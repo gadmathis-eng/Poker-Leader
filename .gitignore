@@ -1,0 +1,9 @@
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.env.vercel*
+.env*
+GoogleService-Info.plist
+.DS_Store
+.cursor/

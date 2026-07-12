@@ -1,0 +1,15 @@
+{
+  "trailingSlash": true,
+  "redirects": [
+    {
+      "source": "/privacy",
+      "destination": "/privacy/",
+      "permanent": true
+    },
+    {
+      "source": "/support",
+      "destination": "/support/",
+      "permanent": true
+    }
+  ]
+}

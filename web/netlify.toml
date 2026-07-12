@@ -1,0 +1,12 @@
+[build]
+  publish = "."
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy/"
+  status = 301
+
+[[redirects]]
+  from = "/support"
+  to = "/support/"
+  status = 301
