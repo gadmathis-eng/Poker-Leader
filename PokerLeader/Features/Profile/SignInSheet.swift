@@ -108,6 +108,12 @@ struct SignInSheet: View {
                         .foregroundStyle(AppTheme.muted)
                         .frame(maxWidth: .infinity)
                     }
+
+                    Text("By signing in, you agree to our [Terms of Service](https://potmaster.app/terms/) and [Privacy Policy](https://potmaster.app/privacy/).")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
                 }
                 .padding()
             }

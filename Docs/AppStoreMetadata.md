@@ -30,6 +30,14 @@ https://potmaster.app/privacy/
 
 Markdown source: `Docs/PrivacyPolicy.md`
 
+## Terms of Service URL
+
+https://potmaster.app/terms/
+
+Markdown source: `Docs/TermsOfService.md`
+
+Use this in App Store Connect if a Terms URL field is available, and link to it from the app and website.
+
 ## Review Notes
 
 Pot Master uses Supabase for optional cloud sync (Sign in with Apple, Google, and email OTP). The app does not process real-money payments; settlement results are informational only.
@@ -45,5 +53,5 @@ Account deletion is available in Settings → Account → Delete account.
 - [ ] Set up **support@potmaster.app** email forwarding
 - [ ] Production `Supabase.plist` bundled in release builds
 - [ ] Apple Sign In + Google OAuth configured in Supabase and Apple Developer
-- [ ] Privacy policy and support pages live at public URLs
+- [ ] Privacy policy, terms, and support pages live at public URLs
 - [ ] App Store Connect screenshots, age rating, and export compliance completed

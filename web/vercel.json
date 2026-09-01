@@ -10,6 +10,11 @@
       "source": "/support",
       "destination": "/support/",
       "permanent": true
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms/",
+      "permanent": true
     }
   ]
 }

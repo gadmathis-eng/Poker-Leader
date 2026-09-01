@@ -519,6 +519,8 @@ private struct ProfileControlsView: View {
 
                         accountSection
 
+                        legalSection
+
                         if let accountActionError {
                             Text(accountActionError)
                                 .font(.caption)
@@ -699,6 +701,33 @@ private struct ProfileControlsView: View {
         }
         .background(AppTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+    }
+
+    private var legalSection: some View {
+        VStack(spacing: 0) {
+            Link(destination: URL(string: "https://potmaster.app/privacy/")!) {
+                legalLinkRow(title: "Privacy policy")
+            }
+            Divider().overlay(AppTheme.cardBorder)
+            Link(destination: URL(string: "https://potmaster.app/terms/")!) {
+                legalLinkRow(title: "Terms of service")
+            }
+        }
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+    }
+
+    private func legalLinkRow(title: String) -> some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(AppTheme.text)
+            Spacer()
+            Image(systemName: "arrow.up.right")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppTheme.muted)
+        }
+        .font(.subheadline)
+        .padding()
     }
 
     private func deleteAccount() async {

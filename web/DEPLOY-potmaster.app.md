@@ -5,6 +5,7 @@ Use these URLs in **App Store Connect**:
 | Purpose | URL |
 |---------|-----|
 | Privacy Policy | https://potmaster.app/privacy/ |
+| Terms of Service | https://potmaster.app/terms/ |
 | Support | https://potmaster.app/support/ |
 | Marketing (optional) | https://potmaster.app/ |
 
@@ -41,6 +42,7 @@ python3 web/deploy_vercel.py
 Wait a few minutes, then check:
 
 - https://potmaster.app/privacy/
+- https://potmaster.app/terms/
 - https://potmaster.app/support/
 
 ---
@@ -124,4 +126,4 @@ cd web
 python3 -m http.server 8080
 ```
 
-Open http://localhost:8080/privacy/ and http://localhost:8080/support/
+Open http://localhost:8080/privacy/, http://localhost:8080/terms/, and http://localhost:8080/support/
