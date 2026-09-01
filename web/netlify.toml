@@ -10,3 +10,8 @@
   from = "/support"
   to = "/support/"
   status = 301
+
+[[redirects]]
+  from = "/terms"
+  to = "/terms/"
+  status = 301
