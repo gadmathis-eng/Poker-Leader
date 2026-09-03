@@ -38,13 +38,17 @@ struct MainTabView: View {
                 .tabItem { Label("History", systemImage: "clock.fill") }
                 .tag(1)
 
+            TableView()
+                .tabItem { Label("Table", image: "PokerTableIcon") }
+                .tag(2)
+
             LeaderboardView()
                 .tabItem { Label("Board", systemImage: "trophy.fill") }
-                .tag(2)
+                .tag(3)
 
             ProfileSettingsView()
                 .tabItem { Label(currentUserTabLabel, systemImage: "person.fill") }
-                .tag(3)
+                .tag(4)
         }
         .tint(AppTheme.positive)
         .preferredColorScheme(appearancePreference.colorScheme)
