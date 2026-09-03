@@ -53,11 +53,9 @@ struct TableView: View {
 
     private var emptyState: some View {
         VStack(spacing: 14) {
-            Image("PokerTableIcon")
-                .resizable()
-                .renderingMode(.original)
-                .scaledToFit()
-                .frame(width: 56, height: 56)
+            Image(systemName: "suit.spade.fill")
+                .font(.system(size: 56))
+                .foregroundStyle(AppTheme.text)
 
             Text("No circles yet")
                 .font(.headline)

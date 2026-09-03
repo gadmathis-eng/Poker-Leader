@@ -39,7 +39,7 @@ struct MainTabView: View {
                 .tag(1)
 
             TableView()
-                .tabItem { Label("Table", image: "PokerTableIcon") }
+                .tabItem { Label("Table", systemImage: "suit.spade.fill") }
                 .tag(2)
 
             LeaderboardView()
