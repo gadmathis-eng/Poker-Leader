@@ -34,7 +34,7 @@ struct MainTabView: View {
                 .tabItem { Label("Circles", systemImage: "person.3.fill") }
                 .tag(0)
 
-            TableTabView()
+            TableView()
                 .tabItem { Label("Table", systemImage: "table.furniture.fill") }
                 .tag(1)
 
