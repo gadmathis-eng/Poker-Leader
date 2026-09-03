@@ -369,7 +369,6 @@
 				CODE_SIGN_ENTITLEMENTS = "PokerLeader/PokerLeader-Debug.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = CU3B72FQ42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PokerLeader/Info.plist;
@@ -403,7 +402,6 @@
 				CODE_SIGN_ENTITLEMENTS = PokerLeader/PokerLeader.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = CU3B72FQ42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = PokerLeader/Info.plist;
