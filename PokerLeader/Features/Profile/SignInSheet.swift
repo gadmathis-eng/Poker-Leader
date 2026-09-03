@@ -118,6 +118,7 @@ struct SignInSheet: View {
                 .padding()
             }
             .background(AppTheme.background)
+            .presentationBackground(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

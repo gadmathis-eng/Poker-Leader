@@ -9,6 +9,7 @@ struct MainTabView: View {
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
     @State private var selectedTab = 0
     @State private var showSignIn = false
+    @State private var showProfileOnboarding = false
     @State private var authManager = SupabaseAuthManager.shared
 
     private var needsProfileOnboarding: Bool {
@@ -50,21 +51,34 @@ struct MainTabView: View {
                 .tabItem { Label(currentUserTabLabel, systemImage: "person.fill") }
                 .tag(4)
         }
+        .background(AppTheme.background)
         .tint(AppTheme.positive)
         .preferredColorScheme(appearancePreference.colorScheme)
-        .sheet(isPresented: .constant(needsProfileOnboarding)) {
+        .sheet(isPresented: $showProfileOnboarding) {
             ProfileOnboardingSheet(displayName: $displayName, playerHandle: $playerHandle)
+                .modelContext(context)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showSignIn) {
             SignInSheet()
+                .modelContext(context)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .interactiveDismissDisabled(needsSignIn)
         }
+        .onAppear {
+            showProfileOnboarding = needsProfileOnboarding
+        }
+        .onChange(of: needsProfileOnboarding) { _, needsOnboarding in
+            showProfileOnboarding = needsOnboarding
+            if !needsOnboarding && needsSignIn {
+                showSignIn = true
+            }
+        }
         .task {
             await authManager.refreshSession()
+            showProfileOnboarding = needsProfileOnboarding
             if needsSignIn && !needsProfileOnboarding {
                 showSignIn = true
             } else if authManager.isSignedIn {
@@ -89,11 +103,6 @@ struct MainTabView: View {
                 if SupabaseBootstrap.isConfigured {
                     showSignIn = true
                 }
-            }
-        }
-        .onChange(of: needsProfileOnboarding) { _, needsOnboarding in
-            if !needsOnboarding && needsSignIn {
-                showSignIn = true
             }
         }
     }

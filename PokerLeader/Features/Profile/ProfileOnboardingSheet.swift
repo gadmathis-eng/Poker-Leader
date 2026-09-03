@@ -3,7 +3,6 @@ import SwiftUI
 
 struct ProfileOnboardingSheet: View {
     @Environment(\.modelContext) private var context
-    @Query private var circles: [CircleModel]
 
     @Binding var displayName: String
     @Binding var playerHandle: String
@@ -61,6 +60,7 @@ struct ProfileOnboardingSheet: View {
             }
             .padding()
             .background(AppTheme.background)
+            .presentationBackground(AppTheme.background)
             .navigationTitle("Welcome")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -128,6 +128,7 @@ struct ProfileOnboardingSheet: View {
         displayName = cleanedDisplayName
         playerHandle = cleanedHandle
 
+        let circles = (try? context.fetch(FetchDescriptor<CircleModel>())) ?? []
         for member in circles.flatMap(\.members).filter(\.isCurrentUser) {
             member.displayName = cleanedDisplayName
             member.initial = CircleRepository.initial(for: cleanedDisplayName)
