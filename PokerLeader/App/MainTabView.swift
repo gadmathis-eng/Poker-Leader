@@ -34,12 +34,12 @@ struct MainTabView: View {
                 .tabItem { Label("Circles", systemImage: "person.3.fill") }
                 .tag(0)
 
-            TableView()
-                .tabItem { Label("Table", systemImage: "table.furniture.fill") }
-                .tag(1)
-
             HistoryView()
                 .tabItem { Label("History", systemImage: "clock.fill") }
+                .tag(1)
+
+            TableView()
+                .tabItem { Label("Table", image: "PokerTableIcon") }
                 .tag(2)
 
             LeaderboardView()
