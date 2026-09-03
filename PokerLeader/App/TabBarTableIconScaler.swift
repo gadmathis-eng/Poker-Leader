@@ -21,7 +21,7 @@ private struct TabBarTableIconScaler: UIViewControllerRepresentable {
             guard item.image?.size.width ?? 0 < 34 else { return }
 
             guard let base = UIImage(named: "PokerTableIcon")?.withRenderingMode(.alwaysTemplate) else { return }
-            let scale: CGFloat = 1.24
+            let scale: CGFloat = 1.12
             let newSize = CGSize(width: base.size.width * scale, height: base.size.height * scale)
             let renderer = UIGraphicsImageRenderer(size: newSize)
             let scaled = renderer.image { _ in
