@@ -35,7 +35,7 @@ struct MainTabView: View {
                 .tag(0)
 
             TableView()
-                .tabItem { Label("Table", systemImage: "suit.spade.fill") }
+                .tabItem { Label("Table", systemImage: "table.furniture.fill") }
                 .tag(1)
 
             HistoryView()
