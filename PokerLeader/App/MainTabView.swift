@@ -34,24 +34,17 @@ struct MainTabView: View {
                 .tabItem { Label("Circles", systemImage: "person.3.fill") }
                 .tag(0)
 
-            TableView()
-                .tabItem {
-                    Image("TabPokerTable")
-                }
-                .accessibilityLabel("Table")
-                .tag(1)
-
             HistoryView()
                 .tabItem { Label("History", systemImage: "clock.fill") }
-                .tag(2)
+                .tag(1)
 
             LeaderboardView()
                 .tabItem { Label("Board", systemImage: "trophy.fill") }
-                .tag(3)
+                .tag(2)
 
             ProfileSettingsView()
                 .tabItem { Label(currentUserTabLabel, systemImage: "person.fill") }
-                .tag(4)
+                .tag(3)
         }
         .tint(AppTheme.positive)
         .preferredColorScheme(appearancePreference.colorScheme)

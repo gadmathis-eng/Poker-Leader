@@ -187,7 +187,7 @@ final class CircleRepository {
         }
 
         for snapshot in snapshots where !deletedIds.contains(snapshot.id) {
-            _ = upsertLocalCircle(
+            upsertLocalCircle(
                 from: snapshot,
                 fallbackDisplayName: displayName,
                 fallbackHandle: playerHandle
