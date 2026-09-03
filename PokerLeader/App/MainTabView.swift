@@ -39,7 +39,7 @@ struct MainTabView: View {
                 .tag(1)
 
             TableView()
-                .tabItem { Label("Table", image: "PokerTableIcon") }
+                .tabItem { Label("Table", systemImage: "suit.spade.fill") }
                 .tag(2)
 
             LeaderboardView()
@@ -50,7 +50,6 @@ struct MainTabView: View {
                 .tabItem { Label(currentUserTabLabel, systemImage: "person.fill") }
                 .tag(4)
         }
-        .scaleTableTabIcon()
         .tint(AppTheme.positive)
         .preferredColorScheme(appearancePreference.colorScheme)
         .sheet(isPresented: .constant(needsProfileOnboarding)) {
