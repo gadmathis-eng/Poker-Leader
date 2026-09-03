@@ -21,8 +21,8 @@ struct TableView: View {
                             .resizable()
                             .renderingMode(.template)
                             .scaledToFit()
-                            .frame(width: 72, height: 72)
-                            .foregroundStyle(AppTheme.positive.opacity(0.85))
+                            .frame(width: 56, height: 56)
+                            .foregroundStyle(AppTheme.text)
 
                         Text("No active table")
                             .font(.headline)
