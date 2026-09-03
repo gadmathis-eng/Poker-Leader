@@ -20,7 +20,7 @@ struct TableView: View {
                         Text("Table")
                             .font(.largeTitle.bold())
                             .foregroundStyle(AppTheme.text)
-                        Text("Active games and buy-in tracking live here.")
+                        Text("Track your personal buy-in or join a circle session.")
                             .font(.caption)
                             .foregroundStyle(AppTheme.muted)
                     }
@@ -29,25 +29,29 @@ struct TableView: View {
                     Button {
                         showingPersonalSession = true
                     } label: {
-                        HStack {
+                        HStack(spacing: 12) {
                             Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(AppTheme.positive)
-                            Text("New session")
-                                .font(.headline)
-                                .foregroundStyle(AppTheme.text)
-                            Spacer()
+                                .font(.title2)
+                                .foregroundStyle(AppTheme.contrastText)
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("New session")
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.contrastText)
+                                Text("Set your currency and buy-in amount")
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.contrastText.opacity(0.75))
+                            }
+
+                            Spacer(minLength: 0)
+
                             Image(systemName: "chevron.right")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(AppTheme.muted)
+                                .foregroundStyle(AppTheme.contrastText.opacity(0.75))
                         }
                         .padding(16)
-                        .background(AppTheme.card)
+                        .background(AppTheme.positive)
                         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                                .stroke(AppTheme.cardBorder)
-                        )
                     }
                     .buttonStyle(.plain)
                     .padding(.horizontal)
@@ -92,18 +96,15 @@ struct TableView: View {
                     }
 
                     VStack(spacing: 14) {
-                        Image("PokerTableIcon")
-                            .resizable()
-                            .renderingMode(.template)
-                            .scaledToFit()
-                            .frame(width: 56, height: 56)
+                        Image(systemName: "table.furniture.fill")
+                            .font(.system(size: 44))
                             .foregroundStyle(AppTheme.text)
 
                         Text("No active table")
                             .font(.headline)
                             .foregroundStyle(AppTheme.text)
 
-                        Text("Open a circle and start a session to track buy-ins at the table.")
+                        Text("Tap New session above to set your buy-in, or open a circle to start a group game.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.muted)
                             .multilineTextAlignment(.center)
@@ -121,6 +122,16 @@ struct TableView: View {
                 .padding(.vertical)
             }
             .background(AppTheme.background)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("New session") {
+                        showingPersonalSession = true
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundStyle(AppTheme.positive)
+                }
+            }
             .sheet(isPresented: $showingPersonalSession) {
                 PersonalSessionSheet(
                     initialCurrencyCode: personalBuyInCurrencyCode,
