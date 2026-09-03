@@ -17,11 +17,11 @@ struct TableView: View {
                     .padding(.horizontal)
 
                     VStack(spacing: 14) {
-                        Image("PokerTableIcon")
+                        Image("PokerChipSpadeIcon")
                             .resizable()
                             .renderingMode(.template)
                             .scaledToFit()
-                            .frame(width: 56, height: 56)
+                            .frame(width: 64, height: 64)
                             .foregroundStyle(AppTheme.text)
 
                         Text("No active table")
