@@ -40,7 +40,7 @@ struct MainTabView: View {
                 .tag(1)
 
             TableView()
-                .tabItem { Label("Table", image: "PokerTableIcon") }
+                .tabItem { Label("Table", systemImage: "table.furniture.fill") }
                 .tag(2)
 
             LeaderboardView()
@@ -51,7 +51,6 @@ struct MainTabView: View {
                 .tabItem { Label(currentUserTabLabel, systemImage: "person.fill") }
                 .tag(4)
         }
-        .scaleTableTabIcon()
         .background(AppTheme.background)
         .tint(AppTheme.positive)
         .preferredColorScheme(appearancePreference.colorScheme)
