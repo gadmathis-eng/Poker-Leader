@@ -35,7 +35,10 @@ struct MainTabView: View {
                 .tag(0)
 
             TableView()
-                .tabItem { Label("Table", systemImage: "table.furniture.fill") }
+                .tabItem {
+                    Image("TabPokerTable")
+                }
+                .accessibilityLabel("Table")
                 .tag(1)
 
             HistoryView()
