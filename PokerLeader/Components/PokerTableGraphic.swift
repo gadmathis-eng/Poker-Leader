@@ -3,7 +3,6 @@ import SwiftUI
 struct PokerTableGraphic: View {
     var lineWidth: CGFloat = 2
     var innerLineWidth: CGFloat = 1.25
-    var fillTable: Bool = true
 
     var body: some View {
         GeometryReader { geo in
@@ -18,12 +17,6 @@ struct PokerTableGraphic: View {
                 Ellipse()
                     .stroke(Color.primary.opacity(0.85), lineWidth: innerLineWidth)
                     .frame(width: width * 0.76, height: height * 0.72)
-
-                if fillTable {
-                    Ellipse()
-                        .fill(Color.primary.opacity(0.12))
-                        .frame(width: width * 0.74, height: height * 0.68)
-                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
