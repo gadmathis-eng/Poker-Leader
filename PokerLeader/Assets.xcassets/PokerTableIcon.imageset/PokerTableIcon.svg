@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <g fill="black" fill-rule="evenodd">
+    <path d="M 7 8.5 H 17 A 3.5 3.5 0 0 1 17 15.5 H 7 A 3.5 3.5 0 0 1 7 8.5 Z"/>
+    <ellipse cx="7" cy="12" rx="2.1" ry="2.6"/>
+    <ellipse cx="17" cy="12" rx="2.1" ry="2.6"/>
+  </g>
+</svg>
