@@ -3,19 +3,22 @@ import SwiftUI
 struct PersonalSessionSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @State private var currencyCode: String
+    @State private var sessionCurrencyCode: String
+    @State private var buyInCurrencyCode: String
     @State private var buyInText: String
-    @State private var showingCurrencyPicker = false
+    @State private var currencyPickerTarget: CurrencyPickerTarget?
     @State private var editingBuyIn: MoneyAmountEditorState?
 
-    let onSave: (String, Decimal) -> Void
+    let onSave: (String, String, Decimal) -> Void
 
     init(
-        initialCurrencyCode: String = CurrencyPreferences.defaultCurrencyCode,
+        initialSessionCurrencyCode: String = CurrencyPreferences.defaultCurrencyCode,
+        initialBuyInCurrencyCode: String = CurrencyPreferences.defaultCurrencyCode,
         initialBuyIn: Decimal = 0,
-        onSave: @escaping (String, Decimal) -> Void
+        onSave: @escaping (String, String, Decimal) -> Void
     ) {
-        _currencyCode = State(initialValue: initialCurrencyCode)
+        _sessionCurrencyCode = State(initialValue: initialSessionCurrencyCode)
+        _buyInCurrencyCode = State(initialValue: initialBuyInCurrencyCode)
         _buyInText = State(initialValue: initialBuyIn > 0 ? NSDecimalNumber(decimal: initialBuyIn).stringValue : "0")
         self.onSave = onSave
     }
@@ -40,7 +43,7 @@ struct PersonalSessionSheet: View {
                 Text("New session")
                     .font(.title3.bold())
                     .foregroundStyle(AppTheme.text)
-                Text("Set your personal buy-in")
+                Text("Set session currency and your buy-in")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.muted)
                     .textCase(.uppercase)
@@ -49,12 +52,12 @@ struct PersonalSessionSheet: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Currency")
+                    Text("Session currency")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(AppTheme.muted)
                     Spacer()
-                    CurrencyChipButton(currencyCode: currencyCode) {
-                        showingCurrencyPicker = true
+                    CurrencyChipButton(currencyCode: sessionCurrencyCode) {
+                        currencyPickerTarget = .session
                     }
                 }
                 .padding(.horizontal, 16)
@@ -68,18 +71,18 @@ struct PersonalSessionSheet: View {
 
                 StandardBuyInCard(
                     amount: buyInAmount ?? 0,
-                    currencyCode: currencyCode,
+                    currencyCode: buyInCurrencyCode,
                     onAmountTap: {
                         editingBuyIn = MoneyAmountEditorState(
                             id: UUID(),
                             title: "My buy-in",
                             subtitle: "Personal amount",
-                            currencyCode: currencyCode,
+                            currencyCode: buyInCurrencyCode,
                             text: buyInText
                         )
                     },
                     onCurrencyTap: {
-                        showingCurrencyPicker = true
+                        currencyPickerTarget = .buyIn
                     }
                 )
             }
@@ -99,7 +102,7 @@ struct PersonalSessionSheet: View {
 
                 Button {
                     if let amount = buyInAmount {
-                        onSave(currencyCode, amount)
+                        onSave(sessionCurrencyCode, buyInCurrencyCode, amount)
                         dismiss()
                     }
                 } label: {
@@ -123,15 +126,28 @@ struct PersonalSessionSheet: View {
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showingCurrencyPicker) {
-            CurrencyPickerSheet(selectedCurrencyCode: currencyCode) { code in
+        .sheet(item: $currencyPickerTarget) { target in
+            CurrencyPickerSheet(
+                selectedCurrencyCode: target == .session ? sessionCurrencyCode : buyInCurrencyCode
+            ) { code in
                 let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
-                if CurrencyPreferences.isValidCurrencyCode(cleaned) {
-                    currencyCode = cleaned
+                guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }
+                switch target {
+                case .session:
+                    sessionCurrencyCode = cleaned
+                case .buyIn:
+                    buyInCurrencyCode = cleaned
                 }
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
     }
+}
+
+private enum CurrencyPickerTarget: Identifiable {
+    case session
+    case buyIn
+
+    var id: Self { self }
 }

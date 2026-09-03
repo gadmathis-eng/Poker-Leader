@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TableView: View {
+    @AppStorage("personalSessionCurrencyCode") private var personalSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @AppStorage("personalBuyInCurrencyCode") private var personalBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @AppStorage("personalBuyInAmount") private var personalBuyInAmountString = ""
 
@@ -38,7 +39,7 @@ struct TableView: View {
                                 Text("New session")
                                     .font(.headline)
                                     .foregroundStyle(AppTheme.contrastText)
-                                Text("Set your currency and buy-in amount")
+                                Text("Set session currency and buy-in amount")
                                     .font(.caption)
                                     .foregroundStyle(AppTheme.contrastText.opacity(0.75))
                             }
@@ -61,26 +62,37 @@ struct TableView: View {
                             SectionHeader(title: "My buy-in")
                                 .padding(.horizontal)
 
-                            HStack(spacing: 0) {
-                                VStack(alignment: .leading, spacing: 4) {
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Session currency")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(AppTheme.muted)
+                                    Spacer()
+                                    Text(personalSessionCurrencyCode)
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(AppTheme.text)
+                                }
+
+                                HStack {
                                     Text("Personal buy-in")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(AppTheme.muted)
+                                    Spacer()
                                     Text(MoneyFormatting.plain(amount, currencyCode: personalBuyInCurrencyCode))
-                                        .font(.title2.bold())
+                                        .font(.title3.bold())
                                         .foregroundStyle(AppTheme.gold)
                                 }
-                                Spacer()
+
                                 Button {
                                     showingPersonalSession = true
                                 } label: {
                                     Text("Edit")
                                         .font(.caption.weight(.semibold))
                                         .foregroundStyle(AppTheme.positive)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
                                         .background(AppTheme.positive.opacity(0.12))
-                                        .clipShape(Capsule())
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -134,13 +146,15 @@ struct TableView: View {
             }
             .sheet(isPresented: $showingPersonalSession) {
                 PersonalSessionSheet(
-                    initialCurrencyCode: personalBuyInCurrencyCode,
+                    initialSessionCurrencyCode: personalSessionCurrencyCode,
+                    initialBuyInCurrencyCode: personalBuyInCurrencyCode,
                     initialBuyIn: personalBuyInAmount ?? 0
-                ) { code, amount in
-                    personalBuyInCurrencyCode = code
+                ) { sessionCode, buyInCode, amount in
+                    personalSessionCurrencyCode = sessionCode
+                    personalBuyInCurrencyCode = buyInCode
                     personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
                 }
-                .presentationDetents([.height(400)])
+                .presentationDetents([.height(420)])
                 .presentationDragIndicator(.visible)
             }
         }
