@@ -38,5 +38,18 @@
 
       <footer>Pot Master · Home poker tracking</footer>
     </main>
+    <script src="/open-table.js"></script>
+    <script>
+      (function () {
+        if (window.PotMasterTableInvite) {
+          window.PotMasterTableInvite.openApp();
+          return;
+        }
+        var params = new URLSearchParams(location.search);
+        var code = (params.get("table") || params.get("code") || "").trim().toUpperCase();
+        if (!code) return;
+        location.href = "com.mathisgad.pokerleader://table/" + encodeURIComponent(code);
+      })();
+    </script>
   </body>
 </html>

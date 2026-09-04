@@ -1,14 +1,25 @@
 import SwiftUI
+import SwiftData
 
 struct TableView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(AppRouter.self) private var router
     @AppStorage("personalSessionCurrencyCode") private var personalSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @AppStorage("personalBuyInCurrencyCode") private var personalBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @AppStorage("personalBuyInAmount") private var personalBuyInAmountString = ""
+    @AppStorage("displayName") private var displayName = "Your name"
 
     @State private var draftSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInText = "0"
     @State private var showingSeatSelection = false
+    @State private var activeTable: OpenTableModel?
+    @State private var joinError: String?
+    @State private var isJoiningTable = false
+    @State private var showSignIn = false
+    @State private var authManager = SupabaseAuthManager.shared
+
+    private var repo: TableRepository { TableRepository(context: context) }
 
     private var personalBuyInAmount: Decimal? {
         guard !personalBuyInAmountString.isEmpty else { return nil }
@@ -23,6 +34,14 @@ struct TableView: View {
         (draftBuyInAmount ?? 0) > 0
     }
 
+    private var tableSessionCurrencyCode: String {
+        activeTable?.sessionCurrencyCode ?? personalSessionCurrencyCode
+    }
+
+    private var hasJoinableBuyIn: Bool {
+        (personalBuyInAmount ?? 0) > 0
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -32,11 +51,26 @@ struct TableView: View {
                         Text("Table")
                             .font(.largeTitle.bold())
                             .foregroundStyle(AppTheme.text)
-                        Text("Track your personal buy-in or join a circle session.")
+                        Text("Track your personal buy-in, then share a link so friends can sit down.")
                             .font(.caption)
                             .foregroundStyle(AppTheme.muted)
                     }
                     .padding(.horizontal)
+
+                    if let activeTable, !activeTable.isHostLocally {
+                        joiningBanner(activeTable)
+                    }
+
+                    if router.pendingTableInviteCode != nil, SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
+                        signInToJoinBanner
+                    }
+
+                    if let joinError {
+                        Text(joinError)
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.negative)
+                            .padding(.horizontal)
+                    }
 
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader(title: "New session")
@@ -50,7 +84,7 @@ struct TableView: View {
                         Button {
                             savePersonalBuyIn()
                         } label: {
-                            Text("Save buy-in")
+                            Text(activeTable?.isHostLocally == false ? "Join table" : "Save buy-in")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .padding()
@@ -70,7 +104,7 @@ struct TableView: View {
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(AppTheme.muted)
                                 Spacer()
-                                Text(personalSessionCurrencyCode)
+                                Text(tableSessionCurrencyCode)
                                     .font(.caption.weight(.bold))
                                     .foregroundStyle(AppTheme.text)
                             }
@@ -94,14 +128,49 @@ struct TableView: View {
                             .font(.system(size: 44))
                             .foregroundStyle(AppTheme.text)
 
-                        Text("No active table")
+                        Text(activeTable == nil ? "No active table" : "Table \(activeTable?.inviteCode ?? "")")
                             .font(.headline)
                             .foregroundStyle(AppTheme.text)
 
-                        Text("Set your buy-in above, or open a circle to start a group game.")
+                        Text(activeTable == nil
+                             ? "Set your buy-in above, then share the table so friends can tap the link to join."
+                             : "Open the table to pick a seat, or share the invite so others can join.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.muted)
                             .multilineTextAlignment(.center)
+
+                        if let activeTable {
+                            ShareLink(
+                                item: TableInviteSharing.url(forInviteCode: activeTable.inviteCode),
+                                subject: Text("Join my Pot Master table"),
+                                message: Text(
+                                    TableInviteSharing.message(
+                                        forInviteCode: activeTable.inviteCode,
+                                        hostName: activeTable.hostDisplayName
+                                    )
+                                )
+                            ) {
+                                Label("Share table", systemImage: "square.and.arrow.up")
+                                    .font(.headline.weight(.semibold))
+                                    .foregroundStyle(AppTheme.contrastText)
+                                    .padding(.horizontal, 18)
+                                    .padding(.vertical, 10)
+                                    .background(AppTheme.positive)
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        if hasJoinableBuyIn {
+                            Button("Open table") {
+                                showingSeatSelection = true
+                            }
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppTheme.contrastText)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 10)
+                            .background(AppTheme.positive)
+                            .clipShape(Capsule())
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(28)
@@ -118,29 +187,156 @@ struct TableView: View {
             .background(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear(perform: loadDraftValues)
+            .task {
+                loadActiveTable()
+                await handlePendingJoin()
+            }
+            .onChange(of: router.pendingTableInviteCode) { _, _ in
+                Task { await handlePendingJoin() }
+            }
             .navigationDestination(isPresented: $showingSeatSelection) {
                 TableSeatSelectionView(
                     buyInAmount: personalBuyInAmount ?? 0,
                     buyInCurrencyCode: personalBuyInCurrencyCode,
-                    sessionCurrencyCode: personalSessionCurrencyCode
+                    sessionCurrencyCode: tableSessionCurrencyCode
                 )
+            }
+            .sheet(isPresented: $showSignIn) {
+                SignInSheet()
+                    .modelContext(context)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            }
+            .onChange(of: showSignIn) { _, isPresented in
+                if !isPresented {
+                    Task { await handlePendingJoin() }
+                }
+            }
+            .onChange(of: authManager.isSignedIn) { _, signedIn in
+                if signedIn {
+                    showSignIn = false
+                    Task { await handlePendingJoin() }
+                }
             }
         }
     }
 
+    private var signInToJoinBanner: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Sign in to join this table")
+                .font(.headline)
+                .foregroundStyle(AppTheme.text)
+            Text("The host shared a link. Use the same Pot Master account on this device, then you'll sit at their table.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+            Button("Sign in") {
+                showSignIn = true
+            }
+            .font(.headline.weight(.semibold))
+            .foregroundStyle(AppTheme.contrastText)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(AppTheme.positive)
+            .clipShape(Capsule())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.cardBorder)
+        )
+        .padding(.horizontal)
+    }
+
+    private func joiningBanner(_ table: OpenTableModel) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("You're joining \(table.hostDisplayName)'s table")
+                .font(.headline)
+                .foregroundStyle(AppTheme.text)
+            Text("Set your buy-in, then pick an open seat.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.cardBorder)
+        )
+        .padding(.horizontal)
+    }
+
     private func loadDraftValues() {
-        draftSessionCurrencyCode = personalSessionCurrencyCode
+        draftSessionCurrencyCode = tableSessionCurrencyCode
         draftBuyInCurrencyCode = personalBuyInCurrencyCode
         draftBuyInText = personalBuyInAmountString.isEmpty
             ? "0"
             : personalBuyInAmountString
     }
 
+    private func loadActiveTable() {
+        activeTable = try? repo.activeTable()
+        if let table = activeTable, !table.isHostLocally {
+            draftSessionCurrencyCode = table.sessionCurrencyCode
+        }
+    }
+
     private func savePersonalBuyIn() {
         guard let amount = draftBuyInAmount else { return }
-        personalSessionCurrencyCode = draftSessionCurrencyCode
         personalBuyInCurrencyCode = draftBuyInCurrencyCode
         personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
+
+        if activeTable?.isHostLocally != false {
+            personalSessionCurrencyCode = draftSessionCurrencyCode
+        }
+
+        if activeTable == nil {
+            activeTable = try? repo.ensureHostTable(
+                sessionCurrencyCode: draftSessionCurrencyCode,
+                hostDisplayName: displayName
+            )
+        } else if let table = activeTable, table.isHostLocally {
+            table.sessionCurrencyCode = draftSessionCurrencyCode
+            table.hostDisplayName = displayName
+            repo.publish(table)
+        }
+
+        if let table = activeTable, table.isHostLocally {
+            Task { try? await repo.publishForSharing(table) }
+        }
+
         showingSeatSelection = true
+    }
+
+    private func handlePendingJoin() async {
+        guard let code = router.pendingTableInviteCode else { return }
+        guard !isJoiningTable else { return }
+
+        if SupabaseBootstrap.isConfigured, !SupabaseAuthManager.shared.isSignedIn {
+            return
+        }
+
+        isJoiningTable = true
+        joinError = nil
+        defer { isJoiningTable = false }
+
+        do {
+            let table = try await repo.join(inviteCode: code, displayName: displayName)
+            activeTable = table
+            draftSessionCurrencyCode = table.sessionCurrencyCode
+            router.pendingTableInviteCode = nil
+            if hasJoinableBuyIn {
+                showingSeatSelection = true
+            }
+        } catch let error as TableRepositoryError where error == .notSignedIn {
+            joinError = error.localizedDescription
+        } catch {
+            joinError = error.localizedDescription
+            router.pendingTableInviteCode = nil
+        }
     }
 }

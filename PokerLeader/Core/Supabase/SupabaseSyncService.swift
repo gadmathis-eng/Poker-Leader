@@ -416,6 +416,62 @@ final class SupabaseSyncService {
         guard let row = rows.first else { return nil }
         return row.snapshot
     }
+
+    func fetchOpenTable(inviteCode: String) async throws -> CloudOpenTableSnapshot? {
+        _ = try await ensureReady()
+        let normalized = TableInviteDeepLink.normalizedCode(inviteCode)
+        let client = try SupabaseBootstrap.requireClient()
+
+        let rows: [OpenTableRow] = try await client
+            .from("open_tables")
+            .select()
+            .eq("invite_code", value: normalized)
+            .limit(1)
+            .execute()
+            .value
+
+        return rows.first?.snapshot
+    }
+
+    func upsertOpenTable(_ table: OpenTableModel) async throws {
+        let userId = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        guard let hostUserId = UUID(uuidString: userId) else {
+            throw SupabaseSyncError.notSignedIn
+        }
+
+        let row = OpenTableRow(
+            id: table.id,
+            inviteCode: table.inviteCode,
+            hostUserId: hostUserId,
+            hostDisplayName: table.hostDisplayName,
+            hostPlayerKey: table.hostPlayerKey,
+            sessionCurrencyCode: table.sessionCurrencyCode,
+            isStarted: table.isStarted,
+            seats: table.seats,
+            createdAt: table.createdAt,
+            updatedAt: table.updatedAt
+        )
+
+        try await client.from("open_tables").upsert(row).execute()
+    }
+
+    func updateOpenTableSeats(_ table: OpenTableModel) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+
+        try await client
+            .from("open_tables")
+            .update(
+                OpenTablePlayUpdate(
+                    isStarted: table.isStarted,
+                    seats: table.seats,
+                    updatedAt: table.updatedAt
+                )
+            )
+            .eq("invite_code", value: table.inviteCode)
+            .execute()
+    }
 }
 
 // MARK: - Database rows
@@ -912,5 +968,57 @@ private extension SettlementPaymentModel {
 private extension Decimal {
     var cloudString: String {
         NSDecimalNumber(decimal: self).stringValue
+    }
+}
+
+private struct OpenTableRow: Codable {
+    let id: UUID
+    let inviteCode: String
+    let hostUserId: UUID
+    let hostDisplayName: String
+    let hostPlayerKey: String
+    let sessionCurrencyCode: String
+    let isStarted: Bool
+    let seats: [SharedTableSeat]
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case inviteCode = "invite_code"
+        case hostUserId = "host_user_id"
+        case hostDisplayName = "host_display_name"
+        case hostPlayerKey = "host_player_key"
+        case sessionCurrencyCode = "session_currency_code"
+        case isStarted = "is_started"
+        case seats
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    var snapshot: CloudOpenTableSnapshot {
+        CloudOpenTableSnapshot(
+            id: id,
+            inviteCode: inviteCode,
+            hostDisplayName: hostDisplayName,
+            hostPlayerKey: hostPlayerKey,
+            sessionCurrencyCode: sessionCurrencyCode,
+            isStarted: isStarted,
+            seats: seats,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+}
+
+private struct OpenTablePlayUpdate: Encodable {
+    let isStarted: Bool
+    let seats: [SharedTableSeat]
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case isStarted = "is_started"
+        case seats
+        case updatedAt = "updated_at"
     }
 }

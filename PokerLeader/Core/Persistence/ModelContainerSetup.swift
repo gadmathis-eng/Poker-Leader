@@ -9,7 +9,8 @@ enum ModelContainerSetup {
             SessionPlayerModel.self,
             SettlementPaymentModel.self,
             FriendRequestModel.self,
-            AppNotificationModel.self
+            AppNotificationModel.self,
+            OpenTableModel.self
         ])
         let config = ModelConfiguration(isStoredInMemoryOnly: false)
         do {

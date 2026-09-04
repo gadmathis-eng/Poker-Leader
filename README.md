@@ -93,6 +93,10 @@ Run the account deletion migration before release:
 
 `supabase/migrations/20250625120000_delete_own_account.sql`
 
+Run the open-table sharing migration so friends can join a table from a link:
+
+`supabase/migrations/20260904120000_open_tables.sql`
+
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 
 Without `Supabase.plist`, the app still works locally with SwiftData only.

@@ -69,6 +69,9 @@ struct MainTabView: View {
         }
         .onAppear {
             showProfileOnboarding = needsProfileOnboarding
+            if router.pendingTableInviteCode != nil {
+                selectedTab = 2
+            }
         }
         .task {
             await authManager.refreshSession()
@@ -83,6 +86,11 @@ struct MainTabView: View {
         .onChange(of: router.pendingSettlementSessionId) { _, sessionId in
             if sessionId != nil {
                 selectedTab = 0
+            }
+        }
+        .onChange(of: router.pendingTableInviteCode) { _, code in
+            if code != nil {
+                selectedTab = 2
             }
         }
         .onChange(of: authManager.isSignedIn) { _, signedIn in
