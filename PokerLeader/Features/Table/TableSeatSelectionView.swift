@@ -184,7 +184,7 @@ struct TableSeatSelectionView: View {
 
     private var confirmTitle: String {
         guard let seat = selectedSeat else { return "Select a seat" }
-        return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
+        return "Take seat \(seat)"
     }
 
     private func resetAmountToFullStack() {
