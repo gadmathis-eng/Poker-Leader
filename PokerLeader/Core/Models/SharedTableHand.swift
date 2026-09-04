@@ -127,7 +127,7 @@ enum PreflopRoundError: LocalizedError, Equatable {
     }
 }
 
-enum PreflopMove: String, Codable, Equatable, CaseIterable {
+enum PreflopMove: String, Codable, Equatable {
     /// Ante up, or match whatever the table has bet, to stay in the hand.
     case stayIn = "in"
     /// A pre-flop bet, sized as the total this player wants in the pot.

@@ -212,6 +212,38 @@ final class PreflopRoundTests: XCTestCase {
         }
     }
 
+    func testTheTableKeepsItsMoneyFromOneHandToTheNext() throws {
+        var seats = threeHandedTable()
+        var hand = try PreflopRound.start(seats: seats, dealerSeat: nil, ante: 1)
+        hand = try PreflopRound.apply(move: .stayIn, playerKey: "ben", to: hand)
+        hand = try PreflopRound.apply(move: .bet, amount: 4, playerKey: "cal", to: hand)
+        hand = try PreflopRound.apply(move: .fold, playerKey: "ana", to: hand)
+        hand = try PreflopRound.apply(move: .stayIn, playerKey: "ben", to: hand)
+        hand = try PreflopRound.award(potTo: 4, in: hand)
+
+        let stacks = PreflopRound.stacksAfter(hand)
+        for index in seats.indices {
+            guard let stack = stacks[seats[index].playerKey] else { continue }
+            seats[index].amount = TableMoney.string(stack)
+        }
+
+        XCTAssertEqual(seats.reduce(Decimal(0)) { $0 + $1.amountDecimal }, 60)
+        XCTAssertEqual(seats.first { $0.playerKey == "cal" }?.amountDecimal, 24)
+
+        let nextHand = try PreflopRound.start(
+            seats: seats,
+            dealerSeat: PreflopRound.nextDealerSeat(after: hand.dealerSeat, seats: seats),
+            ante: 1,
+            handNumber: hand.handNumber + 1
+        )
+
+        XCTAssertEqual(nextHand.handNumber, 2)
+        XCTAssertEqual(nextHand.dealerSeat, 2)
+        XCTAssertEqual(nextHand.actingSeat, 4)
+        XCTAssertEqual(nextHand.pot, 0)
+        XCTAssertEqual(nextHand.seat(forPlayerKey: "cal")?.stackDecimal, 24)
+    }
+
     func testTheButtonMovesOnForTheNextHand() {
         XCTAssertEqual(PreflopRound.nextDealerSeat(after: 1, seats: threeHandedTable()), 2)
         XCTAssertEqual(PreflopRound.nextDealerSeat(after: 4, seats: threeHandedTable()), 1)
