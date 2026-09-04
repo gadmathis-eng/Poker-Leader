@@ -7,12 +7,13 @@ struct TableSeatSelectionView: View {
 
     @AppStorage("displayName") private var displayName = "Your name"
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
+    @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
-    @State private var party = TableParty()
-    @State private var pendingGuestSeat: Int?
-    @State private var guestName = ""
+    @State private var selectedSeat: Int?
+    @State private var amountText = ""
 
     private static let seatCount = 8
+    private static let amountStep = 0.01
 
     private var playerName: String {
         if !MemberModel.isPlaceholderName(displayName) {
@@ -21,205 +22,8 @@ struct TableSeatSelectionView: View {
         return MemberModel.normalizedHandle(playerHandle) ?? "You"
     }
 
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
-                header
-
-                PokerTableSeatLayout(
-                    seatCount: Self.seatCount,
-                    party: party,
-                    currencyCode: buyInCurrencyCode,
-                    onSelectSeat: handleSeatTap
-                )
-                .frame(height: 400)
-                .padding(.horizontal)
-
-                partyRoster
-
-                actionButtons
-            }
-            .padding(.vertical)
-        }
-        .background(AppTheme.background)
-        .navigationTitle("Table")
-        .navigationBarTitleDisplayMode(.inline)
-        .alert("Add player", isPresented: guestPromptBinding) {
-            TextField("Name", text: $guestName)
-            Button("Cancel", role: .cancel) { pendingGuestSeat = nil }
-            Button("Join") { addGuest() }
-        } message: {
-            if let seat = pendingGuestSeat {
-                Text("Seat \(seat)")
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(spacing: 6) {
-            SectionHeader(title: party.isStarted ? "Game in progress" : "Table lobby")
-            Text(headerTitle)
-                .font(.title3.bold())
-                .foregroundStyle(AppTheme.text)
-            Text(headerSubtitle)
-                .font(.caption)
-                .foregroundStyle(AppTheme.muted)
-                .multilineTextAlignment(.center)
-        }
-        .padding(.horizontal)
-    }
-
-    private var headerTitle: String {
-        if party.isStarted { return "Good luck" }
-        return party.you == nil ? "Tap an open seat" : "Waiting to start"
-    }
-
-    private var headerSubtitle: String {
-        if let leader = party.leader {
-            let leaderLabel = leader.isYou ? "You are" : "\(leader.name) is"
-            return "\(leaderLabel) party leader · table in \(sessionCurrencyCode)"
-        }
-        return "First to sit down creates the game · table in \(sessionCurrencyCode)"
-    }
-
-    @ViewBuilder
-    private var partyRoster: some View {
-        if !party.players.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                SectionHeader(title: "Party · \(party.players.count) seated")
-
-                VStack(spacing: 0) {
-                    ForEach(Array(party.players.enumerated()), id: \.element.id) { index, player in
-                        if index > 0 {
-                            Divider().overlay(AppTheme.cardBorder)
-                        }
-                        rosterRow(for: player, joinPosition: index + 1)
-                    }
-                }
-                .background(AppTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                        .stroke(AppTheme.cardBorder)
-                )
-            }
-            .padding(.horizontal)
-        }
-    }
-
-    private func rosterRow(for player: TablePartyPlayer, joinPosition: Int) -> some View {
-        PartyRosterRow(
-            player: player,
-            joinPosition: joinPosition,
-            isLeader: party.isLeader(player.id),
-            currencyCode: buyInCurrencyCode,
-            onAdd: { amount in
-                withAnimation(.easeOut(duration: 0.18)) {
-                    party.addToStack(amount, for: player.id)
-                }
-            },
-            onLeave: {
-                withAnimation(.easeOut(duration: 0.18)) {
-                    party.leave(player.id)
-                }
-            }
-        )
-    }
-
-    @ViewBuilder
-    private var actionButtons: some View {
-        VStack(spacing: 10) {
-            if party.isStarted {
-                Text("Game started")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(AppTheme.positive.opacity(0.15))
-                    .foregroundStyle(AppTheme.positive)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-            } else if party.youAreLeader {
-                Button {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        party.startGame()
-                    }
-                } label: {
-                    Text(startButtonTitle)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(party.canStart ? AppTheme.positive : AppTheme.card)
-                        .foregroundStyle(party.canStart ? AppTheme.contrastText : AppTheme.muted)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                }
-                .buttonStyle(.plain)
-                .disabled(!party.canStart)
-            } else if let leader = party.leader {
-                Text("Waiting for \(leader.name) to start")
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(AppTheme.card)
-                    .foregroundStyle(AppTheme.muted)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-            }
-        }
-        .padding(.horizontal)
-    }
-
-    private var startButtonTitle: String {
-        guard !party.canStart else { return "Start game" }
-        let needed = TableParty.minimumPlayersToStart - party.players.count
-        return needed == 1 ? "Need 1 more player" : "Need \(needed) more players"
-    }
-
-    private var guestPromptBinding: Binding<Bool> {
-        Binding(
-            get: { pendingGuestSeat != nil },
-            set: { if !$0 { pendingGuestSeat = nil } }
-        )
-    }
-
-    private func handleSeatTap(_ seat: Int) {
-        guard party.player(inSeat: seat) == nil else { return }
-
-        if party.you == nil {
-            withAnimation(.easeOut(duration: 0.18)) {
-                party.join(name: playerName, seat: seat, stack: buyInAmount, isYou: true)
-            }
-            return
-        }
-
-        guestName = "Player \(party.players.count + 1)"
-        pendingGuestSeat = seat
-    }
-
-    private func addGuest() {
-        guard let seat = pendingGuestSeat else { return }
-        let trimmed = guestName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let name = trimmed.isEmpty ? "Player \(party.players.count + 1)" : trimmed
-
-        withAnimation(.easeOut(duration: 0.18)) {
-            party.join(name: name, seat: seat, stack: buyInAmount)
-        }
-        pendingGuestSeat = nil
-    }
-}
-
-private struct PartyRosterRow: View {
-    let player: TablePartyPlayer
-    let joinPosition: Int
-    let isLeader: Bool
-    let currencyCode: String
-    let onAdd: (Decimal) -> Void
-    let onLeave: () -> Void
-
-    @State private var sliderValue: Double = 0
-    @State private var amountText: String = ""
-
-    /// The slider spans everything this player currently has, so the far right
-    /// of the track is their whole stack.
     private var availableMoney: Double {
-        max(NSDecimalNumber(decimal: player.stack).doubleValue, 0)
+        max(NSDecimalNumber(decimal: buyInAmount).doubleValue, 0)
     }
 
     private var hasMoney: Bool {
@@ -227,122 +31,190 @@ private struct PartyRosterRow: View {
     }
 
     private var sliderRange: ClosedRange<Double> {
-        0...max(availableMoney, 1)
+        0...max(availableMoney, Self.amountStep)
     }
 
-    private var parsedAmount: Decimal? {
-        let trimmed = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let value = Decimal(string: trimmed), value > 0 else { return nil }
-        return min(value, player.stack)
+    private var seatedAmount: Decimal {
+        let committed = MoneyAmountKeypad.committedText(
+            amountText,
+            maximum: Decimal(string: hundredthsText(availableMoney))
+        )
+        return Decimal(string: committed) ?? 0
+    }
+
+    private var stackLabel: String {
+        MoneyFormatting.plain(seatedAmount, currencyCode: buyInCurrencyCode)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Text("\(joinPosition)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(AppTheme.muted)
-                    .frame(width: 16)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(player.isYou ? "\(player.name) (you)" : player.name)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.text)
-
-                        if isLeader {
-                            Image(systemName: "crown.fill")
-                                .font(.caption2)
-                                .foregroundStyle(AppTheme.gold)
-                        }
-                    }
-                    Text("Seat \(player.seat) · \(MoneyFormatting.plain(player.stack, currencyCode: currencyCode))")
-                        .font(.caption2)
+        ScrollView {
+            VStack(spacing: 20) {
+                VStack(spacing: 6) {
+                    SectionHeader(title: "Choose your seat")
+                    Text("Tap an open seat")
+                        .font(.title3.bold())
+                        .foregroundStyle(AppTheme.text)
+                    Text("Table in \(sessionCurrencyCode)")
+                        .font(.caption)
                         .foregroundStyle(AppTheme.muted)
                 }
+                .padding(.horizontal)
 
-                Spacer(minLength: 0)
+                PokerTableSeatLayout(
+                    seatCount: Self.seatCount,
+                    selectedSeat: selectedSeat,
+                    playerName: playerName,
+                    stackLabel: stackLabel,
+                    onSelect: { seat in
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            if selectedSeat == seat {
+                                selectedSeat = nil
+                            } else {
+                                selectedSeat = seat
+                                resetAmountToFullStack()
+                            }
+                        }
+                    }
+                )
+                .frame(height: 400)
+                .padding(.horizontal)
 
-                Button(action: onLeave) {
-                    Text("Leave")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppTheme.negative)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(AppTheme.negative.opacity(0.12))
-                        .clipShape(Capsule())
+                if selectedSeat != nil {
+                    amountControls
                 }
-                .buttonStyle(.plain)
-            }
-
-            HStack(spacing: 10) {
-                Slider(value: $sliderValue, in: sliderRange, step: 1)
-                    .tint(AppTheme.positive)
-                    .disabled(!hasMoney)
-                    .onChange(of: sliderValue) { _, newValue in
-                        let text = String(Int(newValue.rounded()))
-                        if amountText != text {
-                            amountText = text
-                        }
-                    }
-                    .onChange(of: availableMoney) { _, newMaximum in
-                        if sliderValue > newMaximum {
-                            sliderValue = newMaximum
-                        }
-                    }
-
-                TextField("0", text: $amountText)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.text)
-                    .frame(width: 62)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.background)
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9)
-                            .stroke(AppTheme.cardBorder)
-                    )
-                    .onChange(of: amountText) { _, newValue in
-                        guard let typed = Double(newValue.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-                        let clamped = min(max(typed, 0), availableMoney)
-                        if abs(clamped - sliderValue) > 0.001 {
-                            sliderValue = clamped
-                        }
-                    }
-                    .disabled(!hasMoney)
 
                 Button {
-                    guard let amount = parsedAmount else { return }
-                    onAdd(amount)
-                    amountText = ""
-                    sliderValue = 0
+                    if let seat = selectedSeat {
+                        storedSeatNumber = seat
+                    }
                 } label: {
-                    Image(systemName: "plus")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(parsedAmount == nil ? AppTheme.muted : AppTheme.contrastText)
-                        .frame(width: 34, height: 34)
-                        .background(parsedAmount == nil ? AppTheme.card : AppTheme.positive)
-                        .clipShape(RoundedRectangle(cornerRadius: 9))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9)
-                                .stroke(parsedAmount == nil ? AppTheme.cardBorder : AppTheme.positive)
-                        )
+                    Text(confirmTitle)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(selectedSeat == nil ? AppTheme.card : AppTheme.positive)
+                        .foregroundStyle(selectedSeat == nil ? AppTheme.muted : AppTheme.contrastText)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
                 }
                 .buttonStyle(.plain)
-                .disabled(parsedAmount == nil)
+                .disabled(selectedSeat == nil || seatedAmount <= 0)
+                .padding(.horizontal)
             }
+            .padding(.vertical)
         }
-        .padding(14)
+        .background(AppTheme.background)
+        .navigationTitle("Table")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            if selectedSeat == nil, storedSeatNumber > 0 {
+                selectedSeat = storedSeatNumber
+            }
+            resetAmountToFullStack()
+        }
+    }
+
+    private var amountControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionHeader(title: "Money in")
+                Spacer()
+                Text(stackLabel)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.gold)
+            }
+
+            VStack(spacing: 12) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
+                            .tint(AppTheme.positive)
+                            .disabled(!hasMoney)
+
+                        Text(amountText.isEmpty ? "0.00" : amountText)
+                            .multilineTextAlignment(.center)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(hasMoney ? AppTheme.text : AppTheme.muted)
+                            .frame(width: 72)
+                            .padding(.vertical, 8)
+                            .background(AppTheme.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 9))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .stroke(AppTheme.cardBorder)
+                            )
+                    }
+
+                    HStack {
+                        Text("0.00")
+                        Spacer()
+                        Text(hundredthsText(availableMoney))
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.muted)
+                }
+
+                MoneyAmountKeypad(
+                    text: $amountText,
+                    maximum: Decimal(string: hundredthsText(availableMoney)),
+                    isEnabled: hasMoney,
+                    onSet: { applyAmountText(amountText) }
+                )
+            }
+            .padding(14)
+            .background(AppTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                    .stroke(AppTheme.cardBorder)
+            )
+        }
+        .padding(.horizontal)
+    }
+
+    private var hundredthsSliderBinding: Binding<Double> {
+        Binding(
+            get: {
+                clampedHundredths(Double(MoneyAmountKeypad.normalizedText(amountText)) ?? 0)
+            },
+            set: { newValue in
+                amountText = hundredthsText(newValue)
+            }
+        )
+    }
+
+    private var confirmTitle: String {
+        guard let seat = selectedSeat else { return "Select a seat" }
+        return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
+    }
+
+    private func resetAmountToFullStack() {
+        amountText = hundredthsText(availableMoney)
+    }
+
+    private func applyAmountText(_ text: String) {
+        let committed = MoneyAmountKeypad.committedText(
+            text,
+            maximum: Decimal(string: hundredthsText(availableMoney))
+        )
+        amountText = hundredthsText(Double(committed) ?? 0)
+    }
+
+    private func clampedHundredths(_ value: Double) -> Double {
+        let clamped = min(max(value, 0), availableMoney)
+        return (clamped * 100).rounded() / 100
+    }
+
+    private func hundredthsText(_ value: Double) -> String {
+        String(format: "%.2f", clampedHundredths(value))
     }
 }
 
 private struct PokerTableSeatLayout: View {
     let seatCount: Int
-    let party: TableParty
-    let currencyCode: String
-    let onSelectSeat: (Int) -> Void
+    let selectedSeat: Int?
+    let playerName: String
+    let stackLabel: String
+    let onSelect: (Int) -> Void
 
     private let seatWidth: CGFloat = 88
     private let seatHeight: CGFloat = 62
@@ -362,14 +234,12 @@ private struct PokerTableSeatLayout: View {
 
                 ForEach(1...seatCount, id: \.self) { seat in
                     let angle = seatAngle(for: seat)
-                    let occupant = party.player(inSeat: seat)
-
                     SeatChip(
                         seatNumber: seat,
-                        occupant: occupant,
-                        isLeader: occupant.map { party.isLeader($0.id) } ?? false,
-                        currencyCode: currencyCode,
-                        action: { onSelectSeat(seat) }
+                        isOccupied: selectedSeat == seat,
+                        playerName: playerName,
+                        stackLabel: stackLabel,
+                        action: { onSelect(seat) }
                     )
                     .frame(width: seatWidth, height: seatHeight)
                     .offset(
@@ -401,27 +271,20 @@ private struct TableFelt: View {
 
 private struct SeatChip: View {
     let seatNumber: Int
-    let occupant: TablePartyPlayer?
-    let isLeader: Bool
-    let currencyCode: String
+    let isOccupied: Bool
+    let playerName: String
+    let stackLabel: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                if let occupant {
-                    HStack(spacing: 3) {
-                        if isLeader {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(AppTheme.gold)
-                        }
-                        Text(occupant.name)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
-                    Text(MoneyFormatting.plain(occupant.stack, currencyCode: currencyCode))
+                if isOccupied {
+                    Text(playerName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text(stackLabel)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -433,19 +296,16 @@ private struct SeatChip: View {
                         .font(.caption2.weight(.semibold))
                 }
             }
-            .foregroundStyle(occupant == nil ? AppTheme.text : AppTheme.contrastText)
+            .foregroundStyle(isOccupied ? AppTheme.contrastText : AppTheme.text)
             .padding(.horizontal, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(occupant == nil ? AppTheme.card : AppTheme.positive)
+                    .fill(isOccupied ? AppTheme.positive : AppTheme.card)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(
-                        isLeader ? AppTheme.gold : (occupant == nil ? AppTheme.cardBorder : AppTheme.positive),
-                        lineWidth: isLeader ? 2.5 : (occupant == nil ? 1 : 2)
-                    )
+                    .stroke(isOccupied ? AppTheme.positive : AppTheme.cardBorder, lineWidth: isOccupied ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
