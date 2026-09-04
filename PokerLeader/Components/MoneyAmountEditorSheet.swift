@@ -172,38 +172,27 @@ struct MoneyAmountEditorSheet: View {
                 HStack(spacing: 8) {
                     keypadButton(".")
                     keypadButton("0")
-                    Button(action: deleteLast) {
-                        Image(systemName: "delete.left")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(KeypadButtonStyle())
+                    deleteKey
                 }
-            }
-
-            HStack(spacing: 12) {
-                Button("Clear") {
-                    text = "0"
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(AppTheme.card)
-                .foregroundStyle(AppTheme.text)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-
-                Button {
-                    onSave(normalizedText)
-                    dismiss()
-                } label: {
-                    Image(systemName: "checkmark")
-                        .font(.headline)
+                HStack(spacing: 8) {
+                    Color.clear
                         .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(canSave ? AppTheme.positive : AppTheme.card)
-                        .foregroundStyle(canSave ? AppTheme.contrastText : AppTheme.muted)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        .frame(height: 48)
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                    setKey
                 }
-                .disabled(!canSave)
             }
+
+            Button("Clear") {
+                text = "0"
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(AppTheme.card)
+            .foregroundStyle(AppTheme.text)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
         }
         .padding(20)
         .background(AppTheme.background)
@@ -229,6 +218,25 @@ struct MoneyAmountEditorSheet: View {
         return value.isEmpty ? "0" : value
     }
 
+    private var deleteKey: some View {
+        Button(action: deleteLast) {
+            Image(systemName: "delete.left")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(KeypadButtonStyle())
+        .accessibilityLabel("Delete")
+    }
+
+    private var setKey: some View {
+        Button(action: commitAmount) {
+            Text("Set")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(KeypadButtonStyle(prominent: canSave))
+        .disabled(!canSave)
+        .accessibilityLabel("Set")
+    }
+
     private func keypadRow(_ values: [String]) -> some View {
         HStack(spacing: 8) {
             ForEach(values, id: \.self, content: keypadButton)
@@ -240,6 +248,12 @@ struct MoneyAmountEditorSheet: View {
             append(value)
         }
         .buttonStyle(KeypadButtonStyle())
+    }
+
+    private func commitAmount() {
+        guard canSave else { return }
+        onSave(normalizedText)
+        dismiss()
     }
 
     private func append(_ value: String) {
@@ -261,13 +275,19 @@ struct MoneyAmountEditorSheet: View {
 }
 
 private struct KeypadButtonStyle: ButtonStyle {
+    var prominent: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.title3, design: .rounded).weight(.bold))
-            .foregroundStyle(AppTheme.text)
+            .foregroundStyle(prominent ? AppTheme.contrastText : AppTheme.text)
             .frame(height: 48)
             .frame(maxWidth: .infinity)
-            .background(configuration.isPressed ? AppTheme.positive.opacity(0.35) : AppTheme.card)
+            .background(
+                prominent
+                    ? (configuration.isPressed ? AppTheme.positive.opacity(0.7) : AppTheme.positive)
+                    : (configuration.isPressed ? AppTheme.positive.opacity(0.35) : AppTheme.card)
+            )
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
