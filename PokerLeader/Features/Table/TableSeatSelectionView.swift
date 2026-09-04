@@ -132,7 +132,7 @@ struct TableSeatSelectionView: View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
-                    if selectedSeat == nil && !isGameStarted {
+                    if selectedSeat == nil {
                         Text("Tap an open seat")
                             .font(.title3.bold())
                             .foregroundStyle(AppTheme.text)

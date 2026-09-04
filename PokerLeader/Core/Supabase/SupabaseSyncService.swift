@@ -1015,6 +1015,24 @@ private struct OpenTableRow: Codable {
         case updatedAt = "updated_at"
     }
 
+    /// Written by hand so that clearing the hand sends an explicit null instead
+    /// of leaving the finished hand behind in the row.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(inviteCode, forKey: .inviteCode)
+        try container.encode(hostUserId, forKey: .hostUserId)
+        try container.encode(hostDisplayName, forKey: .hostDisplayName)
+        try container.encode(hostPlayerKey, forKey: .hostPlayerKey)
+        try container.encode(sessionCurrencyCode, forKey: .sessionCurrencyCode)
+        try container.encode(isStarted, forKey: .isStarted)
+        try container.encode(seats, forKey: .seats)
+        try container.encode(anteAmount, forKey: .anteAmount)
+        try container.encode(hand, forKey: .hand)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
     var snapshot: CloudOpenTableSnapshot {
         CloudOpenTableSnapshot(
             id: id,
@@ -1045,5 +1063,14 @@ private struct OpenTablePlayUpdate: Encodable {
         case anteAmount = "ante_amount"
         case hand
         case updatedAt = "updated_at"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isStarted, forKey: .isStarted)
+        try container.encode(seats, forKey: .seats)
+        try container.encode(anteAmount, forKey: .anteAmount)
+        try container.encode(hand, forKey: .hand)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
