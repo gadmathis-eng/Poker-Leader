@@ -99,6 +99,10 @@ Run the account deletion migration before release:
 
 Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
+Run the pre-flop migration so the ante and the hand in progress sync between players:
+
+`supabase/migrations/20260905090000_open_tables_preflop_hand.sql`
+
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 
 Without `Supabase.plist`, the app still works locally with SwiftData only.
