@@ -102,6 +102,16 @@ final class TableParty {
         save()
     }
 
+    /// Tops a player up by `amount`. Negative amounts are ignored so a stack
+    /// can never be reduced through the add control.
+    func addToStack(_ amount: Decimal, for playerId: UUID) {
+        guard amount > 0 else { return }
+        guard let index = players.firstIndex(where: { $0.id == playerId }) else { return }
+
+        players[index].stack += amount
+        save()
+    }
+
     func startGame() {
         guard canStart else { return }
         isStarted = true

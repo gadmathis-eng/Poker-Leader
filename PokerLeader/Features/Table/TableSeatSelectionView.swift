@@ -108,48 +108,22 @@ struct TableSeatSelectionView: View {
     }
 
     private func rosterRow(for player: TablePartyPlayer, joinPosition: Int) -> some View {
-        HStack(spacing: 10) {
-            Text("\(joinPosition)")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(AppTheme.muted)
-                .frame(width: 16)
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(player.isYou ? "\(player.name) (you)" : player.name)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.text)
-
-                    if party.isLeader(player.id) {
-                        Label("Leader", systemImage: "crown.fill")
-                            .labelStyle(.iconOnly)
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.gold)
-                    }
+        PartyRosterRow(
+            player: player,
+            joinPosition: joinPosition,
+            isLeader: party.isLeader(player.id),
+            currencyCode: buyInCurrencyCode,
+            onAdd: { amount in
+                withAnimation(.easeOut(duration: 0.18)) {
+                    party.addToStack(amount, for: player.id)
                 }
-                Text("Seat \(player.seat) · \(MoneyFormatting.plain(player.stack, currencyCode: buyInCurrencyCode))")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-            }
-
-            Spacer(minLength: 0)
-
-            Button {
+            },
+            onLeave: {
                 withAnimation(.easeOut(duration: 0.18)) {
                     party.leave(player.id)
                 }
-            } label: {
-                Text("Leave")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.negative)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.negative.opacity(0.12))
-                    .clipShape(Capsule())
             }
-            .buttonStyle(.plain)
-        }
-        .padding(14)
+        )
     }
 
     @ViewBuilder
@@ -228,6 +202,139 @@ struct TableSeatSelectionView: View {
             party.join(name: name, seat: seat, stack: buyInAmount)
         }
         pendingGuestSeat = nil
+    }
+}
+
+private struct PartyRosterRow: View {
+    let player: TablePartyPlayer
+    let joinPosition: Int
+    let isLeader: Bool
+    let currencyCode: String
+    let onAdd: (Decimal) -> Void
+    let onLeave: () -> Void
+
+    @State private var sliderValue: Double = 0
+    @State private var amountText: String = ""
+
+    /// The slider spans everything this player currently has, so the far right
+    /// of the track is their whole stack.
+    private var availableMoney: Double {
+        max(NSDecimalNumber(decimal: player.stack).doubleValue, 0)
+    }
+
+    private var hasMoney: Bool {
+        availableMoney > 0
+    }
+
+    private var sliderRange: ClosedRange<Double> {
+        0...max(availableMoney, 1)
+    }
+
+    private var parsedAmount: Decimal? {
+        let trimmed = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let value = Decimal(string: trimmed), value > 0 else { return nil }
+        return min(value, player.stack)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Text("\(joinPosition)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppTheme.muted)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(player.isYou ? "\(player.name) (you)" : player.name)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.text)
+
+                        if isLeader {
+                            Image(systemName: "crown.fill")
+                                .font(.caption2)
+                                .foregroundStyle(AppTheme.gold)
+                        }
+                    }
+                    Text("Seat \(player.seat) · \(MoneyFormatting.plain(player.stack, currencyCode: currencyCode))")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                }
+
+                Spacer(minLength: 0)
+
+                Button(action: onLeave) {
+                    Text("Leave")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.negative)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(AppTheme.negative.opacity(0.12))
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack(spacing: 10) {
+                Slider(value: $sliderValue, in: sliderRange, step: 1)
+                    .tint(AppTheme.positive)
+                    .disabled(!hasMoney)
+                    .onChange(of: sliderValue) { _, newValue in
+                        let text = String(Int(newValue.rounded()))
+                        if amountText != text {
+                            amountText = text
+                        }
+                    }
+                    .onChange(of: availableMoney) { _, newMaximum in
+                        if sliderValue > newMaximum {
+                            sliderValue = newMaximum
+                        }
+                    }
+
+                TextField("0", text: $amountText)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.center)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(AppTheme.text)
+                    .frame(width: 62)
+                    .padding(.vertical, 8)
+                    .background(AppTheme.background)
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9)
+                            .stroke(AppTheme.cardBorder)
+                    )
+                    .onChange(of: amountText) { _, newValue in
+                        guard let typed = Double(newValue.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
+                        let clamped = min(max(typed, 0), availableMoney)
+                        if abs(clamped - sliderValue) > 0.001 {
+                            sliderValue = clamped
+                        }
+                    }
+                    .disabled(!hasMoney)
+
+                Button {
+                    guard let amount = parsedAmount else { return }
+                    onAdd(amount)
+                    amountText = ""
+                    sliderValue = 0
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(parsedAmount == nil ? AppTheme.muted : AppTheme.contrastText)
+                        .frame(width: 34, height: 34)
+                        .background(parsedAmount == nil ? AppTheme.card : AppTheme.positive)
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(parsedAmount == nil ? AppTheme.cardBorder : AppTheme.positive)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(parsedAmount == nil)
+            }
+        }
+        .padding(14)
     }
 }
 
