@@ -98,7 +98,7 @@ struct FinalStacksView: View {
                     MoneyAmountEditorSheet(editor: editor) { text in
                         stackTexts[editor.id] = sanitizedNonNegativeDecimalText(text)
                     }
-                    .presentationDetents([.height(480)])
+                    .presentationDetents([.height(420)])
                     .presentationDragIndicator(.visible)
                 }
             } else {

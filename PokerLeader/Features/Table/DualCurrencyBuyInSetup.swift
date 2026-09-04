@@ -45,8 +45,6 @@ struct DualCurrencyBuyInSetup: View {
                 onAmountTap: {
                     editingBuyIn = MoneyAmountEditorState(
                         id: UUID(),
-                        title: "My buy-in",
-                        subtitle: "Personal amount",
                         currencyCode: buyInCurrencyCode,
                         text: buyInText
                     )
@@ -60,7 +58,7 @@ struct DualCurrencyBuyInSetup: View {
             MoneyAmountEditorSheet(editor: editor) { text in
                 buyInText = text
             }
-            .presentationDetents([.height(480)])
+            .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $currencyPickerTarget) { target in

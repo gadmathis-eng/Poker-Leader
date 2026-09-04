@@ -114,7 +114,7 @@ struct LiveTableView: View {
                         repo.updateTotalIn(player: player, amount: amount, session: currentSession)
                         syncMoneyText(for: player)
                     }
-                    .presentationDetents([.height(480)])
+                    .presentationDetents([.height(420)])
                     .presentationDragIndicator(.visible)
                 }
             } else {

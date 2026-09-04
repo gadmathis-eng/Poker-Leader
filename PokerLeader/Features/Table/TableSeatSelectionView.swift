@@ -11,6 +11,7 @@ struct TableSeatSelectionView: View {
 
     @State private var selectedSeat: Int?
     @State private var amountText = ""
+    @State private var editingAmount: MoneyAmountEditorState?
 
     private static let seatCount = 8
     private static let amountStep = 0.01
@@ -50,10 +51,11 @@ struct TableSeatSelectionView: View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
-                    SectionHeader(title: "Choose your seat")
-                    Text("Tap an open seat")
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.text)
+                    if selectedSeat == nil {
+                        Text("Tap an open seat")
+                            .font(.title3.bold())
+                            .foregroundStyle(AppTheme.text)
+                    }
                     Text("Table in \(sessionCurrencyCode)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
@@ -65,16 +67,7 @@ struct TableSeatSelectionView: View {
                     selectedSeat: selectedSeat,
                     playerName: playerName,
                     stackLabel: stackLabel,
-                    onSelect: { seat in
-                        withAnimation(.easeOut(duration: 0.18)) {
-                            if selectedSeat == seat {
-                                selectedSeat = nil
-                            } else {
-                                selectedSeat = seat
-                                resetAmountToFullStack()
-                            }
-                        }
-                    }
+                    onSelect: handleSeatTap
                 )
                 .frame(height: 400)
                 .padding(.horizontal)
@@ -111,6 +104,13 @@ struct TableSeatSelectionView: View {
             }
             resetAmountToFullStack()
         }
+        .sheet(item: $editingAmount) { editor in
+            MoneyAmountEditorSheet(editor: editor) { text in
+                applyAmountText(text)
+            }
+            .presentationDetents([.height(420)])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var amountControls: some View {
@@ -118,18 +118,22 @@ struct TableSeatSelectionView: View {
             HStack {
                 SectionHeader(title: "Money in")
                 Spacer()
-                Text(stackLabel)
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.gold)
+                Button(action: presentAmountEditor) {
+                    Text(stackLabel)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(AppTheme.gold)
+                }
+                .buttonStyle(.plain)
+                .disabled(!hasMoney)
             }
 
-            VStack(spacing: 12) {
-                VStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
-                            .tint(AppTheme.positive)
-                            .disabled(!hasMoney)
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
+                        .tint(AppTheme.positive)
+                        .disabled(!hasMoney)
 
+                    Button(action: presentAmountEditor) {
                         Text(amountText.isEmpty ? "0.00" : amountText)
                             .multilineTextAlignment(.center)
                             .font(.subheadline.weight(.semibold))
@@ -143,22 +147,18 @@ struct TableSeatSelectionView: View {
                                     .stroke(AppTheme.cardBorder)
                             )
                     }
-
-                    HStack {
-                        Text("0.00")
-                        Spacer()
-                        Text(hundredthsText(availableMoney))
-                    }
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.muted)
+                    .buttonStyle(.plain)
+                    .disabled(!hasMoney)
+                    .accessibilityLabel("Edit money in")
                 }
 
-                MoneyAmountKeypad(
-                    text: $amountText,
-                    maximum: Decimal(string: hundredthsText(availableMoney)),
-                    isEnabled: hasMoney,
-                    onSet: { applyAmountText(amountText) }
-                )
+                HStack {
+                    Text("0.00")
+                    Spacer()
+                    Text(hundredthsText(availableMoney))
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.muted)
             }
             .padding(14)
             .background(AppTheme.card)
@@ -185,6 +185,28 @@ struct TableSeatSelectionView: View {
     private var confirmTitle: String {
         guard let seat = selectedSeat else { return "Select a seat" }
         return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
+    }
+
+    private func handleSeatTap(_ seat: Int) {
+        if selectedSeat == seat {
+            presentAmountEditor()
+            return
+        }
+
+        withAnimation(.easeOut(duration: 0.18)) {
+            selectedSeat = seat
+            resetAmountToFullStack()
+        }
+    }
+
+    private func presentAmountEditor() {
+        guard hasMoney else { return }
+        editingAmount = MoneyAmountEditorState(
+            id: UUID(),
+            currencyCode: buyInCurrencyCode,
+            text: amountText.isEmpty ? "0" : amountText,
+            maximum: Decimal(string: hundredthsText(availableMoney))
+        )
     }
 
     private func resetAmountToFullStack() {
@@ -309,5 +331,6 @@ private struct SeatChip: View {
             )
         }
         .buttonStyle(.plain)
+        .accessibilityHint(isOccupied ? "Edits the amount at this seat" : "Sits at this seat")
     }
 }
