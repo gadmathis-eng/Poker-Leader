@@ -168,24 +168,52 @@ struct MoneyAmountEditorSheet: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
 
-            VStack(spacing: 8) {
-                keypadRow(["1", "2", "3"])
-                keypadRow(["4", "5", "6"])
-                keypadRow(["7", "8", "9"])
-                HStack(spacing: 8) {
-                    keypadButton(".")
-                    keypadButton("0")
-                    deleteKey
-                }
-                HStack(spacing: 8) {
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                    setKey
-                }
+            MoneyAmountKeypad(text: $text, maximum: maximum, onSet: commitAmount)
+        }
+        .padding(20)
+        .background(AppTheme.background)
+    }
+
+    private var displayAmount: String {
+        MoneyFormatting.plain((Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0).clampedToNonNegative, currencyCode: currencyCode)
+    }
+
+    private func commitAmount() {
+        let value = MoneyAmountKeypad.committedText(text, maximum: maximum)
+        guard Decimal(string: value) != nil else { return }
+        onSave(value)
+        dismiss()
+    }
+}
+
+struct MoneyAmountKeypad: View {
+    @Binding var text: String
+    var maximum: Decimal? = nil
+    var isEnabled: Bool = true
+    var onSet: () -> Void
+
+    private var canSet: Bool {
+        isEnabled && Decimal(string: Self.normalizedText(text)) != nil
+    }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            keypadRow(["1", "2", "3"])
+            keypadRow(["4", "5", "6"])
+            keypadRow(["7", "8", "9"])
+            HStack(spacing: 8) {
+                keypadButton(".")
+                keypadButton("0")
+                deleteKey
+            }
+            HStack(spacing: 8) {
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                Color.clear
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 48)
+                setKey
             }
 
             Button("Clear") {
@@ -196,29 +224,25 @@ struct MoneyAmountEditorSheet: View {
             .background(AppTheme.card)
             .foregroundStyle(AppTheme.text)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            .disabled(!isEnabled)
         }
-        .padding(20)
-        .background(AppTheme.background)
+        .disabled(!isEnabled)
     }
 
-    private var canSave: Bool {
-        amount != nil
-    }
-
-    private var displayAmount: String {
-        MoneyFormatting.plain((amount ?? 0).clampedToNonNegative, currencyCode: currencyCode)
-    }
-
-    private var amount: Decimal? {
-        Decimal(string: normalizedText)
-    }
-
-    private var normalizedText: String {
+    static func normalizedText(_ text: String) -> String {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasSuffix(".") {
             value.removeLast()
         }
         return value.isEmpty ? "0" : value
+    }
+
+    static func committedText(_ text: String, maximum: Decimal?) -> String {
+        var value = normalizedText(text)
+        if let maximum, let typed = Decimal(string: value), typed > maximum {
+            value = NSDecimalNumber(decimal: maximum).stringValue
+        }
+        return value
     }
 
     private var deleteKey: some View {
@@ -231,12 +255,12 @@ struct MoneyAmountEditorSheet: View {
     }
 
     private var setKey: some View {
-        Button(action: commitAmount) {
+        Button(action: onSet) {
             Text("Set")
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(KeypadButtonStyle(prominent: canSave))
-        .disabled(!canSave)
+        .buttonStyle(KeypadButtonStyle(prominent: canSet))
+        .disabled(!canSet)
         .accessibilityLabel("Set")
     }
 
@@ -251,16 +275,6 @@ struct MoneyAmountEditorSheet: View {
             append(value)
         }
         .buttonStyle(KeypadButtonStyle())
-    }
-
-    private func commitAmount() {
-        guard canSave else { return }
-        var value = normalizedText
-        if let maximum, let typed = Decimal(string: value), typed > maximum {
-            value = NSDecimalNumber(decimal: maximum).stringValue
-        }
-        onSave(value)
-        dismiss()
     }
 
     private func append(_ value: String) {

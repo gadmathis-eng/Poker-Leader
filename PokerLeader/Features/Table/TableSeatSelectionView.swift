@@ -10,9 +10,7 @@ struct TableSeatSelectionView: View {
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
     @State private var selectedSeat: Int?
-    @State private var sliderValue: Double = 0
     @State private var amountText = ""
-    @State private var editingAmount: MoneyAmountEditorState?
 
     private static let seatCount = 8
     private static let amountStep = 0.01
@@ -37,7 +35,11 @@ struct TableSeatSelectionView: View {
     }
 
     private var seatedAmount: Decimal {
-        Decimal(string: hundredthsText(sliderValue)) ?? 0
+        let committed = MoneyAmountKeypad.committedText(
+            amountText,
+            maximum: Decimal(string: hundredthsText(availableMoney))
+        )
+        return Decimal(string: committed) ?? 0
     }
 
     private var stackLabel: String {
@@ -109,42 +111,25 @@ struct TableSeatSelectionView: View {
             }
             resetAmountToFullStack()
         }
-        .sheet(item: $editingAmount) { editor in
-            MoneyAmountEditorSheet(editor: editor) { text in
-                applyAmountText(text)
-            }
-            .presentationDetents([.height(480)])
-            .presentationDragIndicator(.visible)
-        }
     }
 
     private var amountControls: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionHeader(title: "Amount at table")
+                SectionHeader(title: "Money in")
                 Spacer()
                 Text(stackLabel)
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppTheme.gold)
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 10) {
-                    Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
-                        .tint(AppTheme.positive)
-                        .disabled(!hasMoney)
+            VStack(spacing: 12) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
+                            .tint(AppTheme.positive)
+                            .disabled(!hasMoney)
 
-                    Button {
-                        guard hasMoney else { return }
-                        editingAmount = MoneyAmountEditorState(
-                            id: UUID(),
-                            title: "Amount at table",
-                            subtitle: "Money in",
-                            currencyCode: buyInCurrencyCode,
-                            text: amountText,
-                            maximum: Decimal(string: hundredthsText(availableMoney))
-                        )
-                    } label: {
                         Text(amountText.isEmpty ? "0.00" : amountText)
                             .multilineTextAlignment(.center)
                             .font(.subheadline.weight(.semibold))
@@ -158,17 +143,22 @@ struct TableSeatSelectionView: View {
                                     .stroke(AppTheme.cardBorder)
                             )
                     }
-                    .buttonStyle(.plain)
-                    .disabled(!hasMoney)
+
+                    HStack {
+                        Text("0.00")
+                        Spacer()
+                        Text(hundredthsText(availableMoney))
+                    }
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.muted)
                 }
 
-                HStack {
-                    Text("0.00")
-                    Spacer()
-                    Text(hundredthsText(availableMoney))
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.muted)
+                MoneyAmountKeypad(
+                    text: $amountText,
+                    maximum: Decimal(string: hundredthsText(availableMoney)),
+                    isEnabled: hasMoney,
+                    onSet: { applyAmountText(amountText) }
+                )
             }
             .padding(14)
             .background(AppTheme.card)
@@ -183,11 +173,11 @@ struct TableSeatSelectionView: View {
 
     private var hundredthsSliderBinding: Binding<Double> {
         Binding(
-            get: { sliderValue },
+            get: {
+                clampedHundredths(Double(MoneyAmountKeypad.normalizedText(amountText)) ?? 0)
+            },
             set: { newValue in
-                let rounded = clampedHundredths(newValue)
-                sliderValue = rounded
-                amountText = hundredthsText(rounded)
+                amountText = hundredthsText(newValue)
             }
         )
     }
@@ -198,43 +188,15 @@ struct TableSeatSelectionView: View {
     }
 
     private func resetAmountToFullStack() {
-        let rounded = clampedHundredths(availableMoney)
-        sliderValue = rounded
-        amountText = hundredthsText(rounded)
+        amountText = hundredthsText(availableMoney)
     }
 
     private func applyAmountText(_ text: String) {
-        let sanitized = sanitizedDecimalText(text)
-        let value = Double(sanitized) ?? 0
-        let clamped = clampedHundredths(value)
-        sliderValue = clamped
-        amountText = hundredthsText(clamped)
-    }
-
-    private func sanitizedDecimalText(_ text: String) -> String {
-        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        value = value.replacingOccurrences(of: ",", with: ".")
-
-        guard !value.isEmpty else { return value }
-
-        var result = ""
-        var hasDecimalSeparator = false
-        var fractionDigits = 0
-
-        for character in value {
-            if character.isWholeNumber {
-                if hasDecimalSeparator {
-                    guard fractionDigits < 2 else { continue }
-                    fractionDigits += 1
-                }
-                result.append(character)
-            } else if character == ".", !hasDecimalSeparator {
-                hasDecimalSeparator = true
-                result.append(character)
-            }
-        }
-
-        return result
+        let committed = MoneyAmountKeypad.committedText(
+            text,
+            maximum: Decimal(string: hundredthsText(availableMoney))
+        )
+        amountText = hundredthsText(Double(committed) ?? 0)
     }
 
     private func clampedHundredths(_ value: Double) -> Double {
