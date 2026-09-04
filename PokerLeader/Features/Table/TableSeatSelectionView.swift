@@ -246,6 +246,7 @@ private struct PokerTableSeatLayout: View {
                     SeatChip(
                         seatNumber: seat,
                         isOccupied: selectedSeat == seat,
+                        isLeader: selectedSeat == seat,
                         playerName: playerName,
                         stackLabel: stackLabel,
                         action: { onSelect(seat) }
@@ -281,6 +282,7 @@ private struct TableFelt: View {
 private struct SeatChip: View {
     let seatNumber: Int
     let isOccupied: Bool
+    let isLeader: Bool
     let playerName: String
     let stackLabel: String
     let action: () -> Void
@@ -289,10 +291,17 @@ private struct SeatChip: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 if isOccupied {
-                    Text(playerName)
-                        .font(.caption.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                    HStack(spacing: 3) {
+                        if isLeader {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppTheme.gold)
+                        }
+                        Text(playerName)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
                     Text(stackLabel)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
@@ -319,5 +328,13 @@ private struct SeatChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(isOccupied ? "Edits the amount at this seat" : "Sits at this seat")
+        .accessibilityLabel(occupancyAccessibilityLabel)
+    }
+
+    private var occupancyAccessibilityLabel: String {
+        if isOccupied {
+            return isLeader ? "\(playerName), party leader" : playerName
+        }
+        return "Seat \(seatNumber)"
     }
 }
