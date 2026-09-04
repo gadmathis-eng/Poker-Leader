@@ -83,23 +83,6 @@ struct TableSeatSelectionView: View {
                 if selectedSeat != nil {
                     amountControls
                 }
-
-                Button {
-                    if let seat = selectedSeat {
-                        storedSeatNumber = seat
-                    }
-                } label: {
-                    Text(confirmTitle)
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(selectedSeat == nil ? AppTheme.card : AppTheme.positive)
-                        .foregroundStyle(selectedSeat == nil ? AppTheme.muted : AppTheme.contrastText)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                }
-                .buttonStyle(.plain)
-                .disabled(selectedSeat == nil || seatedAmount <= 0)
-                .padding(.horizontal)
             }
             .padding(.vertical)
         }
@@ -190,11 +173,6 @@ struct TableSeatSelectionView: View {
         )
     }
 
-    private var confirmTitle: String {
-        guard let seat = selectedSeat else { return "Select a seat" }
-        return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
-    }
-
     private func handleSeatTap(_ seat: Int) {
         if selectedSeat == seat {
             presentAmountEditor()
@@ -203,6 +181,7 @@ struct TableSeatSelectionView: View {
 
         withAnimation(.easeOut(duration: 0.18)) {
             selectedSeat = seat
+            storedSeatNumber = seat
             resetAmountToFullStack()
         }
     }
