@@ -15,6 +15,7 @@ struct TableView: View {
     @State private var showingSeatSelection = false
     @State private var activeTable: OpenTableModel?
     @State private var joinError: String?
+    @State private var joinCodeText = ""
     @State private var isJoiningTable = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
@@ -40,6 +41,10 @@ struct TableView: View {
 
     private var hasJoinableBuyIn: Bool {
         (personalBuyInAmount ?? 0) > 0
+    }
+
+    private var canJoinWithTypedCode: Bool {
+        !TableInviteDeepLink.normalizedCode(joinCodeText).isEmpty
     }
 
     var body: some View {
@@ -71,6 +76,37 @@ struct TableView: View {
                             .foregroundStyle(AppTheme.negative)
                             .padding(.horizontal)
                     }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "Join with code")
+
+                        TextField("Paste table code", text: $joinCodeText)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .font(.headline.monospaced())
+                            .padding(14)
+                            .background(AppTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                                    .stroke(AppTheme.cardBorder)
+                            )
+
+                        Button {
+                            Task { await joinWithTypedCode() }
+                        } label: {
+                            Text(isJoiningTable ? "Joining..." : "Join with code")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(canJoinWithTypedCode ? AppTheme.positive : AppTheme.card)
+                                .foregroundStyle(canJoinWithTypedCode ? AppTheme.contrastText : AppTheme.muted)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canJoinWithTypedCode || isJoiningTable)
+                    }
+                    .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader(title: "New session")
@@ -128,13 +164,17 @@ struct TableView: View {
                             .font(.system(size: 44))
                             .foregroundStyle(AppTheme.text)
 
-                        Text(activeTable == nil ? "No active table" : "Table \(activeTable?.inviteCode ?? "")")
-                            .font(.headline)
-                            .foregroundStyle(AppTheme.text)
+                        if let activeTable {
+                            InviteCodeCopyLabel(code: activeTable.inviteCode, style: .headline)
+                        } else {
+                            Text("No active table")
+                                .font(.headline)
+                                .foregroundStyle(AppTheme.text)
+                        }
 
                         Text(activeTable == nil
-                             ? "Set your buy-in above, then share the table so friends can tap the link to join."
-                             : "Open the table to pick a seat, or share the invite so others can join.")
+                             ? "Paste a friend's table code above, or set your buy-in and share your own table."
+                             : "Open the table to pick a seat, or share the code so others can join.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.muted)
                             .multilineTextAlignment(.center)
@@ -306,10 +346,26 @@ struct TableView: View {
         }
 
         if let table = activeTable, table.isHostLocally {
-            Task { try? await repo.publishForSharing(table) }
+            Task { await publishHostTable(table) }
         }
 
         showingSeatSelection = true
+    }
+
+    private func joinWithTypedCode() async {
+        let code = TableInviteDeepLink.normalizedCode(joinCodeText)
+        guard !code.isEmpty else { return }
+
+        router.pendingTableInviteCode = code
+        await handlePendingJoin()
+    }
+
+    private func publishHostTable(_ table: OpenTableModel) async {
+        do {
+            try await repo.publishForSharing(table)
+        } catch {
+            joinError = error.localizedDescription
+        }
     }
 
     private func handlePendingJoin() async {
@@ -329,6 +385,7 @@ struct TableView: View {
             activeTable = table
             draftSessionCurrencyCode = table.sessionCurrencyCode
             router.pendingTableInviteCode = nil
+            joinCodeText = table.inviteCode
             if hasJoinableBuyIn {
                 showingSeatSelection = true
             }
