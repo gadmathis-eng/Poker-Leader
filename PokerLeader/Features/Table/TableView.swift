@@ -64,38 +64,28 @@ struct TableView: View {
                     .padding(.horizontal)
 
                     if let amount = personalBuyInAmount, amount > 0 {
-                        VStack(alignment: .leading, spacing: 10) {
-                            SectionHeader(title: "My buy-in")
-
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text("Session currency")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(AppTheme.muted)
-                                    Spacer()
-                                    Text(personalSessionCurrencyCode)
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(AppTheme.text)
-                                }
-
-                                HStack {
-                                    Text("Personal buy-in")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(AppTheme.muted)
-                                    Spacer()
-                                    Text(MoneyFormatting.plain(amount, currencyCode: personalBuyInCurrencyCode))
-                                        .font(.title3.bold())
-                                        .foregroundStyle(AppTheme.gold)
-                                }
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Session currency")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(AppTheme.muted)
+                                Spacer()
+                                Text(personalSessionCurrencyCode)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(AppTheme.text)
                             }
-                            .padding(16)
-                            .background(AppTheme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                                    .stroke(AppTheme.cardBorder)
-                            )
+
+                            Text(MoneyFormatting.plain(amount, currencyCode: personalBuyInCurrencyCode))
+                                .font(.title3.bold())
+                                .foregroundStyle(AppTheme.gold)
                         }
+                        .padding(16)
+                        .background(AppTheme.card)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                                .stroke(AppTheme.cardBorder)
+                        )
                         .padding(.horizontal)
                     }
 
