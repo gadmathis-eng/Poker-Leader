@@ -17,8 +17,6 @@ struct TableSeatSelectionView: View {
     @State private var isGameStarted = false
     @State private var table: OpenTableModel?
     @State private var occupants: [SharedTableSeat] = []
-    @State private var shareError: String?
-    @State private var showSignIn = false
 
     private static let amountStep = 0.01
 
@@ -97,10 +95,6 @@ struct TableSeatSelectionView: View {
                 }
                 .padding(.horizontal)
 
-                if let table {
-                    shareCard(for: table)
-                }
-
                 PokerTableSeatLayout(
                     seatCount: SharedTableSeating.seatCount,
                     occupants: layoutOccupants,
@@ -155,63 +149,6 @@ struct TableSeatSelectionView: View {
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
-        .sheet(isPresented: $showSignIn) {
-            SignInSheet()
-                .modelContext(context)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-        }
-        .onChange(of: showSignIn) { _, isPresented in
-            if !isPresented {
-                Task { await publishIfPossible() }
-            }
-        }
-    }
-
-    private func shareCard(for table: OpenTableModel) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    InviteCodeCopyLabel(code: table.inviteCode, style: .headline)
-                    Text("Share this link. Friends join the table when they tap it.")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.muted)
-                }
-
-                Spacer()
-
-                ShareLink(
-                    item: TableInviteSharing.url(forInviteCode: table.inviteCode),
-                    subject: Text("Join my Pot Master table"),
-                    message: Text(TableInviteSharing.message(forInviteCode: table.inviteCode, hostName: table.hostDisplayName))
-                ) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.headline.weight(.bold))
-                        .foregroundStyle(AppTheme.contrastText)
-                        .frame(width: 42, height: 42)
-                        .background(AppTheme.positive)
-                        .clipShape(Circle())
-                }
-                .accessibilityLabel("Share table")
-            }
-
-            if let shareError, !Self.isCloudNoise(shareError) {
-                Text(shareError)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.negative)
-            } else if SupabaseBootstrap.isConfigured, !SupabaseAuthManager.shared.isSignedIn {
-                Button("Sign in so friends can join from the link") {
-                    showSignIn = true
-                }
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(AppTheme.positive)
-            }
-        }
-        .padding()
-        .background(AppTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
-        .padding(.horizontal)
     }
 
     private var amountControls: some View {
@@ -354,9 +291,7 @@ struct TableSeatSelectionView: View {
                 amount: seatedAmount
             )
             occupants = table.seats
-            shareError = nil
         } catch {
-            shareError = error.localizedDescription
             Task { await syncSharedTable() }
         }
     }
@@ -411,20 +346,13 @@ struct TableSeatSelectionView: View {
             )
             try? context.save()
         } catch {
-            shareError = error.localizedDescription
+            return
         }
     }
 
     private func publishIfPossible() async {
         guard let table else { return }
         try? await repo.publishForSharing(table)
-    }
-
-    private static func isCloudNoise(_ message: String) -> Bool {
-        let lowered = message.lowercased()
-        return lowered.contains("schema cache")
-            || lowered.contains("open_tables")
-            || lowered.contains("could not find the table")
     }
 }
 
