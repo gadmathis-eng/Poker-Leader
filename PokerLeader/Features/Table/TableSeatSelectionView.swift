@@ -112,40 +112,46 @@ struct TableSeatSelectionView: View {
 
     private var amountControls: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Amount at table")
+            HStack {
+                SectionHeader(title: "Amount at table")
+                Spacer()
+                Text(stackLabel)
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.gold)
+            }
 
-            HStack(spacing: 10) {
-                Slider(value: $sliderValue, in: sliderRange, step: Self.amountStep)
-                    .tint(AppTheme.positive)
-                    .disabled(!hasMoney)
-                    .onChange(of: sliderValue) { _, newValue in
-                        let text = hundredthsText(clampedHundredths(newValue))
-                        if amountText != text {
-                            amountText = text
-                        }
-                    }
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
+                        .tint(AppTheme.positive)
+                        .disabled(!hasMoney)
 
-                TextField("0.00", text: $amountText)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(AppTheme.text)
-                    .frame(width: 72)
-                    .padding(.vertical, 8)
-                    .background(AppTheme.background)
-                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 9)
-                            .stroke(AppTheme.cardBorder)
-                    )
-                    .onChange(of: amountText) { _, newValue in
-                        guard let typed = Double(newValue.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-                        let clamped = clampedHundredths(typed)
-                        if abs(clamped - sliderValue) > 0.0001 {
-                            sliderValue = clamped
+                    TextField("0.00", text: $amountText)
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.center)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(AppTheme.text)
+                        .frame(width: 72)
+                        .padding(.vertical, 8)
+                        .background(AppTheme.background)
+                        .clipShape(RoundedRectangle(cornerRadius: 9))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9)
+                                .stroke(AppTheme.cardBorder)
+                        )
+                        .onChange(of: amountText) { _, newValue in
+                            syncSliderFromText(newValue)
                         }
-                    }
-                    .disabled(!hasMoney)
+                        .disabled(!hasMoney)
+                }
+
+                HStack {
+                    Text("0.00")
+                    Spacer()
+                    Text(hundredthsText(availableMoney))
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.muted)
             }
             .padding(14)
             .background(AppTheme.card)
@@ -158,14 +164,66 @@ struct TableSeatSelectionView: View {
         .padding(.horizontal)
     }
 
+    private var hundredthsSliderBinding: Binding<Double> {
+        Binding(
+            get: { sliderValue },
+            set: { newValue in
+                let rounded = clampedHundredths(newValue)
+                sliderValue = rounded
+                amountText = hundredthsText(rounded)
+            }
+        )
+    }
+
     private var confirmTitle: String {
         guard let seat = selectedSeat else { return "Select a seat" }
         return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
     }
 
     private func resetAmountToFullStack() {
-        sliderValue = availableMoney
-        amountText = hundredthsText(availableMoney)
+        let rounded = clampedHundredths(availableMoney)
+        sliderValue = rounded
+        amountText = hundredthsText(rounded)
+    }
+
+    private func syncSliderFromText(_ text: String) {
+        let sanitized = sanitizedDecimalText(text)
+        if sanitized != text {
+            amountText = sanitized
+            return
+        }
+
+        guard let typed = Double(sanitized), !sanitized.isEmpty else { return }
+        let clamped = clampedHundredths(typed)
+        if abs(clamped - sliderValue) > 0.0001 {
+            sliderValue = clamped
+        }
+    }
+
+    private func sanitizedDecimalText(_ text: String) -> String {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        value = value.replacingOccurrences(of: ",", with: ".")
+
+        guard !value.isEmpty else { return value }
+
+        var result = ""
+        var hasDecimalSeparator = false
+        var fractionDigits = 0
+
+        for character in value {
+            if character.isWholeNumber {
+                if hasDecimalSeparator {
+                    guard fractionDigits < 2 else { continue }
+                    fractionDigits += 1
+                }
+                result.append(character)
+            } else if character == ".", !hasDecimalSeparator {
+                hasDecimalSeparator = true
+                result.append(character)
+            }
+        }
+
+        return result
     }
 
     private func clampedHundredths(_ value: Double) -> Double {
