@@ -10,6 +10,7 @@ struct TableSeatSelectionView: View {
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
     @State private var selectedSeat: Int?
+    @State private var seatedAt: Int?
 
     private static let seatCount = 8
 
@@ -55,6 +56,7 @@ struct TableSeatSelectionView: View {
                 Button {
                     if let seat = selectedSeat {
                         storedSeatNumber = seat
+                        seatedAt = seat
                     }
                 } label: {
                     Text(confirmTitle)
@@ -74,16 +76,14 @@ struct TableSeatSelectionView: View {
         .background(AppTheme.background)
         .navigationTitle("Table")
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            if selectedSeat == nil, storedSeatNumber > 0 {
-                selectedSeat = storedSeatNumber
-            }
+        .navigationDestination(item: $seatedAt) { seat in
+            PokerChipsView(seatNumber: seat, currencyCode: buyInCurrencyCode)
         }
     }
 
     private var confirmTitle: String {
         guard let seat = selectedSeat else { return "Select a seat" }
-        return storedSeatNumber == seat ? "Seated at \(seat)" : "Take seat \(seat)"
+        return "Take seat \(seat)"
     }
 }
 
