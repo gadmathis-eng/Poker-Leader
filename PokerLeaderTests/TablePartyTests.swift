@@ -120,6 +120,46 @@ final class TablePartyTests: XCTestCase {
         XCTAssertEqual(party.players.count, 1)
     }
 
+    func testAddToStackIncreasesPlayerStack() {
+        let party = makeParty()
+        let player = party.join(name: "Alex", seat: 1, stack: 20)
+
+        party.addToStack(35, for: player!.id)
+
+        XCTAssertEqual(party.players.first?.stack, 55)
+    }
+
+    func testAddToStackIgnoresNonPositiveAmounts() {
+        let party = makeParty()
+        let player = party.join(name: "Alex", seat: 1, stack: 20)
+
+        party.addToStack(0, for: player!.id)
+        party.addToStack(-10, for: player!.id)
+
+        XCTAssertEqual(party.players.first?.stack, 20)
+    }
+
+    func testAddToStackOnlyAffectsTargetPlayer() {
+        let party = makeParty()
+        let alex = party.join(name: "Alex", seat: 1, stack: 20)
+        party.join(name: "Ben", seat: 2, stack: 20)
+
+        party.addToStack(50, for: alex!.id)
+
+        XCTAssertEqual(party.players[0].stack, 70)
+        XCTAssertEqual(party.players[1].stack, 20)
+    }
+
+    func testAddedStackPersists() {
+        let party = makeParty()
+        let player = party.join(name: "Alex", seat: 1, stack: 20)
+        party.addToStack(40, for: player!.id)
+
+        let restored = makeParty()
+
+        XCTAssertEqual(restored.players.first?.stack, 60)
+    }
+
     func testStatePersistsAcrossInstances() {
         let party = makeParty()
         let creator = party.join(name: "Alex", seat: 1, stack: 100, isYou: true)
