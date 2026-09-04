@@ -12,6 +12,7 @@ struct TableSeatSelectionView: View {
     @State private var selectedSeat: Int?
     @State private var amountText = ""
     @State private var editingAmount: MoneyAmountEditorState?
+    @State private var isGameStarted = false
 
     private static let seatCount = 8
     private static let amountStep = 0.01
@@ -75,7 +76,10 @@ struct TableSeatSelectionView: View {
                     selectedSeat: selectedSeat,
                     playerName: playerName,
                     stackLabel: stackLabel,
-                    onSelect: handleSeatTap
+                    canStart: selectedSeat != nil && seatedAmount > 0 && !isGameStarted,
+                    isStarted: isGameStarted,
+                    onSelect: handleSeatTap,
+                    onPlay: startGame
                 )
                 .frame(height: 400)
                 .padding(.horizontal)
@@ -173,6 +177,13 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    private func startGame() {
+        guard selectedSeat != nil, seatedAmount > 0, !isGameStarted else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            isGameStarted = true
+        }
+    }
+
     private func handleSeatTap(_ seat: Int) {
         if selectedSeat == seat {
             presentAmountEditor()
@@ -223,7 +234,10 @@ private struct PokerTableSeatLayout: View {
     let selectedSeat: Int?
     let playerName: String
     let stackLabel: String
+    let canStart: Bool
+    let isStarted: Bool
     let onSelect: (Int) -> Void
+    let onPlay: () -> Void
 
     private let seatWidth: CGFloat = 88
     private let seatHeight: CGFloat = 62
@@ -240,6 +254,8 @@ private struct PokerTableSeatLayout: View {
                         width: max(size.width - seatWidth * 1.25, 80),
                         height: max(size.height - seatHeight * 1.55, 80)
                     )
+
+                TablePlayButton(isEnabled: canStart, isStarted: isStarted, action: onPlay)
 
                 ForEach(1...seatCount, id: \.self) { seat in
                     let angle = seatAngle(for: seat)
@@ -265,6 +281,37 @@ private struct PokerTableSeatLayout: View {
     private func seatAngle(for seat: Int) -> CGFloat {
         let step = 2 * CGFloat.pi / CGFloat(seatCount)
         return CGFloat.pi / 2 + step * CGFloat(seat - 1)
+    }
+}
+
+private struct TablePlayButton: View {
+    let isEnabled: Bool
+    let isStarted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(isEnabled || isStarted ? AppTheme.contrastText : AppTheme.muted)
+                .offset(x: 2)
+                .frame(width: 64, height: 64)
+                .background(
+                    Circle()
+                        .fill(isEnabled || isStarted ? AppTheme.positive : AppTheme.card)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(
+                            isEnabled || isStarted ? AppTheme.positive : AppTheme.cardBorder,
+                            lineWidth: 2
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(isStarted ? "Game started" : "Play")
+        .accessibilityHint(isEnabled ? "Starts the game" : "Sit down to start")
     }
 }
 
