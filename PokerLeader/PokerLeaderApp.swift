@@ -15,6 +15,7 @@ struct PokerLeaderApp: App {
             MainTabView()
                 .modelContainer(container)
                 .environment(router)
+                .overlay(LaunchIconSplash())
                 .onOpenURL { url in
                     if !router.handleDeepLink(url) {
                         SupabaseAuthManager.shared.handleOpenURL(url)
