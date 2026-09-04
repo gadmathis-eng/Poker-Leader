@@ -291,17 +291,17 @@ private struct TablePlayButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "play.fill")
-                .font(.system(size: 22, weight: .bold))
+            Text("Play")
+                .font(.headline.weight(.bold))
                 .foregroundStyle(isEnabled || isStarted ? AppTheme.contrastText : AppTheme.muted)
-                .offset(x: 2)
-                .frame(width: 64, height: 64)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 12)
                 .background(
-                    Circle()
+                    Capsule()
                         .fill(isEnabled || isStarted ? AppTheme.positive : AppTheme.card)
                 )
                 .overlay(
-                    Circle()
+                    Capsule()
                         .stroke(
                             isEnabled || isStarted ? AppTheme.positive : AppTheme.cardBorder,
                             lineWidth: 2
