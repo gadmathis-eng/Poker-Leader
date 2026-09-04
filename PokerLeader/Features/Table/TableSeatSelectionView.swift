@@ -113,7 +113,6 @@ struct TableSeatSelectionView: View {
             joinPosition: joinPosition,
             isLeader: party.isLeader(player.id),
             currencyCode: buyInCurrencyCode,
-            sliderMaximum: sliderMaximum,
             onAdd: { amount in
                 withAnimation(.easeOut(duration: 0.18)) {
                     party.addToStack(amount, for: player.id)
@@ -125,11 +124,6 @@ struct TableSeatSelectionView: View {
                 }
             }
         )
-    }
-
-    private var sliderMaximum: Double {
-        let base = NSDecimalNumber(decimal: buyInAmount).doubleValue * 10
-        return max(base.rounded(), 100)
     }
 
     @ViewBuilder
@@ -216,17 +210,30 @@ private struct PartyRosterRow: View {
     let joinPosition: Int
     let isLeader: Bool
     let currencyCode: String
-    let sliderMaximum: Double
     let onAdd: (Decimal) -> Void
     let onLeave: () -> Void
 
     @State private var sliderValue: Double = 0
     @State private var amountText: String = ""
 
+    /// The slider spans everything this player currently has, so the far right
+    /// of the track is their whole stack.
+    private var availableMoney: Double {
+        max(NSDecimalNumber(decimal: player.stack).doubleValue, 0)
+    }
+
+    private var hasMoney: Bool {
+        availableMoney > 0
+    }
+
+    private var sliderRange: ClosedRange<Double> {
+        0...max(availableMoney, 1)
+    }
+
     private var parsedAmount: Decimal? {
         let trimmed = amountText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let value = Decimal(string: trimmed), value > 0 else { return nil }
-        return value
+        return min(value, player.stack)
     }
 
     var body: some View {
@@ -269,12 +276,18 @@ private struct PartyRosterRow: View {
             }
 
             HStack(spacing: 10) {
-                Slider(value: $sliderValue, in: 0...sliderMaximum, step: 1)
+                Slider(value: $sliderValue, in: sliderRange, step: 1)
                     .tint(AppTheme.positive)
+                    .disabled(!hasMoney)
                     .onChange(of: sliderValue) { _, newValue in
                         let text = String(Int(newValue.rounded()))
                         if amountText != text {
                             amountText = text
+                        }
+                    }
+                    .onChange(of: availableMoney) { _, newMaximum in
+                        if sliderValue > newMaximum {
+                            sliderValue = newMaximum
                         }
                     }
 
@@ -293,11 +306,12 @@ private struct PartyRosterRow: View {
                     )
                     .onChange(of: amountText) { _, newValue in
                         guard let typed = Double(newValue.trimmingCharacters(in: .whitespacesAndNewlines)) else { return }
-                        let clamped = min(max(typed, 0), sliderMaximum)
+                        let clamped = min(max(typed, 0), availableMoney)
                         if abs(clamped - sliderValue) > 0.001 {
                             sliderValue = clamped
                         }
                     }
+                    .disabled(!hasMoney)
 
                 Button {
                     guard let amount = parsedAmount else { return }
