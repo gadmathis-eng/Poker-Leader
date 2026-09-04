@@ -20,11 +20,11 @@
   "rewrites": [
     {
       "source": "/table/:code",
-      "destination": "/table/"
+      "destination": "/table/index.html"
     },
     {
       "source": "/table/:code/",
-      "destination": "/table/"
+      "destination": "/table/index.html"
     }
   ]
 }

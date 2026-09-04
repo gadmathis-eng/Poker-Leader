@@ -63,18 +63,11 @@
         <a href="/privacy/">Privacy</a>
       </nav>
     </main>
+    <script src="/open-table.js"></script>
     <script>
       (function () {
-        function inviteCode() {
-          var parts = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
-          var last = parts[parts.length - 1] || "";
-          if (last && last.toLowerCase() !== "table") {
-            return last.toUpperCase();
-          }
-          return new URLSearchParams(location.search).get("code") || "";
-        }
-
-        var code = inviteCode().trim().toUpperCase();
+        var invite = window.PotMasterTableInvite;
+        var code = invite ? invite.inviteCode() : "";
         var codeEl = document.getElementById("code");
         var openEl = document.getElementById("open-app");
         var titleEl = document.getElementById("title");
@@ -86,14 +79,13 @@
           ledeEl.textContent = "Ask the host to share their table again.";
           codeEl.textContent = "NO CODE";
           openEl.style.display = "none";
-          statusEl.textContent = "A table invite looks like potmaster.app/table/ABC123.";
+          statusEl.textContent = "A table invite looks like potmaster.app/?table=ABC123.";
           return;
         }
 
-        var appUrl = "com.mathisgad.pokerleader://table/" + encodeURIComponent(code);
         codeEl.textContent = code;
-        openEl.href = appUrl;
-        window.location.href = appUrl;
+        openEl.href = invite.appUrl(code);
+        invite.openApp();
       })();
     </script>
   </body>

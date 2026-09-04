@@ -6,7 +6,7 @@ enum TableInviteDeepLink {
 
     static func webURL(forInviteCode code: String) -> URL {
         let normalized = normalizedCode(code)
-        return URL(string: "https://\(httpsHost)/table/\(normalized)")!
+        return URL(string: "https://\(httpsHost)/?table=\(normalized)")!
     }
 
     static func appURL(forInviteCode code: String) -> URL {
@@ -45,6 +45,10 @@ enum TableInviteDeepLink {
         let host = url.host?.lowercased() ?? ""
         guard host == httpsHost || host == "www.\(httpsHost)" else { return nil }
 
+        if let queryCode = queryCode(from: url) {
+            return queryCode
+        }
+
         let parts = url.path
             .split(separator: "/", omittingEmptySubsequences: true)
             .map(String.init)
@@ -55,18 +59,24 @@ enum TableInviteDeepLink {
             return normalizedCode(parts[1])
         }
 
-        return queryCode(from: url)
+        return nil
     }
 
     private static func queryCode(from url: URL) -> String? {
         guard
             let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-            let code = components.queryItems?.first(where: { $0.name == "code" })?.value,
-            !code.isEmpty
+            let items = components.queryItems
         else {
             return nil
         }
-        return normalizedCode(code)
+
+        for name in ["table", "code"] {
+            if let code = items.first(where: { $0.name == name })?.value, !code.isEmpty {
+                return normalizedCode(code)
+            }
+        }
+
+        return nil
     }
 }
 

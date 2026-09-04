@@ -10,7 +10,7 @@
       (function () {
         var match = location.pathname.match(/\/table\/([^\/]+)\/?$/i);
         if (match && match[1]) {
-          location.replace("/table/?code=" + encodeURIComponent(match[1].toUpperCase()));
+          location.replace("/?table=" + encodeURIComponent(match[1].toUpperCase()));
           return;
         }
         location.replace("/");

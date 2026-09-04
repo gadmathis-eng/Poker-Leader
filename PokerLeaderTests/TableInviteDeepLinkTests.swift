@@ -5,7 +5,7 @@ final class TableInviteDeepLinkTests: XCTestCase {
     func testBuildsHttpsShareURL() {
         XCTAssertEqual(
             TableInviteDeepLink.webURL(forInviteCode: "ab12cd").absoluteString,
-            "https://potmaster.app/table/AB12CD"
+            "https://potmaster.app/?table=AB12CD"
         )
     }
 
@@ -22,6 +22,11 @@ final class TableInviteDeepLinkTests: XCTestCase {
     func testParsesWwwHttpsTablePathWithTrailingSlash() {
         let url = URL(string: "https://www.potmaster.app/table/seat01/")!
         XCTAssertEqual(TableInviteDeepLink.inviteCode(from: url), "SEAT01")
+    }
+
+    func testParsesHomepageTableQuery() {
+        let url = URL(string: "https://potmaster.app/?table=joinme")!
+        XCTAssertEqual(TableInviteDeepLink.inviteCode(from: url), "JOINME")
     }
 
     func testParsesHttpsTableQueryCode() {
@@ -41,7 +46,7 @@ final class TableInviteDeepLinkTests: XCTestCase {
 
     func testShareMessageIncludesTapableLink() {
         let message = TableInviteSharing.message(forInviteCode: "abc123", hostName: "Alex")
-        XCTAssertTrue(message.contains("https://potmaster.app/table/ABC123"))
+        XCTAssertTrue(message.contains("https://potmaster.app/?table=ABC123"))
         XCTAssertTrue(message.contains("Alex's"))
     }
 }
