@@ -12,6 +12,7 @@ struct TableSeatSelectionView: View {
     @State private var selectedSeat: Int?
     @State private var amountText = ""
     @State private var editingAmount: MoneyAmountEditorState?
+    @State private var isGameStarted = false
 
     private static let seatCount = 8
     private static let amountStep = 0.01
@@ -75,7 +76,10 @@ struct TableSeatSelectionView: View {
                     selectedSeat: selectedSeat,
                     playerName: playerName,
                     stackLabel: stackLabel,
-                    onSelect: handleSeatTap
+                    canStart: selectedSeat != nil && seatedAmount > 0 && !isGameStarted,
+                    isStarted: isGameStarted,
+                    onSelect: handleSeatTap,
+                    onPlay: startGame
                 )
                 .frame(height: 400)
                 .padding(.horizontal)
@@ -173,6 +177,13 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    private func startGame() {
+        guard selectedSeat != nil, seatedAmount > 0, !isGameStarted else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            isGameStarted = true
+        }
+    }
+
     private func handleSeatTap(_ seat: Int) {
         if selectedSeat == seat {
             presentAmountEditor()
@@ -223,7 +234,10 @@ private struct PokerTableSeatLayout: View {
     let selectedSeat: Int?
     let playerName: String
     let stackLabel: String
+    let canStart: Bool
+    let isStarted: Bool
     let onSelect: (Int) -> Void
+    let onPlay: () -> Void
 
     private let seatWidth: CGFloat = 88
     private let seatHeight: CGFloat = 62
@@ -241,11 +255,14 @@ private struct PokerTableSeatLayout: View {
                         height: max(size.height - seatHeight * 1.55, 80)
                     )
 
+                TablePlayButton(isEnabled: canStart, isStarted: isStarted, action: onPlay)
+
                 ForEach(1...seatCount, id: \.self) { seat in
                     let angle = seatAngle(for: seat)
                     SeatChip(
                         seatNumber: seat,
                         isOccupied: selectedSeat == seat,
+                        isLeader: selectedSeat == seat,
                         playerName: playerName,
                         stackLabel: stackLabel,
                         action: { onSelect(seat) }
@@ -267,6 +284,37 @@ private struct PokerTableSeatLayout: View {
     }
 }
 
+private struct TablePlayButton: View {
+    let isEnabled: Bool
+    let isStarted: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "play.fill")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(isEnabled || isStarted ? AppTheme.contrastText : AppTheme.muted)
+                .offset(x: 2)
+                .frame(width: 64, height: 64)
+                .background(
+                    Circle()
+                        .fill(isEnabled || isStarted ? AppTheme.positive : AppTheme.card)
+                )
+                .overlay(
+                    Circle()
+                        .stroke(
+                            isEnabled || isStarted ? AppTheme.positive : AppTheme.cardBorder,
+                            lineWidth: 2
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .accessibilityLabel(isStarted ? "Game started" : "Play")
+        .accessibilityHint(isEnabled ? "Starts the game" : "Sit down to start")
+    }
+}
+
 private struct TableFelt: View {
     var body: some View {
         Ellipse()
@@ -281,6 +329,7 @@ private struct TableFelt: View {
 private struct SeatChip: View {
     let seatNumber: Int
     let isOccupied: Bool
+    let isLeader: Bool
     let playerName: String
     let stackLabel: String
     let action: () -> Void
@@ -289,10 +338,17 @@ private struct SeatChip: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 if isOccupied {
-                    Text(playerName)
-                        .font(.caption.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                    HStack(spacing: 3) {
+                        if isLeader {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(AppTheme.gold)
+                        }
+                        Text(playerName)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
                     Text(stackLabel)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
@@ -319,5 +375,13 @@ private struct SeatChip: View {
         }
         .buttonStyle(.plain)
         .accessibilityHint(isOccupied ? "Edits the amount at this seat" : "Sits at this seat")
+        .accessibilityLabel(occupancyAccessibilityLabel)
+    }
+
+    private var occupancyAccessibilityLabel: String {
+        if isOccupied {
+            return isLeader ? "\(playerName), party leader" : playerName
+        }
+        return "Seat \(seatNumber)"
     }
 }
