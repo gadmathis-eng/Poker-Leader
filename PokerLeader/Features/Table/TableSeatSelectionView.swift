@@ -5,61 +5,52 @@ struct TableSeatSelectionView: View {
     let buyInCurrencyCode: String
     let sessionCurrencyCode: String
 
+    @AppStorage("displayName") private var displayName = "Your name"
+    @AppStorage("playerHandle") private var playerHandle = "@yourname"
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
     @State private var selectedSeat: Int?
 
     private static let seatCount = 8
 
+    private var playerName: String {
+        if !MemberModel.isPlaceholderName(displayName) {
+            return displayName
+        }
+        return MemberModel.normalizedHandle(playerHandle) ?? "You"
+    }
+
+    private var stackLabel: String {
+        MoneyFormatting.plain(buyInAmount, currencyCode: buyInCurrencyCode)
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
                     SectionHeader(title: "Choose your seat")
-                        .multilineTextAlignment(.center)
                     Text("Tap an open seat")
                         .font(.title3.bold())
                         .foregroundStyle(AppTheme.text)
-                    Text("Your buy-in \(MoneyFormatting.plain(buyInAmount, currencyCode: buyInCurrencyCode)) · table in \(sessionCurrencyCode)")
+                    Text("Table in \(sessionCurrencyCode)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
-                        .multilineTextAlignment(.center)
                 }
                 .padding(.horizontal)
 
                 PokerTableSeatLayout(
                     seatCount: Self.seatCount,
                     selectedSeat: selectedSeat,
-                    buyInAmount: buyInAmount,
-                    buyInCurrencyCode: buyInCurrencyCode,
+                    playerName: playerName,
+                    stackLabel: stackLabel,
                     onSelect: { seat in
                         withAnimation(.easeOut(duration: 0.18)) {
                             selectedSeat = selectedSeat == seat ? nil : seat
                         }
                     }
                 )
-                .frame(height: 380)
+                .frame(height: 400)
                 .padding(.horizontal)
-
-                if let seat = selectedSeat {
-                    VStack(spacing: 4) {
-                        Text("Seat \(seat)")
-                            .font(.headline)
-                            .foregroundStyle(AppTheme.text)
-                        Text("You're sitting in for \(MoneyFormatting.plain(buyInAmount, currencyCode: buyInCurrencyCode))")
-                            .font(.caption)
-                            .foregroundStyle(AppTheme.muted)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(16)
-                    .background(AppTheme.card)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                            .stroke(AppTheme.cardBorder)
-                    )
-                    .padding(.horizontal)
-                }
 
                 Button {
                     if let seat = selectedSeat {
@@ -99,34 +90,36 @@ struct TableSeatSelectionView: View {
 private struct PokerTableSeatLayout: View {
     let seatCount: Int
     let selectedSeat: Int?
-    let buyInAmount: Decimal
-    let buyInCurrencyCode: String
+    let playerName: String
+    let stackLabel: String
     let onSelect: (Int) -> Void
+
+    private let seatWidth: CGFloat = 88
+    private let seatHeight: CGFloat = 62
 
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let seatDiameter: CGFloat = 62
-            let radiusX = (size.width - seatDiameter) / 2
-            let radiusY = (size.height - seatDiameter) / 2
+            let radiusX = (size.width - seatWidth) / 2
+            let radiusY = (size.height - seatHeight) / 2
 
             ZStack {
-                TableFelt(
-                    potLabel: MoneyFormatting.plain(buyInAmount, currencyCode: buyInCurrencyCode)
-                )
-                .frame(
-                    width: max(size.width - seatDiameter * 1.7, 80),
-                    height: max(size.height - seatDiameter * 1.7, 80)
-                )
+                TableFelt()
+                    .frame(
+                        width: max(size.width - seatWidth * 1.25, 80),
+                        height: max(size.height - seatHeight * 1.55, 80)
+                    )
 
                 ForEach(1...seatCount, id: \.self) { seat in
                     let angle = seatAngle(for: seat)
                     SeatChip(
                         seatNumber: seat,
-                        isSelected: selectedSeat == seat,
+                        isOccupied: selectedSeat == seat,
+                        playerName: playerName,
+                        stackLabel: stackLabel,
                         action: { onSelect(seat) }
                     )
-                    .frame(width: seatDiameter, height: seatDiameter)
+                    .frame(width: seatWidth, height: seatHeight)
                     .offset(
                         x: cos(angle) * radiusX,
                         y: sin(angle) * radiusY
@@ -144,52 +137,53 @@ private struct PokerTableSeatLayout: View {
 }
 
 private struct TableFelt: View {
-    let potLabel: String
-
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 999)
-                .fill(AppTheme.positive.opacity(0.18))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 999)
-                        .stroke(AppTheme.positive.opacity(0.45), lineWidth: 3)
-                )
-
-            VStack(spacing: 4) {
-                Text("YOUR BUY-IN")
-                    .font(.caption2.weight(.bold))
-                    .tracking(AppTheme.sectionTracking)
-                    .foregroundStyle(AppTheme.muted)
-                Text(potLabel)
-                    .font(.title2.bold())
-                    .foregroundStyle(AppTheme.gold)
-            }
-        }
+        Ellipse()
+            .fill(AppTheme.positive.opacity(0.18))
+            .overlay(
+                Ellipse()
+                    .stroke(AppTheme.positive.opacity(0.45), lineWidth: 3)
+            )
     }
 }
 
 private struct SeatChip: View {
     let seatNumber: Int
-    let isSelected: Bool
+    let isOccupied: Bool
+    let playerName: String
+    let stackLabel: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 2) {
-                Image(systemName: isSelected ? "person.fill" : "chair.lounge.fill")
-                    .font(.system(size: 17, weight: .semibold))
-                Text("\(seatNumber)")
-                    .font(.caption2.weight(.bold))
+                if isOccupied {
+                    Text(playerName)
+                        .font(.caption.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text(stackLabel)
+                        .font(.caption2.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .foregroundStyle(AppTheme.contrastText.opacity(0.8))
+                } else {
+                    Image(systemName: "chair.lounge.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Seat \(seatNumber)")
+                        .font(.caption2.weight(.semibold))
+                }
             }
-            .foregroundStyle(isSelected ? AppTheme.contrastText : AppTheme.text)
+            .foregroundStyle(isOccupied ? AppTheme.contrastText : AppTheme.text)
+            .padding(.horizontal, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
-                Circle()
-                    .fill(isSelected ? AppTheme.positive : AppTheme.card)
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(isOccupied ? AppTheme.positive : AppTheme.card)
             )
             .overlay(
-                Circle()
-                    .stroke(isSelected ? AppTheme.positive : AppTheme.cardBorder, lineWidth: isSelected ? 2 : 1)
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(isOccupied ? AppTheme.positive : AppTheme.cardBorder, lineWidth: isOccupied ? 2 : 1)
             )
         }
         .buttonStyle(.plain)
