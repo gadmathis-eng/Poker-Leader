@@ -60,7 +60,7 @@ struct DualCurrencyBuyInSetup: View {
             MoneyAmountEditorSheet(editor: editor) { text in
                 buyInText = text
             }
-            .presentationDetents([.height(480)])
+            .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
         .sheet(item: $currencyPickerTarget) { target in

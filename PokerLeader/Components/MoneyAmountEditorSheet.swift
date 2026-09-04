@@ -156,26 +156,82 @@ struct MoneyAmountEditorSheet: View {
                     .textCase(.uppercase)
             }
 
-            Text(displayAmount)
-                .font(.system(size: 44, weight: .bold, design: .rounded))
-                .foregroundStyle(AppTheme.text)
+            Group {
+                if usesCompactSymbolLayout {
+                    HStack(alignment: .firstTextBaseline, spacing: 1) {
+                        Text(currencySymbol)
+                            .font(.system(size: 26, weight: .semibold, design: .rounded))
+                            .foregroundStyle(AppTheme.muted)
+                            .offset(y: -4)
+                        Text(MoneyFormatting.decimalString(currentAmount))
+                            .font(.system(size: 44, weight: .bold, design: .rounded))
+                            .foregroundStyle(AppTheme.text)
+                            .monospacedDigit()
+                    }
+                } else {
+                    Text(displayAmount)
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .foregroundStyle(AppTheme.text)
+                        .monospacedDigit()
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(AppTheme.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                    .stroke(AppTheme.cardBorder)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+
+            MoneyAmountKeypad(text: $text, maximum: maximum)
+
+            HStack(spacing: 12) {
+                Button("Clear") {
+                    text = "0"
+                }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
+                .padding()
                 .background(AppTheme.card)
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                        .stroke(AppTheme.cardBorder)
-                )
+                .foregroundStyle(AppTheme.text)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
 
-            MoneyAmountKeypad(text: $text, maximum: maximum, onSet: commitAmount)
+                Button(action: commitAmount) {
+                    Image(systemName: "checkmark")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(canSave ? AppTheme.positive : AppTheme.card)
+                        .foregroundStyle(canSave ? AppTheme.contrastText : AppTheme.muted)
+                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                }
+                .disabled(!canSave)
+                .accessibilityLabel("Set")
+            }
         }
         .padding(20)
         .background(AppTheme.background)
     }
 
+    private var canSave: Bool {
+        Decimal(string: MoneyAmountKeypad.normalizedText(text)) != nil
+    }
+
+    private var currentAmount: Decimal {
+        (Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0).clampedToNonNegative
+    }
+
     private var displayAmount: String {
-        MoneyFormatting.plain((Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0).clampedToNonNegative, currencyCode: currencyCode)
+        MoneyFormatting.plain(currentAmount, currencyCode: currencyCode)
+    }
+
+    private var currencySymbol: String {
+        MoneyFormatting.currencySymbol(for: currencyCode)
+    }
+
+    private var usesCompactSymbolLayout: Bool {
+        let code = CurrencyPreferences.normalizedCurrencyCode(currencyCode)
+        return currencySymbol != code && !currencySymbol.contains(" ")
     }
 
     private func commitAmount() {
@@ -189,12 +245,6 @@ struct MoneyAmountEditorSheet: View {
 struct MoneyAmountKeypad: View {
     @Binding var text: String
     var maximum: Decimal? = nil
-    var isEnabled: Bool = true
-    var onSet: () -> Void
-
-    private var canSet: Bool {
-        isEnabled && Decimal(string: Self.normalizedText(text)) != nil
-    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -206,27 +256,7 @@ struct MoneyAmountKeypad: View {
                 keypadButton("0")
                 deleteKey
             }
-            HStack(spacing: 8) {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 48)
-                setKey
-            }
-
-            Button("Clear") {
-                text = "0"
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(AppTheme.card)
-            .foregroundStyle(AppTheme.text)
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-            .disabled(!isEnabled)
         }
-        .disabled(!isEnabled)
     }
 
     static func normalizedText(_ text: String) -> String {
@@ -252,16 +282,6 @@ struct MoneyAmountKeypad: View {
         }
         .buttonStyle(KeypadButtonStyle())
         .accessibilityLabel("Delete")
-    }
-
-    private var setKey: some View {
-        Button(action: onSet) {
-            Text("Set")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(KeypadButtonStyle(prominent: canSet))
-        .disabled(!canSet)
-        .accessibilityLabel("Set")
     }
 
     private func keypadRow(_ values: [String]) -> some View {
@@ -315,19 +335,13 @@ struct MoneyAmountKeypad: View {
 }
 
 private struct KeypadButtonStyle: ButtonStyle {
-    var prominent: Bool = false
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(.title3, design: .rounded).weight(.bold))
-            .foregroundStyle(prominent ? AppTheme.contrastText : AppTheme.text)
+            .foregroundStyle(AppTheme.text)
             .frame(height: 48)
             .frame(maxWidth: .infinity)
-            .background(
-                prominent
-                    ? (configuration.isPressed ? AppTheme.positive.opacity(0.7) : AppTheme.positive)
-                    : (configuration.isPressed ? AppTheme.positive.opacity(0.35) : AppTheme.card)
-            )
+            .background(configuration.isPressed ? AppTheme.positive.opacity(0.35) : AppTheme.card)
             .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
