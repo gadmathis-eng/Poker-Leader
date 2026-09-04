@@ -8,6 +8,7 @@ struct TableView: View {
     @State private var draftSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInText = "0"
+    @State private var showingSeatSelection = false
 
     private var personalBuyInAmount: Decimal? {
         guard !personalBuyInAmountString.isEmpty else { return nil }
@@ -127,6 +128,13 @@ struct TableView: View {
             .background(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear(perform: loadDraftValues)
+            .navigationDestination(isPresented: $showingSeatSelection) {
+                TableSeatSelectionView(
+                    buyInAmount: personalBuyInAmount ?? 0,
+                    buyInCurrencyCode: personalBuyInCurrencyCode,
+                    sessionCurrencyCode: personalSessionCurrencyCode
+                )
+            }
         }
     }
 
@@ -143,5 +151,6 @@ struct TableView: View {
         personalSessionCurrencyCode = draftSessionCurrencyCode
         personalBuyInCurrencyCode = draftBuyInCurrencyCode
         personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
+        showingSeatSelection = true
     }
 }
