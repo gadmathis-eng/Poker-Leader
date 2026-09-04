@@ -15,3 +15,8 @@
   from = "/terms"
   to = "/terms/"
   status = 301
+
+[[redirects]]
+  from = "/table/*"
+  to = "/table/index.html"
+  status = 200

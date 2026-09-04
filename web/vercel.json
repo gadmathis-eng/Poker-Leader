@@ -16,5 +16,15 @@
       "destination": "/terms/",
       "permanent": true
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/table/:code",
+      "destination": "/table/"
+    },
+    {
+      "source": "/table/:code/",
+      "destination": "/table/"
+    }
   ]
 }

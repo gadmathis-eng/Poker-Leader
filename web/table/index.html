@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Join table · Pot Master</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .button {
+        display: inline-block;
+        text-align: center;
+        background: var(--accent);
+        color: #04120a;
+        font-weight: 700;
+        text-decoration: none;
+        border-radius: 14px;
+        padding: 14px 18px;
+      }
+      .button.secondary {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+      .code {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin: 8px 0 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand">POT MASTER</div>
+        <h1 id="title">Join this table</h1>
+        <p class="lede" id="lede">
+          Opening Pot Master so you can sit down with the host.
+        </p>
+      </header>
+
+      <div class="card">
+        <h2>Table invite</h2>
+        <p class="code" id="code">—</p>
+        <div class="actions">
+          <a class="button" id="open-app" href="#">Open in Pot Master</a>
+          <a class="button secondary" href="/">Get Pot Master</a>
+        </div>
+        <p class="lede" id="status">
+          If the app does not open, install Pot Master and tap the button again.
+        </p>
+      </div>
+
+      <nav>
+        <a href="/">Home</a>
+        <a href="/support/">Support</a>
+        <a href="/privacy/">Privacy</a>
+      </nav>
+    </main>
+    <script>
+      (function () {
+        function inviteCode() {
+          var parts = location.pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+          var last = parts[parts.length - 1] || "";
+          if (last && last.toLowerCase() !== "table") {
+            return last.toUpperCase();
+          }
+          return new URLSearchParams(location.search).get("code") || "";
+        }
+
+        var code = inviteCode().trim().toUpperCase();
+        var codeEl = document.getElementById("code");
+        var openEl = document.getElementById("open-app");
+        var titleEl = document.getElementById("title");
+        var ledeEl = document.getElementById("lede");
+        var statusEl = document.getElementById("status");
+
+        if (!code) {
+          titleEl.textContent = "Table link missing";
+          ledeEl.textContent = "Ask the host to share their table again.";
+          codeEl.textContent = "NO CODE";
+          openEl.style.display = "none";
+          statusEl.textContent = "A table invite looks like potmaster.app/table/ABC123.";
+          return;
+        }
+
+        var appUrl = "com.mathisgad.pokerleader://table/" + encodeURIComponent(code);
+        codeEl.textContent = code;
+        openEl.href = appUrl;
+        window.location.href = appUrl;
+      })();
+    </script>
+  </body>
+</html>

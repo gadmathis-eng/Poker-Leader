@@ -120,3 +120,15 @@ struct CloudOutgoingFriendRequest {
     let status: String
     let createdAt: Date
 }
+
+struct CloudOpenTableSnapshot {
+    let id: UUID
+    let inviteCode: String
+    let hostDisplayName: String
+    let hostPlayerKey: String
+    let sessionCurrencyCode: String
+    let isStarted: Bool
+    let seats: [SharedTableSeat]
+    let createdAt: Date
+    let updatedAt: Date
+}

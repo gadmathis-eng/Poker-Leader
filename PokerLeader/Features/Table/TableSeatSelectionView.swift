@@ -1,10 +1,12 @@
 import SwiftUI
+import SwiftData
 
 struct TableSeatSelectionView: View {
     let buyInAmount: Decimal
     let buyInCurrencyCode: String
     let sessionCurrencyCode: String
 
+    @Environment(\.modelContext) private var context
     @AppStorage("displayName") private var displayName = "Your name"
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
@@ -13,9 +15,14 @@ struct TableSeatSelectionView: View {
     @State private var amountText = ""
     @State private var editingAmount: MoneyAmountEditorState?
     @State private var isGameStarted = false
+    @State private var table: OpenTableModel?
+    @State private var occupants: [SharedTableSeat] = []
+    @State private var shareError: String?
+    @State private var showSignIn = false
 
-    private static let seatCount = 8
     private static let amountStep = 0.01
+
+    private var repo: TableRepository { TableRepository(context: context) }
 
     private var playerName: String {
         if !MemberModel.isPlaceholderName(displayName) {
@@ -24,11 +31,15 @@ struct TableSeatSelectionView: View {
         return MemberModel.normalizedHandle(playerHandle) ?? "You"
     }
 
+    private var tableCurrencyCode: String {
+        table?.sessionCurrencyCode ?? sessionCurrencyCode
+    }
+
     private var tableBuyInAmount: Decimal {
         TableCurrencyConversion.amountInTableCurrency(
             buyInAmount,
             from: buyInCurrencyCode,
-            to: sessionCurrencyCode
+            to: tableCurrencyCode
         )
     }
 
@@ -53,7 +64,22 @@ struct TableSeatSelectionView: View {
     }
 
     private var stackLabel: String {
-        MoneyFormatting.plain(seatedAmount, currencyCode: sessionCurrencyCode)
+        MoneyFormatting.plain(seatedAmount, currencyCode: tableCurrencyCode)
+    }
+
+    private var layoutOccupants: [TableSeatOccupant] {
+        occupants.map { seat in
+            let isLocal = seat.playerKey == repo.localPlayerKey
+            return TableSeatOccupant(
+                seatNumber: seat.seatNumber,
+                playerName: isLocal ? playerName : seat.playerName,
+                stackLabel: isLocal
+                    ? stackLabel
+                    : MoneyFormatting.plain(seat.amountDecimal, currencyCode: tableCurrencyCode),
+                isLocalUser: isLocal,
+                isLeader: seat.isHost || seat.playerKey == table?.hostPlayerKey
+            )
+        }
     }
 
     var body: some View {
@@ -65,17 +91,19 @@ struct TableSeatSelectionView: View {
                             .font(.title3.bold())
                             .foregroundStyle(AppTheme.text)
                     }
-                    Text("Table in \(sessionCurrencyCode)")
+                    Text("Table in \(tableCurrencyCode)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
                 }
                 .padding(.horizontal)
 
+                if let table {
+                    shareCard(for: table)
+                }
+
                 PokerTableSeatLayout(
-                    seatCount: Self.seatCount,
-                    selectedSeat: selectedSeat,
-                    playerName: playerName,
-                    stackLabel: stackLabel,
+                    seatCount: SharedTableSeating.seatCount,
+                    occupants: layoutOccupants,
                     canStart: selectedSeat != nil && seatedAmount > 0 && !isGameStarted,
                     isStarted: isGameStarted,
                     onSelect: handleSeatTap,
@@ -93,11 +121,32 @@ struct TableSeatSelectionView: View {
         .background(AppTheme.background)
         .navigationTitle("Table")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let table {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(
+                        item: TableInviteSharing.url(forInviteCode: table.inviteCode),
+                        subject: Text("Join my Pot Master table"),
+                        message: Text(TableInviteSharing.message(forInviteCode: table.inviteCode, hostName: table.hostDisplayName))
+                    ) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share table")
+                }
+            }
+        }
         .onAppear {
             if selectedSeat == nil, storedSeatNumber > 0 {
                 selectedSeat = storedSeatNumber
             }
             resetAmountToFullStack()
+        }
+        .task {
+            await prepareSharedTable()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                await syncSharedTable()
+            }
         }
         .sheet(item: $editingAmount) { editor in
             MoneyAmountEditorSheet(editor: editor) { text in
@@ -106,6 +155,63 @@ struct TableSeatSelectionView: View {
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $showSignIn) {
+            SignInSheet()
+                .modelContext(context)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
+        .onChange(of: showSignIn) { _, isPresented in
+            if !isPresented {
+                Task { await publishIfPossible() }
+            }
+        }
+    }
+
+    private func shareCard(for table: OpenTableModel) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    InviteCodeCopyLabel(code: table.inviteCode, style: .headline)
+                    Text("Share this link. Friends join the table when they tap it.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                }
+
+                Spacer()
+
+                ShareLink(
+                    item: TableInviteSharing.url(forInviteCode: table.inviteCode),
+                    subject: Text("Join my Pot Master table"),
+                    message: Text(TableInviteSharing.message(forInviteCode: table.inviteCode, hostName: table.hostDisplayName))
+                ) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(AppTheme.contrastText)
+                        .frame(width: 42, height: 42)
+                        .background(AppTheme.positive)
+                        .clipShape(Circle())
+                }
+                .accessibilityLabel("Share table")
+            }
+
+            if let shareError {
+                Text(shareError)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.negative)
+            } else if SupabaseBootstrap.isConfigured, !SupabaseAuthManager.shared.isSignedIn {
+                Button("Sign in so friends can join from the link") {
+                    showSignIn = true
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.positive)
+            }
+        }
+        .padding()
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
+        .padding(.horizontal)
     }
 
     private var amountControls: some View {
@@ -148,9 +254,9 @@ struct TableSeatSelectionView: View {
                 }
 
                 HStack {
-                    Text(MoneyFormatting.plain(0, currencyCode: sessionCurrencyCode))
+                    Text(MoneyFormatting.plain(0, currencyCode: tableCurrencyCode))
                     Spacer()
-                    Text(MoneyFormatting.plain(tableBuyInAmount, currencyCode: sessionCurrencyCode))
+                    Text(MoneyFormatting.plain(tableBuyInAmount, currencyCode: tableCurrencyCode))
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(AppTheme.muted)
@@ -182,9 +288,16 @@ struct TableSeatSelectionView: View {
         withAnimation(.easeOut(duration: 0.18)) {
             isGameStarted = true
         }
+        if let table {
+            repo.markStarted(table)
+        }
     }
 
     private func handleSeatTap(_ seat: Int) {
+        if occupants.contains(where: { $0.seatNumber == seat && $0.playerKey != repo.localPlayerKey }) {
+            return
+        }
+
         if selectedSeat == seat {
             presentAmountEditor()
             return
@@ -195,13 +308,14 @@ struct TableSeatSelectionView: View {
             storedSeatNumber = seat
             resetAmountToFullStack()
         }
+        persistSelectedSeat()
     }
 
     private func presentAmountEditor() {
         guard hasMoney else { return }
         editingAmount = MoneyAmountEditorState(
             id: UUID(),
-            currencyCode: sessionCurrencyCode,
+            currencyCode: tableCurrencyCode,
             text: amountText.isEmpty ? "0" : amountText,
             maximum: Decimal(string: hundredthsText(availableMoney))
         )
@@ -217,6 +331,7 @@ struct TableSeatSelectionView: View {
             maximum: Decimal(string: hundredthsText(availableMoney))
         )
         amountText = hundredthsText(Double(committed) ?? 0)
+        persistSelectedSeat()
     }
 
     private func clampedHundredths(_ value: Double) -> Double {
@@ -227,13 +342,103 @@ struct TableSeatSelectionView: View {
     private func hundredthsText(_ value: Double) -> String {
         String(format: "%.2f", clampedHundredths(value))
     }
+
+    private func persistSelectedSeat() {
+        guard let table, let selectedSeat else { return }
+        do {
+            try repo.occupySeat(
+                on: table,
+                seatNumber: selectedSeat,
+                playerName: playerName,
+                handle: MemberModel.normalizedHandle(playerHandle),
+                amount: seatedAmount
+            )
+            occupants = table.seats
+            shareError = nil
+        } catch {
+            shareError = error.localizedDescription
+            Task { await syncSharedTable() }
+        }
+    }
+
+    private func prepareSharedTable() async {
+        let hostName = playerName
+        let resolved = (try? repo.activeTable()) ?? (try? repo.ensureHostTable(
+            sessionCurrencyCode: sessionCurrencyCode,
+            hostDisplayName: hostName
+        ))
+        table = resolved
+        occupants = resolved?.seats ?? []
+        isGameStarted = resolved?.isStarted ?? false
+
+        if let mine = resolved?.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
+            selectedSeat = mine.seatNumber
+            storedSeatNumber = mine.seatNumber
+        } else if selectedSeat != nil {
+            persistSelectedSeat()
+        }
+
+        await publishIfPossible()
+        await syncSharedTable()
+    }
+
+    private func syncSharedTable() async {
+        guard let table else { return }
+        if selectedSeat != nil {
+            repo.updateLocalAmount(on: table, amount: seatedAmount)
+        }
+        await repo.refresh(table: table)
+        mergeLocalSeat(into: table)
+        occupants = table.seats
+        isGameStarted = table.isStarted || isGameStarted
+        if let mine = table.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
+            selectedSeat = mine.seatNumber
+            storedSeatNumber = mine.seatNumber
+        }
+    }
+
+    private func mergeLocalSeat(into table: OpenTableModel) {
+        guard let selectedSeat else { return }
+        do {
+            table.seats = try SharedTableSeating.occupy(
+                seats: table.seats,
+                seatNumber: selectedSeat,
+                playerKey: repo.localPlayerKey,
+                playerName: playerName,
+                handle: MemberModel.normalizedHandle(playerHandle),
+                amount: seatedAmount,
+                isHost: table.hostPlayerKey == repo.localPlayerKey
+            )
+            try? context.save()
+        } catch {
+            shareError = error.localizedDescription
+        }
+    }
+
+    private func publishIfPossible() async {
+        guard let table else { return }
+        do {
+            try await repo.publishForSharing(table)
+            shareError = nil
+        } catch let error as TableRepositoryError where error == .notSignedIn || error == .cloudUnavailable {
+            shareError = nil
+        } catch {
+            shareError = error.localizedDescription
+        }
+    }
+}
+
+private struct TableSeatOccupant: Equatable {
+    var seatNumber: Int
+    var playerName: String
+    var stackLabel: String
+    var isLocalUser: Bool
+    var isLeader: Bool
 }
 
 private struct PokerTableSeatLayout: View {
     let seatCount: Int
-    let selectedSeat: Int?
-    let playerName: String
-    let stackLabel: String
+    let occupants: [TableSeatOccupant]
     let canStart: Bool
     let isStarted: Bool
     let onSelect: (Int) -> Void
@@ -258,13 +463,15 @@ private struct PokerTableSeatLayout: View {
                 TablePlayButton(isEnabled: canStart, isStarted: isStarted, action: onPlay)
 
                 ForEach(1...seatCount, id: \.self) { seat in
+                    let occupant = occupants.first { $0.seatNumber == seat }
                     let angle = seatAngle(for: seat)
                     SeatChip(
                         seatNumber: seat,
-                        isOccupied: selectedSeat == seat,
-                        isLeader: selectedSeat == seat,
-                        playerName: playerName,
-                        stackLabel: stackLabel,
+                        isOccupied: occupant != nil,
+                        isLeader: occupant?.isLeader ?? false,
+                        playerName: occupant?.playerName ?? "",
+                        stackLabel: occupant?.stackLabel ?? "",
+                        isTakenByOther: occupant?.isLocalUser == false,
                         action: { onSelect(seat) }
                     )
                     .frame(width: seatWidth, height: seatHeight)
@@ -332,6 +539,7 @@ private struct SeatChip: View {
     let isLeader: Bool
     let playerName: String
     let stackLabel: String
+    let isTakenByOther: Bool
     let action: () -> Void
 
     var body: some View {
@@ -374,7 +582,8 @@ private struct SeatChip: View {
             )
         }
         .buttonStyle(.plain)
-        .accessibilityHint(isOccupied ? "Edits the amount at this seat" : "Sits at this seat")
+        .disabled(isTakenByOther)
+        .accessibilityHint(accessibilityHint)
         .accessibilityLabel(occupancyAccessibilityLabel)
     }
 
@@ -383,5 +592,12 @@ private struct SeatChip: View {
             return isLeader ? "\(playerName), party leader" : playerName
         }
         return "Seat \(seatNumber)"
+    }
+
+    private var accessibilityHint: String {
+        if isTakenByOther {
+            return "Seat taken"
+        }
+        return isOccupied ? "Edits the amount at this seat" : "Sits at this seat"
     }
 }

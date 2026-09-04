@@ -21,6 +21,7 @@ final class AppRouter {
     var currentUserMemberId: UUID?
     var pendingInviteCode: String?
     var pendingSettlementSessionId: UUID?
+    var pendingTableInviteCode: String?
 
     func push(_ route: AppRoute) {
         circlesPath.append(route)
@@ -31,6 +32,10 @@ final class AppRouter {
     }
 
     func handleDeepLink(_ url: URL) -> Bool {
+        if handleTableInviteURL(url) {
+            return true
+        }
+
         if handleInviteURL(url) {
             return true
         }
@@ -46,6 +51,12 @@ final class AppRouter {
     func handleInviteURL(_ url: URL) -> Bool {
         guard let code = CircleInviteDeepLink.inviteCode(from: url) else { return false }
         pendingInviteCode = code
+        return true
+    }
+
+    func handleTableInviteURL(_ url: URL) -> Bool {
+        guard let code = TableInviteDeepLink.inviteCode(from: url) else { return false }
+        pendingTableInviteCode = code
         return true
     }
 }
