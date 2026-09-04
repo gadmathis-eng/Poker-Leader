@@ -195,7 +195,7 @@ struct TableSeatSelectionView: View {
                 .accessibilityLabel("Share table")
             }
 
-            if let shareError {
+            if let shareError, !Self.isCloudNoise(shareError) {
                 Text(shareError)
                     .font(.caption)
                     .foregroundStyle(AppTheme.negative)
@@ -417,14 +417,14 @@ struct TableSeatSelectionView: View {
 
     private func publishIfPossible() async {
         guard let table else { return }
-        do {
-            try await repo.publishForSharing(table)
-            shareError = nil
-        } catch let error as TableRepositoryError where error == .notSignedIn || error == .cloudUnavailable {
-            shareError = nil
-        } catch {
-            shareError = error.localizedDescription
-        }
+        try? await repo.publishForSharing(table)
+    }
+
+    private static func isCloudNoise(_ message: String) -> Bool {
+        let lowered = message.lowercased()
+        return lowered.contains("schema cache")
+            || lowered.contains("open_tables")
+            || lowered.contains("could not find the table")
     }
 }
 
