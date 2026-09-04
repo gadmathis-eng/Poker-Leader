@@ -449,6 +449,8 @@ final class SupabaseSyncService {
             sessionCurrencyCode: table.sessionCurrencyCode,
             isStarted: table.isStarted,
             seats: table.seats,
+            anteAmount: table.anteAmount,
+            hand: table.hand,
             createdAt: table.createdAt,
             updatedAt: table.updatedAt
         )
@@ -466,6 +468,8 @@ final class SupabaseSyncService {
                 OpenTablePlayUpdate(
                     isStarted: table.isStarted,
                     seats: table.seats,
+                    anteAmount: table.anteAmount,
+                    hand: table.hand,
                     updatedAt: table.updatedAt
                 )
             )
@@ -991,6 +995,8 @@ private struct OpenTableRow: Codable {
     let sessionCurrencyCode: String
     let isStarted: Bool
     let seats: [SharedTableSeat]
+    let anteAmount: String?
+    let hand: SharedTableHand?
     let createdAt: Date
     let updatedAt: Date
 
@@ -1003,6 +1009,8 @@ private struct OpenTableRow: Codable {
         case sessionCurrencyCode = "session_currency_code"
         case isStarted = "is_started"
         case seats
+        case anteAmount = "ante_amount"
+        case hand
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -1016,6 +1024,8 @@ private struct OpenTableRow: Codable {
             sessionCurrencyCode: sessionCurrencyCode,
             isStarted: isStarted,
             seats: seats,
+            anteAmount: anteAmount ?? "0",
+            hand: hand,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -1025,11 +1035,15 @@ private struct OpenTableRow: Codable {
 private struct OpenTablePlayUpdate: Encodable {
     let isStarted: Bool
     let seats: [SharedTableSeat]
+    let anteAmount: String
+    let hand: SharedTableHand?
     let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
         case isStarted = "is_started"
         case seats
+        case anteAmount = "ante_amount"
+        case hand
         case updatedAt = "updated_at"
     }
 }

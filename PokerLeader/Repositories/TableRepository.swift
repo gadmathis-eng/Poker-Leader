@@ -222,6 +222,57 @@ final class TableRepository {
         publish(table)
     }
 
+    func updateAnte(_ amount: Decimal, on table: OpenTableModel) {
+        table.anteAmount = TableMoney.string(amount)
+        table.updatedAt = .now
+        try? context.save()
+        publish(table)
+    }
+
+    /// Deals the pre-flop round so the table gets asked, seat by seat, who is in.
+    @discardableResult
+    func dealHand(on table: OpenTableModel) throws -> SharedTableHand {
+        let hand = try PreflopRound.start(
+            seats: table.seats,
+            dealerSeat: PreflopRound.openingDealerSeat(seats: table.seats),
+            ante: table.anteDecimal
+        )
+        table.isStarted = true
+        table.hand = hand
+        try context.save()
+        publish(table)
+        return hand
+    }
+
+    func updateHand(_ hand: SharedTableHand, on table: OpenTableModel) {
+        table.hand = hand
+        try? context.save()
+        publish(table)
+    }
+
+    /// Pushes the pot to the winner and deals the next pre-flop round.
+    func settleHandAndDealNext(on table: OpenTableModel) throws {
+        guard let hand = table.hand else { throw PreflopRoundError.bettingOpen }
+        guard hand.winnerSeat != nil else { throw PreflopRoundError.bettingOpen }
+
+        let stacks = PreflopRound.stacksAfter(hand)
+        var seats = table.seats
+        for index in seats.indices {
+            guard let stack = stacks[seats[index].playerKey] else { continue }
+            seats[index].amount = TableMoney.string(stack)
+        }
+        table.seats = seats
+
+        table.hand = try? PreflopRound.start(
+            seats: seats,
+            dealerSeat: PreflopRound.nextDealerSeat(after: hand.dealerSeat, seats: seats),
+            ante: table.anteDecimal,
+            handNumber: hand.handNumber + 1
+        )
+        try context.save()
+        publish(table)
+    }
+
     func refresh(table: OpenTableModel) async {
         guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return }
         guard let snapshot = try? await SupabaseSyncService.shared.fetchOpenTable(inviteCode: table.inviteCode) else {
@@ -310,6 +361,8 @@ final class TableRepository {
             isStarted: snapshot.isStarted,
             isHostLocally: isHostLocally,
             seats: snapshot.seats,
+            anteAmount: snapshot.anteAmount,
+            hand: snapshot.hand,
             createdAt: snapshot.createdAt,
             updatedAt: snapshot.updatedAt
         )
@@ -319,13 +372,39 @@ final class TableRepository {
     }
 
     private func apply(snapshot: CloudOpenTableSnapshot, existing table: OpenTableModel) {
+        let localHand = table.hand
+        let localUpdatedAt = table.updatedAt
         table.hostDisplayName = snapshot.hostDisplayName
         table.hostPlayerKey = snapshot.hostPlayerKey
         table.sessionCurrencyCode = snapshot.sessionCurrencyCode
         table.isStarted = snapshot.isStarted
         table.seats = snapshot.seats
+        table.anteAmount = snapshot.anteAmount
+        table.hand = mergedHand(
+            local: localHand,
+            cloud: snapshot.hand,
+            cloudUpdatedAt: snapshot.updatedAt,
+            localUpdatedAt: localUpdatedAt
+        )
         table.updatedAt = snapshot.updatedAt
         try? context.save()
+    }
+
+    /// A move made on this device stays put until the cloud catches up with it.
+    private func mergedHand(
+        local: SharedTableHand?,
+        cloud: SharedTableHand?,
+        cloudUpdatedAt: Date,
+        localUpdatedAt: Date
+    ) -> SharedTableHand? {
+        guard let local else { return cloud }
+        guard let cloud else {
+            return cloudUpdatedAt > localUpdatedAt ? nil : local
+        }
+        if local.id == cloud.id, local.revision > cloud.revision {
+            return local
+        }
+        return cloud
     }
 
     private func uniqueInviteCode() throws -> String {
