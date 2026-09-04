@@ -5,11 +5,21 @@ struct TableView: View {
     @AppStorage("personalBuyInCurrencyCode") private var personalBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @AppStorage("personalBuyInAmount") private var personalBuyInAmountString = ""
 
-    @State private var showingPersonalSession = false
+    @State private var draftSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
+    @State private var draftBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
+    @State private var draftBuyInText = "0"
 
     private var personalBuyInAmount: Decimal? {
         guard !personalBuyInAmountString.isEmpty else { return nil }
         return Decimal(string: personalBuyInAmountString)?.clampedToNonNegative
+    }
+
+    private var draftBuyInAmount: Decimal? {
+        Decimal(string: draftBuyInText.trimmingCharacters(in: .whitespacesAndNewlines))?.clampedToNonNegative
+    }
+
+    private var canSaveBuyIn: Bool {
+        (draftBuyInAmount ?? 0) > 0
     }
 
     var body: some View {
@@ -27,40 +37,34 @@ struct TableView: View {
                     }
                     .padding(.horizontal)
 
-                    Button {
-                        showingPersonalSession = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title2)
-                                .foregroundStyle(AppTheme.contrastText)
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "New session")
 
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("New session")
-                                    .font(.headline)
-                                    .foregroundStyle(AppTheme.contrastText)
-                                Text("Set session currency and buy-in amount")
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.contrastText.opacity(0.75))
-                            }
+                        DualCurrencyBuyInSetup(
+                            sessionCurrencyCode: $draftSessionCurrencyCode,
+                            buyInCurrencyCode: $draftBuyInCurrencyCode,
+                            buyInText: $draftBuyInText
+                        )
 
-                            Spacer(minLength: 0)
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(AppTheme.contrastText.opacity(0.75))
+                        Button {
+                            savePersonalBuyIn()
+                        } label: {
+                            Text("Save buy-in")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(canSaveBuyIn ? AppTheme.positive : AppTheme.card)
+                                .foregroundStyle(canSaveBuyIn ? AppTheme.contrastText : AppTheme.muted)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
                         }
-                        .padding(16)
-                        .background(AppTheme.positive)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        .buttonStyle(.plain)
+                        .disabled(!canSaveBuyIn)
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal)
 
                     if let amount = personalBuyInAmount, amount > 0 {
                         VStack(alignment: .leading, spacing: 10) {
                             SectionHeader(title: "My buy-in")
-                                .padding(.horizontal)
 
                             VStack(alignment: .leading, spacing: 12) {
                                 HStack {
@@ -82,19 +86,6 @@ struct TableView: View {
                                         .font(.title3.bold())
                                         .foregroundStyle(AppTheme.gold)
                                 }
-
-                                Button {
-                                    showingPersonalSession = true
-                                } label: {
-                                    Text("Edit")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(AppTheme.positive)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(AppTheme.positive.opacity(0.12))
-                                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                                }
-                                .buttonStyle(.plain)
                             }
                             .padding(16)
                             .background(AppTheme.card)
@@ -103,8 +94,8 @@ struct TableView: View {
                                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                                     .stroke(AppTheme.cardBorder)
                             )
-                            .padding(.horizontal)
                         }
+                        .padding(.horizontal)
                     }
 
                     VStack(spacing: 14) {
@@ -116,7 +107,7 @@ struct TableView: View {
                             .font(.headline)
                             .foregroundStyle(AppTheme.text)
 
-                        Text("Tap New session above to set your buy-in, or open a circle to start a group game.")
+                        Text("Set your buy-in above, or open a circle to start a group game.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.muted)
                             .multilineTextAlignment(.center)
@@ -135,28 +126,22 @@ struct TableView: View {
             }
             .background(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("New session") {
-                        showingPersonalSession = true
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(AppTheme.positive)
-                }
-            }
-            .sheet(isPresented: $showingPersonalSession) {
-                PersonalSessionSheet(
-                    initialSessionCurrencyCode: personalSessionCurrencyCode,
-                    initialBuyInCurrencyCode: personalBuyInCurrencyCode,
-                    initialBuyIn: personalBuyInAmount ?? 0
-                ) { sessionCode, buyInCode, amount in
-                    personalSessionCurrencyCode = sessionCode
-                    personalBuyInCurrencyCode = buyInCode
-                    personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
-                }
-                .presentationDetents([.height(420)])
-                .presentationDragIndicator(.visible)
-            }
+            .onAppear(perform: loadDraftValues)
         }
+    }
+
+    private func loadDraftValues() {
+        draftSessionCurrencyCode = personalSessionCurrencyCode
+        draftBuyInCurrencyCode = personalBuyInCurrencyCode
+        draftBuyInText = personalBuyInAmountString.isEmpty
+            ? "0"
+            : personalBuyInAmountString
+    }
+
+    private func savePersonalBuyIn() {
+        guard let amount = draftBuyInAmount else { return }
+        personalSessionCurrencyCode = draftSessionCurrencyCode
+        personalBuyInCurrencyCode = draftBuyInCurrencyCode
+        personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
     }
 }

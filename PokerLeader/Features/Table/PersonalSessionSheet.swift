@@ -6,8 +6,6 @@ struct PersonalSessionSheet: View {
     @State private var sessionCurrencyCode: String
     @State private var buyInCurrencyCode: String
     @State private var buyInText: String
-    @State private var currencyPickerTarget: CurrencyPickerTarget?
-    @State private var editingBuyIn: MoneyAmountEditorState?
 
     let onSave: (String, String, Decimal) -> Void
 
@@ -50,42 +48,11 @@ struct PersonalSessionSheet: View {
             }
             .padding(.bottom, 24)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Session currency")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.muted)
-                    Spacer()
-                    CurrencyChipButton(currencyCode: sessionCurrencyCode) {
-                        currencyPickerTarget = .session
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(AppTheme.card)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                .overlay(
-                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                        .stroke(AppTheme.cardBorder)
-                )
-
-                StandardBuyInCard(
-                    amount: buyInAmount ?? 0,
-                    currencyCode: buyInCurrencyCode,
-                    onAmountTap: {
-                        editingBuyIn = MoneyAmountEditorState(
-                            id: UUID(),
-                            title: "My buy-in",
-                            subtitle: "Personal amount",
-                            currencyCode: buyInCurrencyCode,
-                            text: buyInText
-                        )
-                    },
-                    onCurrencyTap: {
-                        currencyPickerTarget = .buyIn
-                    }
-                )
-            }
+            DualCurrencyBuyInSetup(
+                sessionCurrencyCode: $sessionCurrencyCode,
+                buyInCurrencyCode: $buyInCurrencyCode,
+                buyInText: $buyInText
+            )
             .padding(.horizontal, 20)
 
             Spacer(minLength: 24)
@@ -119,35 +86,5 @@ struct PersonalSessionSheet: View {
             .padding(.bottom, 28)
         }
         .background(AppTheme.background)
-        .sheet(item: $editingBuyIn) { editor in
-            MoneyAmountEditorSheet(editor: editor) { text in
-                buyInText = text
-            }
-            .presentationDetents([.height(420)])
-            .presentationDragIndicator(.visible)
-        }
-        .sheet(item: $currencyPickerTarget) { target in
-            CurrencyPickerSheet(
-                selectedCurrencyCode: target == .session ? sessionCurrencyCode : buyInCurrencyCode
-            ) { code in
-                let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
-                guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }
-                switch target {
-                case .session:
-                    sessionCurrencyCode = cleaned
-                case .buyIn:
-                    buyInCurrencyCode = cleaned
-                }
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
-        }
     }
-}
-
-private enum CurrencyPickerTarget: Identifiable {
-    case session
-    case buyIn
-
-    var id: Self { self }
 }
