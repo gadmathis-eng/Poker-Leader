@@ -45,8 +45,6 @@ struct DualCurrencyBuyInSetup: View {
                 onAmountTap: {
                     editingBuyIn = MoneyAmountEditorState(
                         id: UUID(),
-                        title: "My buy-in",
-                        subtitle: "Personal amount",
                         currencyCode: buyInCurrencyCode,
                         text: buyInText
                     )

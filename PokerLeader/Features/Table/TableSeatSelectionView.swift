@@ -202,8 +202,6 @@ struct TableSeatSelectionView: View {
         guard hasMoney else { return }
         editingAmount = MoneyAmountEditorState(
             id: UUID(),
-            title: "My buy-in",
-            subtitle: "Personal amount",
             currencyCode: buyInCurrencyCode,
             text: amountText.isEmpty ? "0" : amountText,
             maximum: Decimal(string: hundredthsText(availableMoney))

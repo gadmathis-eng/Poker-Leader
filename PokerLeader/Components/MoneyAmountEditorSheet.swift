@@ -3,8 +3,8 @@ import SwiftUI
 
 struct MoneyAmountEditorState: Identifiable {
     let id: UUID
-    let title: String
-    let subtitle: String
+    var title: String = ""
+    var subtitle: String = ""
     let currencyCode: String
     var text: String
     var maximum: Decimal? = nil
@@ -146,14 +146,20 @@ struct MoneyAmountEditorSheet: View {
                 .fill(AppTheme.muted.opacity(0.4))
                 .frame(width: 44, height: 4)
 
-            VStack(spacing: 6) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.text)
-                Text(subtitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.muted)
-                    .textCase(.uppercase)
+            if !title.isEmpty || !subtitle.isEmpty {
+                VStack(spacing: 6) {
+                    if !title.isEmpty {
+                        Text(title)
+                            .font(.headline)
+                            .foregroundStyle(AppTheme.text)
+                    }
+                    if !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(AppTheme.muted)
+                            .textCase(.uppercase)
+                    }
+                }
             }
 
             Group {
