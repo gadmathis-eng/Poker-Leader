@@ -23,8 +23,16 @@ struct TableSeatSelectionView: View {
         return MemberModel.normalizedHandle(playerHandle) ?? "You"
     }
 
+    private var tableBuyInAmount: Decimal {
+        TableCurrencyConversion.amountInTableCurrency(
+            buyInAmount,
+            from: buyInCurrencyCode,
+            to: sessionCurrencyCode
+        )
+    }
+
     private var availableMoney: Double {
-        max(NSDecimalNumber(decimal: buyInAmount).doubleValue, 0)
+        max(NSDecimalNumber(decimal: tableBuyInAmount).doubleValue, 0)
     }
 
     private var hasMoney: Bool {
@@ -44,7 +52,7 @@ struct TableSeatSelectionView: View {
     }
 
     private var stackLabel: String {
-        MoneyFormatting.plain(seatedAmount, currencyCode: buyInCurrencyCode)
+        MoneyFormatting.plain(seatedAmount, currencyCode: sessionCurrencyCode)
     }
 
     var body: some View {
@@ -153,9 +161,9 @@ struct TableSeatSelectionView: View {
                 }
 
                 HStack {
-                    Text("0.00")
+                    Text(MoneyFormatting.plain(0, currencyCode: sessionCurrencyCode))
                     Spacer()
-                    Text(hundredthsText(availableMoney))
+                    Text(MoneyFormatting.plain(tableBuyInAmount, currencyCode: sessionCurrencyCode))
                 }
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(AppTheme.muted)
@@ -203,7 +211,7 @@ struct TableSeatSelectionView: View {
         guard hasMoney else { return }
         editingAmount = MoneyAmountEditorState(
             id: UUID(),
-            currencyCode: buyInCurrencyCode,
+            currencyCode: sessionCurrencyCode,
             text: amountText.isEmpty ? "0" : amountText,
             maximum: Decimal(string: hundredthsText(availableMoney))
         )
