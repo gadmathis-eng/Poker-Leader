@@ -51,10 +51,11 @@ struct TableSeatSelectionView: View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 6) {
-                    SectionHeader(title: "Choose your seat")
-                    Text(selectedSeat == nil ? "Tap an open seat" : "Tap the amount to edit")
-                        .font(.title3.bold())
-                        .foregroundStyle(AppTheme.text)
+                    if selectedSeat == nil {
+                        Text("Tap an open seat")
+                            .font(.title3.bold())
+                            .foregroundStyle(AppTheme.text)
+                    }
                     Text("Table in \(sessionCurrencyCode)")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
