@@ -7,6 +7,7 @@ struct MoneyAmountEditorState: Identifiable {
     let subtitle: String
     let currencyCode: String
     var text: String
+    var maximum: Decimal? = nil
 }
 
 struct MoneyAmountPill: View {
@@ -127,12 +128,14 @@ struct MoneyAmountEditorSheet: View {
     let title: String
     let subtitle: String
     let currencyCode: String
+    let maximum: Decimal?
     let onSave: (String) -> Void
 
     init(editor: MoneyAmountEditorState, onSave: @escaping (String) -> Void) {
         self.title = editor.title
         self.subtitle = editor.subtitle
         self.currencyCode = editor.currencyCode
+        self.maximum = editor.maximum
         self.onSave = onSave
         _text = State(initialValue: editor.text)
     }
@@ -252,17 +255,40 @@ struct MoneyAmountEditorSheet: View {
 
     private func commitAmount() {
         guard canSave else { return }
-        onSave(normalizedText)
+        var value = normalizedText
+        if let maximum, let typed = Decimal(string: value), typed > maximum {
+            value = NSDecimalNumber(decimal: maximum).stringValue
+        }
+        onSave(value)
         dismiss()
     }
 
     private func append(_ value: String) {
         if value == ".", text.contains(".") { return }
-        if text == "0", value != "." {
-            text = value
-            return
+
+        var next = text
+        if next == "0", value != "." {
+            next = value
+        } else {
+            next.append(value)
         }
-        text.append(value)
+
+        if let separator = next.firstIndex(of: ".") {
+            let fraction = next[next.index(after: separator)...]
+            if fraction.count > 2 { return }
+        }
+
+        if let typed = Decimal(string: next) {
+            if let maximum, typed > maximum {
+                text = NSDecimalNumber(decimal: maximum).stringValue
+                return
+            }
+            if typed < 0 {
+                return
+            }
+        }
+
+        text = next
     }
 
     private func deleteLast() {

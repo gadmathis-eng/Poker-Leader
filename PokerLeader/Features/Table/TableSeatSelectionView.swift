@@ -12,6 +12,7 @@ struct TableSeatSelectionView: View {
     @State private var selectedSeat: Int?
     @State private var sliderValue: Double = 0
     @State private var amountText = ""
+    @State private var editingAmount: MoneyAmountEditorState?
 
     private static let seatCount = 8
     private static let amountStep = 0.01
@@ -108,6 +109,13 @@ struct TableSeatSelectionView: View {
             }
             resetAmountToFullStack()
         }
+        .sheet(item: $editingAmount) { editor in
+            MoneyAmountEditorSheet(editor: editor) { text in
+                applyAmountText(text)
+            }
+            .presentationDetents([.height(480)])
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var amountControls: some View {
@@ -126,23 +134,32 @@ struct TableSeatSelectionView: View {
                         .tint(AppTheme.positive)
                         .disabled(!hasMoney)
 
-                    TextField("0.00", text: $amountText)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.center)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(AppTheme.text)
-                        .frame(width: 72)
-                        .padding(.vertical, 8)
-                        .background(AppTheme.background)
-                        .clipShape(RoundedRectangle(cornerRadius: 9))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9)
-                                .stroke(AppTheme.cardBorder)
+                    Button {
+                        guard hasMoney else { return }
+                        editingAmount = MoneyAmountEditorState(
+                            id: UUID(),
+                            title: "Amount at table",
+                            subtitle: "Money in",
+                            currencyCode: buyInCurrencyCode,
+                            text: amountText,
+                            maximum: Decimal(string: hundredthsText(availableMoney))
                         )
-                        .onChange(of: amountText) { _, newValue in
-                            syncSliderFromText(newValue)
-                        }
-                        .disabled(!hasMoney)
+                    } label: {
+                        Text(amountText.isEmpty ? "0.00" : amountText)
+                            .multilineTextAlignment(.center)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(hasMoney ? AppTheme.text : AppTheme.muted)
+                            .frame(width: 72)
+                            .padding(.vertical, 8)
+                            .background(AppTheme.background)
+                            .clipShape(RoundedRectangle(cornerRadius: 9))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 9)
+                                    .stroke(AppTheme.cardBorder)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!hasMoney)
                 }
 
                 HStack {
@@ -186,18 +203,12 @@ struct TableSeatSelectionView: View {
         amountText = hundredthsText(rounded)
     }
 
-    private func syncSliderFromText(_ text: String) {
+    private func applyAmountText(_ text: String) {
         let sanitized = sanitizedDecimalText(text)
-        if sanitized != text {
-            amountText = sanitized
-            return
-        }
-
-        guard let typed = Double(sanitized), !sanitized.isEmpty else { return }
-        let clamped = clampedHundredths(typed)
-        if abs(clamped - sliderValue) > 0.0001 {
-            sliderValue = clamped
-        }
+        let value = Double(sanitized) ?? 0
+        let clamped = clampedHundredths(value)
+        sliderValue = clamped
+        amountText = hundredthsText(clamped)
     }
 
     private func sanitizedDecimalText(_ text: String) -> String {
