@@ -101,6 +101,18 @@ enum PokerHandEvaluator {
             .max()
     }
 
+    /// What two cards are called before there is a board to read, such as
+    /// "Pair of queens" or "Ace king suited".
+    static func startingHandName(_ cards: [PlayingCard]) -> String? {
+        let sorted = cards.sorted { $0.rank > $1.rank }
+        guard sorted.count == 2, let high = sorted.first, let low = sorted.last else { return nil }
+
+        if high.rank == low.rank {
+            return "Pair of \(high.rankNamePlural)"
+        }
+        return "\(high.rankName.capitalized) \(low.rankName) \(high.suit == low.suit ? "suited" : "offsuit")"
+    }
+
     /// The five-card hand these exact cards make.
     static func rank(of cards: [PlayingCard]) -> PokerHandRank? {
         guard cards.count == handSize else { return nil }

@@ -233,12 +233,13 @@ final class TableRepository {
         publish(table)
     }
 
-    /// Deals the pre-flop round so the table gets asked, seat by seat, who is in.
+    /// Deals a hand: two cards each, then the table gets asked, seat by seat,
+    /// whether it is in for the ante.
     @discardableResult
     func dealHand(on table: OpenTableModel) throws -> SharedTableHand {
-        let hand = try PreflopRound.start(
+        let hand = try HandRound.start(
             seats: table.seats,
-            dealerSeat: PreflopRound.openingDealerSeat(seats: table.seats),
+            dealerSeat: HandRound.openingDealerSeat(seats: table.seats),
             ante: table.anteDecimal
         )
         table.isStarted = true
@@ -250,26 +251,47 @@ final class TableRepository {
 
     func updateHand(_ hand: SharedTableHand, on table: OpenTableModel) {
         table.hand = hand
+        if hand.isComplete {
+            payOutHand(hand, on: table)
+        }
         try? context.save()
         publish(table)
     }
 
-    /// Pushes the pot to the winner and deals the next pre-flop round.
-    func settleHandAndDealNext(on table: OpenTableModel) throws {
-        guard let hand = table.hand else { throw PreflopRoundError.bettingOpen }
-        guard hand.winnerSeat != nil else { throw PreflopRoundError.bettingOpen }
+    /// Puts what a finished hand paid into the money each player has on the
+    /// table. Every phone works it out from the same hand, so running it more
+    /// than once cannot pay anybody twice.
+    func payOutHand(_ hand: SharedTableHand, on table: OpenTableModel) {
+        guard hand.isComplete else { return }
 
-        let stacks = PreflopRound.stacksAfter(hand)
+        let stacks = HandRound.stacksAfter(hand)
         var seats = table.seats
+        var changed = false
         for index in seats.indices {
             guard let stack = stacks[seats[index].playerKey] else { continue }
-            seats[index].amount = TableMoney.string(stack)
+            let settled = TableMoney.string(stack)
+            guard seats[index].amount != settled else { continue }
+            seats[index].amount = settled
+            changed = true
         }
+        guard changed else { return }
         table.seats = seats
+        try? context.save()
+    }
 
-        table.hand = try? PreflopRound.start(
-            seats: seats,
-            dealerSeat: PreflopRound.nextDealerSeat(after: hand.dealerSeat, seats: seats),
+    /// Deals the next hand, moving the button on. The pot has already been paid
+    /// into everybody's money on the table.
+    func dealNextHand(on table: OpenTableModel) throws {
+        guard let hand = table.hand else {
+            try dealHand(on: table)
+            return
+        }
+        guard hand.isComplete else { throw HandRoundError.handInProgress }
+
+        payOutHand(hand, on: table)
+        table.hand = try HandRound.start(
+            seats: table.seats,
+            dealerSeat: HandRound.nextDealerSeat(after: hand.dealerSeat, seats: table.seats),
             ante: table.anteDecimal,
             handNumber: hand.handNumber + 1
         )
@@ -403,8 +425,9 @@ final class TableRepository {
         if mySeat(on: table) != nil {
             await refresh(table: table)
             if let hand = table.hand,
-               let withdrawn = PreflopRound.withdraw(playerKey: localPlayerKey, from: hand) {
+               let withdrawn = HandRound.withdraw(playerKey: localPlayerKey, from: hand) {
                 table.hand = withdrawn
+                payOutHand(withdrawn, on: table)
             }
             table.seats = SharedTableSeating.removing(playerKey: localPlayerKey, from: table.seats)
             try? context.save()
@@ -476,7 +499,8 @@ final class TableRepository {
         try? context.save()
     }
 
-    /// A move made on this device stays put until the cloud catches up with it.
+    /// A move made on this device stays put until the cloud catches up with it,
+    /// and a hand dealt here is not thrown away by the one it replaced.
     private func mergedHand(
         local: SharedTableHand?,
         cloud: SharedTableHand?,
@@ -487,10 +511,10 @@ final class TableRepository {
         guard let cloud else {
             return cloudUpdatedAt > localUpdatedAt ? nil : local
         }
-        if local.id == cloud.id, local.revision > cloud.revision {
-            return local
+        if local.id == cloud.id {
+            return local.revision > cloud.revision ? local : cloud
         }
-        return cloud
+        return local.handNumber > cloud.handNumber ? local : cloud
     }
 
     private func uniqueInviteCode() throws -> String {

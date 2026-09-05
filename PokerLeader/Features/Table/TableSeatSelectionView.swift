@@ -93,10 +93,25 @@ struct TableSeatSelectionView: View {
         hand?.amountToCall(forPlayerKey: repo.localPlayerKey) ?? 0
     }
 
+    private var board: [PlayingCard] {
+        hand?.board ?? []
+    }
+
+    /// What your two cards and the cards on the table add up to right now.
+    private var localHandSummary: String? {
+        guard let seat = localHandSeat, seat.isDealtCards, !seat.isFolded else { return nil }
+        if let rank = PokerHandEvaluator.best(from: seat.cards + board) {
+            return rank.summary
+        }
+        return PokerHandEvaluator.startingHandName(seat.cards)
+    }
+
     private var layoutOccupants: [TableSeatOccupant] {
         occupants.map { seat in
             let isLocal = seat.playerKey == repo.localPlayerKey
             let handSeat = hand?.seat(forPlayerKey: seat.playerKey)
+            let isShowingDown = hand?.showsCards(forSeat: seat.seatNumber) ?? false
+            let dealtCards = handSeat?.cards.count ?? 0
             return TableSeatOccupant(
                 seatNumber: seat.seatNumber,
                 playerName: isLocal ? playerName : seat.playerName,
@@ -104,12 +119,15 @@ struct TableSeatSelectionView: View {
                 committedLabel: (handSeat?.committedDecimal ?? 0) > 0
                     ? MoneyFormatting.plain(handSeat?.committedDecimal ?? 0, currencyCode: tableCurrencyCode)
                     : nil,
+                cards: isLocal || isShowingDown ? (handSeat?.cards ?? []) : [],
+                faceDownCount: isLocal || isShowingDown ? 0 : dealtCards,
+                handSummary: isShowingDown ? handSeat?.handSummary : nil,
                 isLocalUser: isLocal,
                 isLeader: seat.isHost || seat.playerKey == table?.hostPlayerKey,
                 isDealer: hand?.dealerSeat == seat.seatNumber,
                 isActing: hand?.actingSeat == seat.seatNumber,
                 isFolded: handSeat?.isFolded ?? false,
-                isWinner: hand?.winnerSeat == seat.seatNumber
+                isWinner: hand?.winnerSeats.contains(seat.seatNumber) ?? false
             )
         }
     }
@@ -122,7 +140,8 @@ struct TableSeatSelectionView: View {
             return .waiting("Waiting for players")
         }
         return .pot(
-            handNumber: hand.handNumber,
+            title: hand.isComplete ? "Hand \(hand.handNumber)" : "Hand \(hand.handNumber) · \(hand.street.title)",
+            board: hand.board,
             potLabel: MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode),
             status: potStatus(for: hand)
         )
@@ -150,10 +169,13 @@ struct TableSeatSelectionView: View {
                     onSelect: handleSeatTap,
                     onPlay: startGame
                 )
-                .frame(height: 400)
+                .frame(height: 430)
                 .padding(.horizontal)
 
                 if isGameStarted {
+                    if let seat = localHandSeat, seat.isDealtCards {
+                        yourCardsSection(seat)
+                    }
                     handSection
                     if selectedSeat != nil, localHandSeat == nil {
                         amountControls
@@ -304,10 +326,38 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    private func yourCardsSection(_ seat: SharedTableHandSeat) -> some View {
+        HStack(spacing: 14) {
+            CardRowView(cards: seat.cards, size: .hand)
+                .opacity(seat.isFolded ? 0.4 : 1)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(seat.isFolded ? "You folded" : "Your hand")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.text)
+                Text(localHandSummary ?? "Waiting for the flop")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(seat.isFolded ? AppTheme.muted : AppTheme.gold)
+                Text("\(MoneyFormatting.plain(seat.remaining, currencyCode: tableCurrencyCode)) behind")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.cardBorder)
+        )
+        .padding(.horizontal)
+    }
+
     private var handSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionHeader(title: hand.map { "Hand \($0.handNumber)" } ?? "Pre-flop")
+                SectionHeader(title: hand.map { "Hand \($0.handNumber) · \($0.street.title)" } ?? "Pre-flop")
                 Spacer()
                 Text("Ante \(MoneyFormatting.plain(displayedAnte, currencyCode: tableCurrencyCode))")
                     .font(.caption.weight(.bold))
@@ -344,44 +394,44 @@ struct TableSeatSelectionView: View {
 
     @ViewBuilder
     private func handActions(for hand: SharedTableHand) -> some View {
-        if let winnerSeat = hand.winnerSeat, let winner = hand.seat(at: winnerSeat) {
-            HandPrompt(
-                title: "\(winner.playerKey == repo.localPlayerKey ? "You take" : "\(winner.playerName) takes") \(MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode))",
-                detail: hand.contenders.count == 1 ? "Everyone else folded." : "Pot pushed to the winner."
-            )
+        if hand.isComplete {
+            HandPrompt(title: resultTitle(for: hand), detail: resultDetail(for: hand))
+            if hand.isRevealed {
+                ShowdownRows(
+                    contenders: hand.contenders,
+                    winnerSeats: hand.winnerSeats,
+                    localPlayerKey: repo.localPlayerKey
+                )
+            }
             HandActionButton(title: "Next hand", tint: AppTheme.positive, action: dealNextHand)
-        } else if hand.isBettingComplete {
-            HandPrompt(
-                title: "Who took the pot?",
-                detail: "Pre-flop betting is done. Tap whoever won \(MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode))."
-            )
-            WinnerPicker(
-                contenders: hand.contenders,
-                localPlayerKey: repo.localPlayerKey,
-                onPick: awardPot
-            )
         } else if isLocalTurn, let seat = localHandSeat {
             HandPrompt(
-                title: "Are you in?",
+                title: turnTitle(for: hand),
                 detail: turnDetail(for: hand, seat: seat)
             )
             HStack(spacing: 10) {
+                if amountToCall > 0 {
+                    HandActionButton(
+                        title: "Call \(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode))",
+                        tint: AppTheme.positive,
+                        action: { submit(.call) }
+                    )
+                } else {
+                    HandActionButton(
+                        title: "Check",
+                        tint: AppTheme.card,
+                        action: { submit(.check) }
+                    )
+                }
                 HandActionButton(
-                    title: amountToCall > 0
-                        ? "I'm in \(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode))"
-                        : "I'm in",
-                    tint: AppTheme.positive,
-                    action: { submit(.stayIn) }
-                )
-                HandActionButton(
-                    title: "Bet",
+                    title: amountToCall > 0 ? "Raise" : "Bet",
                     tint: AppTheme.gold,
                     action: presentBetEditor
                 )
                 HandActionButton(
-                    title: amountToCall > 0 ? "Fold" : "Check",
-                    tint: amountToCall > 0 ? AppTheme.negative : AppTheme.card,
-                    action: { submit(amountToCall > 0 ? .fold : .check) }
+                    title: "Fold",
+                    tint: AppTheme.negative,
+                    action: { submit(.fold) }
                 )
             }
         } else if localHandSeat == nil {
@@ -402,15 +452,30 @@ struct TableSeatSelectionView: View {
         }
     }
 
+    private func turnTitle(for hand: SharedTableHand) -> String {
+        switch hand.street {
+        case .preflop:
+            amountToCall > 0 ? "Are you in?" : "Your turn before the flop"
+        case .flop, .turn, .river:
+            "Your turn on the \(hand.street.title.lowercased())"
+        case .showdown:
+            "Cards up"
+        }
+    }
+
     private func turnDetail(for hand: SharedTableHand, seat: SharedTableHandSeat) -> String {
-        let stack = MoneyFormatting.plain(seat.remaining, currencyCode: tableCurrencyCode)
-        if amountToCall <= 0 {
-            return "Nothing to put in yet · \(stack) behind"
+        var parts: [String] = []
+        if let localHandSummary {
+            parts.append(localHandSummary)
         }
-        if hand.callTarget == hand.anteDecimal {
-            return "Ante \(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode)) to stay in · \(stack) behind"
+        if amountToCall > 0 {
+            let owed = MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode)
+            parts.append(hand.callTarget == hand.anteDecimal ? "Ante \(owed) to stay in" : "\(owed) to call")
+        } else {
+            parts.append("Nothing to put in yet")
         }
-        return "\(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode)) to call · \(stack) behind"
+        parts.append("\(MoneyFormatting.plain(seat.remaining, currencyCode: tableCurrencyCode)) behind")
+        return parts.joined(separator: " · ")
     }
 
     private func waitingDetail(for hand: SharedTableHand) -> String {
@@ -418,12 +483,40 @@ struct TableSeatSelectionView: View {
         return "Waiting for \(name)"
     }
 
-    private func potStatus(for hand: SharedTableHand) -> String {
-        if let winnerSeat = hand.winnerSeat, let winner = hand.seat(at: winnerSeat) {
-            return "\(winner.playerName) wins"
+    private func resultTitle(for hand: SharedTableHand) -> String {
+        let winners = hand.winners
+        guard let first = winners.first else { return "Hand over" }
+
+        if winners.count > 1 {
+            let names = winners.map { $0.playerKey == repo.localPlayerKey ? "You" : $0.playerName }
+            let joined = names.count == 2
+                ? names.joined(separator: " and ")
+                : names.dropLast().joined(separator: ", ") + " and " + (names.last ?? "")
+            return "\(joined) split \(MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode))"
         }
-        if hand.isBettingComplete {
-            return "Who won?"
+
+        let taken = MoneyFormatting.plain(first.awardedDecimal, currencyCode: tableCurrencyCode)
+        let who = first.playerKey == repo.localPlayerKey ? "You take" : "\(first.playerName) takes"
+        return "\(who) \(taken)"
+    }
+
+    private func resultDetail(for hand: SharedTableHand) -> String {
+        if let summary = hand.resultSummary {
+            return summary
+        }
+        return "Pot pushed to the winner."
+    }
+
+    private func potStatus(for hand: SharedTableHand) -> String {
+        if hand.isComplete {
+            let winners = hand.winners
+            if winners.count > 1 {
+                return "Split pot"
+            }
+            if let winner = winners.first {
+                return "\(winner.playerName) wins"
+            }
+            return "Hand over"
         }
         if isLocalTurn {
             return "Your turn"
@@ -433,7 +526,7 @@ struct TableSeatSelectionView: View {
 
     private func stackAmount(for seat: SharedTableSeat) -> Decimal {
         if let handSeat = hand?.seat(forPlayerKey: seat.playerKey) {
-            return handSeat.remaining
+            return (handSeat.remaining + handSeat.awardedDecimal).roundedToHundredths
         }
         if seat.playerKey == repo.localPlayerKey, !isGameStarted {
             return seatedAmount
@@ -453,7 +546,7 @@ struct TableSeatSelectionView: View {
     }
 
     private func dealHandIfPossible(on table: OpenTableModel) {
-        if table.hand == nil, (try? repo.dealHand(on: table)) == nil {
+        if needsDeal(on: table), (try? repo.dealHand(on: table)) == nil {
             repo.markStarted(table)
         }
         withAnimation(.easeOut(duration: 0.18)) {
@@ -461,10 +554,17 @@ struct TableSeatSelectionView: View {
         }
     }
 
-    private func submit(_ move: PreflopMove, amount: Decimal? = nil) {
+    /// A table with no hand, or one dealt by a build that did not deal cards,
+    /// needs a fresh deck before it can be played out.
+    private func needsDeal(on table: OpenTableModel) -> Bool {
+        guard let hand = table.hand else { return true }
+        return hand.needsRedeal
+    }
+
+    private func submit(_ move: HandMove, amount: Decimal? = nil) {
         guard let table, let hand else { return }
         do {
-            let next = try PreflopRound.apply(
+            let next = try HandRound.apply(
                 move: move,
                 amount: amount,
                 playerKey: repo.localPlayerKey,
@@ -475,20 +575,7 @@ struct TableSeatSelectionView: View {
                 self.hand = next
             }
             repo.updateHand(next, on: table)
-        } catch {
-            handMessage = error.localizedDescription
-        }
-    }
-
-    private func awardPot(to seatNumber: Int) {
-        guard let table, let hand else { return }
-        do {
-            let next = try PreflopRound.award(potTo: seatNumber, in: hand)
-            handMessage = nil
-            withAnimation(.easeOut(duration: 0.18)) {
-                self.hand = next
-            }
-            repo.updateHand(next, on: table)
+            occupants = table.seats
         } catch {
             handMessage = error.localizedDescription
         }
@@ -497,7 +584,7 @@ struct TableSeatSelectionView: View {
     private func dealNextHand() {
         guard let table else { return }
         do {
-            try repo.settleHandAndDealNext(on: table)
+            try repo.dealNextHand(on: table)
             handMessage = nil
             withAnimation(.easeOut(duration: 0.18)) {
                 hand = table.hand
@@ -559,11 +646,11 @@ struct TableSeatSelectionView: View {
         amountEditor = .bet(
             MoneyAmountEditorState(
                 id: UUID(),
-                title: "Pre-flop bet",
-                subtitle: "Total in the pot",
+                title: amountToCall > 0 ? "Raise to" : "\(hand.street.title) bet",
+                subtitle: "Total in front of you on this street",
                 currencyCode: tableCurrencyCode,
-                text: TableMoney.string(PreflopRound.suggestedBet(in: hand, forPlayerKey: seat.playerKey)),
-                maximum: seat.stackDecimal
+                text: TableMoney.string(HandRound.suggestedBet(in: hand, forPlayerKey: seat.playerKey)),
+                maximum: seat.streetCap
             )
         )
     }
@@ -657,18 +744,24 @@ struct TableSeatSelectionView: View {
 
     private func syncSharedTable() async {
         guard let table else { return }
-        if selectedSeat != nil, !repo.isDealtIn(table) {
+        if selectedSeat != nil, ownsMoneyIn(on: table) {
             repo.updateLocalAmount(on: table, amount: seatedAmount)
         }
         await repo.refresh(table: table)
-        if !repo.isDealtIn(table) {
+        if ownsMoneyIn(on: table) {
             mergeLocalSeat(into: table)
         }
         occupants = table.seats
         isGameStarted = table.isStarted || isGameStarted
 
-        if isGameStarted, table.hand == nil, table.isHostLocally {
+        if let finished = table.hand, finished.isComplete {
+            repo.payOutHand(finished, on: table)
+            occupants = table.seats
+        }
+
+        if isGameStarted, needsDeal(on: table), table.isHostLocally {
             try? repo.dealHand(on: table)
+            occupants = table.seats
         }
         withAnimation(.easeOut(duration: 0.18)) {
             hand = table.hand
@@ -678,6 +771,13 @@ struct TableSeatSelectionView: View {
             selectedSeat = mine.seatNumber
             storedSeatNumber = mine.seatNumber
         }
+    }
+
+    /// Money in follows the slider until the table has been dealt a hand. After
+    /// that a player's money is whatever the poker left them with, so a busted
+    /// stack is not quietly topped back up.
+    private func ownsMoneyIn(on table: OpenTableModel) -> Bool {
+        table.hand == nil && !repo.isDealtIn(table)
     }
 
     private func mergeLocalSeat(into table: OpenTableModel) {
@@ -722,7 +822,7 @@ private enum TableAmountEditor: Identifiable {
 private enum TableCenterContent: Equatable {
     case play(isEnabled: Bool)
     case waiting(String)
-    case pot(handNumber: Int, potLabel: String, status: String)
+    case pot(title: String, board: [PlayingCard], potLabel: String, status: String)
 }
 
 private struct TableSeatOccupant: Equatable {
@@ -730,6 +830,9 @@ private struct TableSeatOccupant: Equatable {
     var playerName: String
     var stackLabel: String
     var committedLabel: String?
+    var cards: [PlayingCard] = []
+    var faceDownCount: Int = 0
+    var handSummary: String?
     var isLocalUser: Bool
     var isLeader: Bool
     var isDealer: Bool
@@ -745,8 +848,8 @@ private struct PokerTableSeatLayout: View {
     let onSelect: (Int) -> Void
     let onPlay: () -> Void
 
-    private let seatWidth: CGFloat = 88
-    private let seatHeight: CGFloat = 62
+    private let seatWidth: CGFloat = 92
+    private let seatHeight: CGFloat = 84
 
     var body: some View {
         GeometryReader { proxy in
@@ -803,13 +906,14 @@ private struct TableCenterView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 10)
                 .background(Capsule().fill(AppTheme.card))
-        case .pot(let handNumber, let potLabel, let status):
-            VStack(spacing: 2) {
-                Text("Hand \(handNumber) · pot")
+        case .pot(let title, let board, let potLabel, let status):
+            VStack(spacing: 6) {
+                Text(title)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
+                BoardCardsView(cards: board)
                 Text(potLabel)
-                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(AppTheme.gold)
                     .monospacedDigit()
                 Text(status)
@@ -818,7 +922,7 @@ private struct TableCenterView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 14)
             .padding(.vertical, 10)
             .background(
                 RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
@@ -921,35 +1025,48 @@ private struct HandActionButton: View {
     }
 }
 
-private struct WinnerPicker: View {
+/// Everyone still in the hand with their cards face up, once the betting is done.
+private struct ShowdownRows: View {
     let contenders: [SharedTableHandSeat]
+    let winnerSeats: [Int]
     let localPlayerKey: String
-    let onPick: (Int) -> Void
-
-    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 8)]
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 8) {
+        VStack(spacing: 8) {
             ForEach(contenders) { seat in
-                Button {
-                    onPick(seat.seatNumber)
-                } label: {
-                    Text(seat.playerKey == localPlayerKey ? "You" : seat.playerName)
-                        .font(.subheadline.weight(.bold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(AppTheme.background)
-                        .foregroundStyle(AppTheme.text)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(AppTheme.cardBorder)
-                        )
+                let isWinner = winnerSeats.contains(seat.seatNumber)
+                HStack(spacing: 10) {
+                    CardRowView(cards: seat.cards, size: .board)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(seat.playerKey == localPlayerKey ? "You" : seat.playerName)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(AppTheme.text)
+                            .lineLimit(1)
+                        if let summary = seat.handSummary {
+                            Text(summary)
+                                .font(.caption)
+                                .foregroundStyle(isWinner ? AppTheme.gold : AppTheme.muted)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                    }
+                    Spacer(minLength: 0)
+
+                    if isWinner {
+                        Image(systemName: "trophy.fill")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(AppTheme.gold)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Gives the pot to this player")
+                .padding(10)
+                .background(AppTheme.background)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(isWinner ? AppTheme.gold : AppTheme.cardBorder, lineWidth: isWinner ? 2 : 1)
+                )
+                .accessibilityElement(children: .combine)
             }
         }
     }
@@ -982,6 +1099,14 @@ private struct SeatChip: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(AppTheme.contrastText.opacity(0.8))
+                    if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
+                        CardRowView(
+                            cards: occupant.cards,
+                            faceDownCount: occupant.faceDownCount,
+                            size: .seat
+                        )
+                        .padding(.vertical, 1)
+                    }
                     if occupant.isFolded {
                         Text("Folded")
                             .font(.system(size: 9, weight: .bold))
@@ -1051,6 +1176,9 @@ private struct SeatChip: View {
             label += ", folded"
         } else if occupant.isActing {
             label += ", to act"
+        }
+        if let summary = occupant.handSummary {
+            label += ", \(summary)"
         }
         return label
     }

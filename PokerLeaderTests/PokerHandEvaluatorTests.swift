@@ -126,4 +126,13 @@ final class PokerHandEvaluatorTests: XCTestCase {
     func testFewerThanFiveCardsMakeNoHand() {
         XCTAssertNil(PokerHandEvaluator.best(from: CardDeck.deck(["Ah", "Kh", "Qh", "Jh"])))
     }
+
+    // MARK: - Before the flop
+
+    func testTwoCardsAreCalledWhatAPlayerWouldCallThem() {
+        XCTAssertEqual(PokerHandEvaluator.startingHandName(CardDeck.deck(["Qs", "Qd"])), "Pair of queens")
+        XCTAssertEqual(PokerHandEvaluator.startingHandName(CardDeck.deck(["Ah", "Kh"])), "Ace king suited")
+        XCTAssertEqual(PokerHandEvaluator.startingHandName(CardDeck.deck(["7c", "Td"])), "Ten seven offsuit")
+        XCTAssertNil(PokerHandEvaluator.startingHandName(CardDeck.deck(["7c"])))
+    }
 }
