@@ -7,6 +7,7 @@ struct MoneyAmountEditorState: Identifiable {
     var subtitle: String = ""
     let currencyCode: String
     var text: String
+    var minimum: Decimal? = nil
     var maximum: Decimal? = nil
 }
 
@@ -128,6 +129,7 @@ struct MoneyAmountEditorSheet: View {
     let title: String
     let subtitle: String
     let currencyCode: String
+    let minimum: Decimal?
     let maximum: Decimal?
     let onSave: (String) -> Void
 
@@ -135,6 +137,7 @@ struct MoneyAmountEditorSheet: View {
         self.title = editor.title
         self.subtitle = editor.subtitle
         self.currencyCode = editor.currencyCode
+        self.minimum = editor.minimum
         self.maximum = editor.maximum
         self.onSave = onSave
         _text = State(initialValue: editor.text)
@@ -220,7 +223,9 @@ struct MoneyAmountEditorSheet: View {
     }
 
     private var canSave: Bool {
-        Decimal(string: MoneyAmountKeypad.normalizedText(text)) != nil
+        guard let typed = Decimal(string: MoneyAmountKeypad.normalizedText(text)) else { return false }
+        guard let minimum else { return true }
+        return typed.clampedToNonNegative >= minimum
     }
 
     private var currentAmount: Decimal {
