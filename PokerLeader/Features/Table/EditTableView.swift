@@ -20,6 +20,7 @@ struct EditTableView: View {
     @State private var editingAmount: MoneyAmountEditorState?
     @State private var showRemoveConfirmation = false
     @State private var isRemoving = false
+    @State private var isDealtIn = false
 
     init(table: OpenTableModel, onChange: @escaping () -> Void = {}) {
         self.table = table
@@ -88,14 +89,21 @@ struct EditTableView: View {
             Section {
                 if let seatNumber {
                     LabeledContent("Seat", value: "Seat \(seatNumber)")
-                    Button(action: presentAmountEditor) {
-                        editableRow(
-                            title: "Money in",
-                            value: MoneyFormatting.plain(seatAmount, currencyCode: currencyCode),
-                            valueColor: AppTheme.gold
-                        )
+                    if isDealtIn {
+                        LabeledContent("Money in") {
+                            Text(MoneyFormatting.plain(seatAmount, currencyCode: currencyCode))
+                                .foregroundStyle(AppTheme.gold)
+                        }
+                    } else {
+                        Button(action: presentAmountEditor) {
+                            editableRow(
+                                title: "Money in",
+                                value: MoneyFormatting.plain(seatAmount, currencyCode: currencyCode),
+                                valueColor: AppTheme.gold
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 } else {
                     Text("You haven't taken a seat here yet. Open the table to sit down.")
                         .font(.caption)
@@ -103,6 +111,10 @@ struct EditTableView: View {
                 }
             } header: {
                 Text("Your seat")
+            } footer: {
+                if isDealtIn {
+                    Text("You are in a hand. Money in changes again once the pot is settled.")
+                }
             }
 
             Section {
@@ -188,6 +200,7 @@ struct EditTableView: View {
 
     private func loadTableState() {
         activeInviteCode = repo.activeInviteCode
+        isDealtIn = repo.isDealtIn(table)
 
         guard let seat = repo.mySeat(on: table) else {
             seatNumber = nil

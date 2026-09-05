@@ -176,6 +176,63 @@ final class PreflopRoundTests: XCTestCase {
         XCTAssertTrue(hand.isBettingComplete)
     }
 
+    // MARK: - Walking away mid-hand
+
+    func testLeavingOnYourTurnPassesTheTurnOn() throws {
+        var hand = try PreflopRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 1)
+        hand = try PreflopRound.apply(move: .stayIn, playerKey: "ben", to: hand)
+
+        let after = try XCTUnwrap(PreflopRound.withdraw(playerKey: "cal", from: hand))
+
+        XCTAssertEqual(after.seat(forPlayerKey: "cal")?.isFolded, true)
+        XCTAssertEqual(after.actingSeat, 1)
+        XCTAssertEqual(after.revision, hand.revision + 1)
+    }
+
+    func testLeavingOutOfTurnDoesNotSkipWhoeverIsBeingAsked() throws {
+        let hand = try PreflopRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 1)
+
+        let after = try XCTUnwrap(PreflopRound.withdraw(playerKey: "cal", from: hand))
+
+        XCTAssertEqual(after.actingSeat, 2, "Ben was being asked and still is")
+        XCTAssertEqual(after.contenders.count, 2)
+    }
+
+    func testLeavingKeepsWhatYouAlreadyPutInAndCanEndTheHand() throws {
+        var hand = try PreflopRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 1)
+        hand = try PreflopRound.apply(move: .stayIn, playerKey: "ben", to: hand)
+        hand = try PreflopRound.apply(move: .fold, playerKey: "cal", to: hand)
+
+        let after = try XCTUnwrap(PreflopRound.withdraw(playerKey: "ben", from: hand))
+
+        XCTAssertEqual(after.pot, 1, "Ben's ante stays in the pot")
+        XCTAssertTrue(after.isBettingComplete)
+        XCTAssertEqual(after.winnerSeat, 1, "Ana is the last one left")
+        XCTAssertEqual(PreflopRound.stacksAfter(after)["ana"], 21)
+    }
+
+    func testLeavingAfterTheBettingIsDoneLeavesItDone() throws {
+        var hand = try PreflopRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 1)
+        for key in ["ben", "cal", "ana"] {
+            hand = try PreflopRound.apply(move: .stayIn, playerKey: key, to: hand)
+        }
+
+        let after = try XCTUnwrap(PreflopRound.withdraw(playerKey: "ben", from: hand))
+
+        XCTAssertTrue(after.isBettingComplete)
+        XCTAssertEqual(after.contenders.count, 2)
+        XCTAssertNil(after.winnerSeat, "The table still says who won")
+        XCTAssertEqual(after.pot, 3)
+    }
+
+    func testLeavingWhenYouWereNotInTheHandChangesNothing() throws {
+        var hand = try PreflopRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 1)
+        XCTAssertNil(PreflopRound.withdraw(playerKey: "dee", from: hand))
+
+        hand = try PreflopRound.apply(move: .fold, playerKey: "ben", to: hand)
+        XCTAssertNil(PreflopRound.withdraw(playerKey: "ben", from: hand), "Already folded")
+    }
+
     // MARK: - Paying out
 
     func testThePotIsPushedToThePickedWinner() throws {
@@ -272,5 +329,48 @@ final class PreflopRoundTests: XCTestCase {
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 50), dec("0.5"))
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: dec("0.2")), dec("0.01"))
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 0), 0)
+    }
+}
+
+final class OpenTableSchemaTests: XCTestCase {
+    private struct CloudError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    private func error(_ message: String) -> Error {
+        CloudError(message: message)
+    }
+
+    func testAMissingHandColumnIsToldApartFromAMissingTable() {
+        let missingColumn = error("Could not find the 'hand' column of 'open_tables' in the schema cache")
+
+        XCTAssertTrue(OpenTableSchema.isMissingHandColumn(missingColumn))
+        XCTAssertFalse(
+            OpenTableSchema.isMissingTable(missingColumn),
+            "The table is there, so the host should not be sent back to the first migration"
+        )
+    }
+
+    func testAMissingAnteColumnIsRecognised() {
+        XCTAssertTrue(
+            OpenTableSchema.isMissingHandColumn(
+                error("Could not find the 'ante_amount' column of 'open_tables' in the schema cache")
+            )
+        )
+    }
+
+    func testAMissingTableIsStillRecognised() {
+        let missingTable = error("Could not find the table 'public.open_tables' in the schema cache")
+
+        XCTAssertTrue(OpenTableSchema.isMissingTable(missingTable))
+        XCTAssertFalse(OpenTableSchema.isMissingHandColumn(missingTable))
+    }
+
+    func testUnrelatedFailuresAreLeftAlone() {
+        let offline = error("The Internet connection appears to be offline.")
+
+        XCTAssertFalse(OpenTableSchema.isMissingTable(offline))
+        XCTAssertFalse(OpenTableSchema.isMissingHandColumn(offline))
     }
 }

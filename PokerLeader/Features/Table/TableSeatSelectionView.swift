@@ -649,11 +649,11 @@ struct TableSeatSelectionView: View {
 
     private func syncSharedTable() async {
         guard let table else { return }
-        if selectedSeat != nil, !isDealtIn(table) {
+        if selectedSeat != nil, !repo.isDealtIn(table) {
             repo.updateLocalAmount(on: table, amount: seatedAmount)
         }
         await repo.refresh(table: table)
-        if !isDealtIn(table) {
+        if !repo.isDealtIn(table) {
             mergeLocalSeat(into: table)
         }
         occupants = table.seats
@@ -670,11 +670,6 @@ struct TableSeatSelectionView: View {
             selectedSeat = mine.seatNumber
             storedSeatNumber = mine.seatNumber
         }
-    }
-
-    /// A stack that is already in a hand belongs to the hand, not to the money-in slider.
-    private func isDealtIn(_ table: OpenTableModel) -> Bool {
-        table.hand?.seat(forPlayerKey: repo.localPlayerKey) != nil
     }
 
     private func mergeLocalSeat(into table: OpenTableModel) {

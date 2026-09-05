@@ -103,6 +103,8 @@ Run the pre-flop migration so the ante and the hand in progress sync between pla
 
 `supabase/migrations/20260905090000_open_tables_preflop_hand.sql`
 
+Without it the table still shares its seats, but a hand dealt with **Play** stays on the device that dealt it.
+
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 
 Without `Supabase.plist`, the app still works locally with SwiftData only.
