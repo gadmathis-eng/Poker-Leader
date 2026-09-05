@@ -10,6 +10,7 @@ struct CirclesHomeView: View {
     @Query(sort: \AppNotificationModel.createdAt, order: .reverse) private var notifications: [AppNotificationModel]
     @State private var showNewCircle = false
     @State private var showJoinCircle = false
+    @State private var showJoinTable = false
     @State private var showEditCircles = false
     @State private var showNotificationCenter = false
     @State private var rateStatusText = ExchangeRateService.shared.rateStatusText
@@ -39,6 +40,18 @@ struct CirclesHomeView: View {
                             .foregroundStyle(AppTheme.text)
                         SectionHeader(title: "Your circles")
                     }
+                    .padding(.horizontal)
+
+                    Button { showJoinTable = true } label: {
+                        Label("Join a table", systemImage: "table.furniture")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(AppTheme.positive)
+                            .foregroundStyle(AppTheme.contrastText)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    }
+                    .buttonStyle(.plain)
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 8) {
@@ -138,6 +151,9 @@ struct CirclesHomeView: View {
                 router.pendingInviteCode = nil
             }) {
                 JoinCircleSheet(initialInviteCode: router.pendingInviteCode)
+            }
+            .sheet(isPresented: $showJoinTable) {
+                JoinTableSheet()
             }
             .sheet(isPresented: $showEditCircles) {
                 EditCirclesSheet(circles: orderedCircles)

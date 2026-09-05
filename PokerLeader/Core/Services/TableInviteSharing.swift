@@ -3,6 +3,7 @@ import Foundation
 enum TableInviteDeepLink {
     static let httpsHost = "potmaster.app"
     static let webBaseURL = URL(string: "https://potmaster.app")!
+    static let codeLength = 6
 
     static func webURL(forInviteCode code: String) -> URL {
         let normalized = normalizedCode(code)
@@ -36,20 +37,14 @@ enum TableInviteDeepLink {
             }
         }
 
-        let tokens = normalizedCode(trimmed)
+        // A share message repeats the code, so the last code-shaped word wins over
+        // the wording around it.
+        let words = normalizedCode(trimmed)
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
 
-        if let marker = tokens.firstIndex(where: { $0 == "TABLE" || $0 == "CODE" }),
-           tokens.index(after: marker) < tokens.endIndex {
-            let next = tokens[tokens.index(after: marker)]
-            if (4...8).contains(next.count) {
-                return next
-            }
-        }
-
-        if let token = tokens.last(where: { (4...8).contains($0.count) }) {
-            return token
+        if let code = words.last(where: { $0.count == codeLength }) {
+            return code
         }
 
         return normalizedCode(trimmed)

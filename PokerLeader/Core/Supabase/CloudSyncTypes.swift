@@ -132,6 +132,8 @@ struct CloudOpenTableSnapshot {
     let sessionCurrencyCode: String
     let isStarted: Bool
     let seats: [SharedTableSeat]
+    let anteAmount: String
+    let hand: SharedTableHand?
     let createdAt: Date
     let updatedAt: Date
 }

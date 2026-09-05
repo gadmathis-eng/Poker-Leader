@@ -12,13 +12,13 @@ struct TableSeatSelectionView: View {
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
     @State private var selectedSeat: Int?
-    @State private var amountText = ""
-    @State private var editingAmount: MoneyAmountEditorState?
+    @State private var amountEditor: TableAmountEditor?
     @State private var isGameStarted = false
     @State private var table: OpenTableModel?
     @State private var occupants: [SharedTableSeat] = []
-
-    private static let amountStep = 0.01
+    @State private var hand: SharedTableHand?
+    @State private var handMessage: String?
+    @State private var needsPreflopMigration = false
 
     private var repo: TableRepository { TableRepository(context: context) }
 
@@ -41,43 +41,68 @@ struct TableSeatSelectionView: View {
         )
     }
 
-    private var availableMoney: Double {
-        max(NSDecimalNumber(decimal: tableBuyInAmount).doubleValue, 0)
-    }
-
-    private var hasMoney: Bool {
-        availableMoney > 0
-    }
-
-    private var sliderRange: ClosedRange<Double> {
-        0...max(availableMoney, Self.amountStep)
-    }
-
     private var seatedAmount: Decimal {
-        let committed = MoneyAmountKeypad.committedText(
-            amountText,
-            maximum: Decimal(string: hundredthsText(availableMoney))
-        )
-        return Decimal(string: committed) ?? 0
+        tableBuyInAmount
     }
 
-    private var stackLabel: String {
-        MoneyFormatting.plain(seatedAmount, currencyCode: tableCurrencyCode)
+    private var anteAmount: Decimal {
+        let stored = table?.anteDecimal ?? 0
+        return stored > 0 ? stored : TableAnte.defaultAmount(forBuyIn: tableBuyInAmount)
+    }
+
+    private var displayedAnte: Decimal {
+        hand?.anteDecimal ?? anteAmount
+    }
+
+    private var canChangeSeat: Bool {
+        !isGameStarted || localHandSeat == nil
+    }
+
+    private var localHandSeat: SharedTableHandSeat? {
+        hand?.seat(forPlayerKey: repo.localPlayerKey)
+    }
+
+    private var isLocalTurn: Bool {
+        hand?.isActing(playerKey: repo.localPlayerKey) ?? false
+    }
+
+    private var amountToCall: Decimal {
+        hand?.amountToCall(forPlayerKey: repo.localPlayerKey) ?? 0
     }
 
     private var layoutOccupants: [TableSeatOccupant] {
         occupants.map { seat in
             let isLocal = seat.playerKey == repo.localPlayerKey
+            let handSeat = hand?.seat(forPlayerKey: seat.playerKey)
             return TableSeatOccupant(
                 seatNumber: seat.seatNumber,
                 playerName: isLocal ? playerName : seat.playerName,
-                stackLabel: isLocal
-                    ? stackLabel
-                    : MoneyFormatting.plain(seat.amountDecimal, currencyCode: tableCurrencyCode),
+                stackLabel: MoneyFormatting.plain(stackAmount(for: seat), currencyCode: tableCurrencyCode),
+                committedLabel: (handSeat?.committedDecimal ?? 0) > 0
+                    ? MoneyFormatting.plain(handSeat?.committedDecimal ?? 0, currencyCode: tableCurrencyCode)
+                    : nil,
                 isLocalUser: isLocal,
-                isLeader: seat.isHost || seat.playerKey == table?.hostPlayerKey
+                isLeader: seat.isHost || seat.playerKey == table?.hostPlayerKey,
+                isDealer: hand?.dealerSeat == seat.seatNumber,
+                isActing: hand?.actingSeat == seat.seatNumber,
+                isFolded: handSeat?.isFolded ?? false,
+                isWinner: hand?.winnerSeat == seat.seatNumber
             )
         }
+    }
+
+    private var centerContent: TableCenterContent {
+        guard isGameStarted else {
+            return .play(isEnabled: selectedSeat != nil && seatedAmount > 0)
+        }
+        guard let hand else {
+            return .waiting("Waiting for players")
+        }
+        return .pot(
+            handNumber: hand.handNumber,
+            potLabel: MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode),
+            status: potStatus(for: hand)
+        )
     }
 
     var body: some View {
@@ -98,16 +123,17 @@ struct TableSeatSelectionView: View {
                 PokerTableSeatLayout(
                     seatCount: SharedTableSeating.seatCount,
                     occupants: layoutOccupants,
-                    canStart: selectedSeat != nil && seatedAmount > 0 && !isGameStarted,
-                    isStarted: isGameStarted,
+                    center: centerContent,
                     onSelect: handleSeatTap,
                     onPlay: startGame
                 )
                 .frame(height: 400)
                 .padding(.horizontal)
 
-                if selectedSeat != nil {
-                    amountControls
+                if isGameStarted {
+                    handSection
+                } else if selectedSeat != nil {
+                    anteControls
                 }
             }
             .padding(.vertical)
@@ -133,7 +159,6 @@ struct TableSeatSelectionView: View {
             if selectedSeat == nil, storedSeatNumber > 0 {
                 selectedSeat = storedSeatNumber
             }
-            resetAmountToFullStack()
         }
         .task {
             await prepareSharedTable()
@@ -142,61 +167,77 @@ struct TableSeatSelectionView: View {
                 await syncSharedTable()
             }
         }
-        .sheet(item: $editingAmount) { editor in
-            MoneyAmountEditorSheet(editor: editor) { text in
-                applyAmountText(text)
+        .sheet(item: $amountEditor) { editor in
+            MoneyAmountEditorSheet(editor: editor.state) { text in
+                apply(editedAmount: text, for: editor)
             }
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
     }
 
-    private var amountControls: some View {
+    private var anteControls: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Ante")
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.text)
+                Text("What everyone puts in to stay in the hand")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+            Spacer()
+            Button(action: presentAnteEditor) {
+                Text(MoneyFormatting.plain(anteAmount, currencyCode: tableCurrencyCode))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(AppTheme.gold)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Edit ante")
+        }
+        .padding(14)
+        .background(AppTheme.card)
+        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                .stroke(AppTheme.cardBorder)
+        )
+        .padding(.horizontal)
+    }
+
+    private var handSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionHeader(title: "Money in")
+                SectionHeader(title: hand.map { "Hand \($0.handNumber)" } ?? "Pre-flop")
                 Spacer()
-                Button(action: presentAmountEditor) {
-                    Text(stackLabel)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
-                .buttonStyle(.plain)
-                .disabled(!hasMoney)
+                Text("Ante \(MoneyFormatting.plain(displayedAnte, currencyCode: tableCurrencyCode))")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.muted)
             }
 
-            VStack(spacing: 8) {
-                HStack(spacing: 10) {
-                    Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
-                        .tint(AppTheme.positive)
-                        .disabled(!hasMoney)
-
-                    Button(action: presentAmountEditor) {
-                        Text(amountText.isEmpty ? "0.00" : amountText)
-                            .multilineTextAlignment(.center)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(hasMoney ? AppTheme.text : AppTheme.muted)
-                            .frame(width: 72)
-                            .padding(.vertical, 8)
-                            .background(AppTheme.background)
-                            .clipShape(RoundedRectangle(cornerRadius: 9))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 9)
-                                    .stroke(AppTheme.cardBorder)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasMoney)
-                    .accessibilityLabel("Edit money in")
+            VStack(spacing: 12) {
+                if let hand {
+                    handActions(for: hand)
+                } else {
+                    Text("Share the table so a friend can sit down. The first hand deals as soon as two of you have money on the table.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                HStack {
-                    Text(MoneyFormatting.plain(0, currencyCode: tableCurrencyCode))
-                    Spacer()
-                    Text(MoneyFormatting.plain(tableBuyInAmount, currencyCode: tableCurrencyCode))
+                if let handMessage {
+                    Text(handMessage)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.negative)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.muted)
+
+                if needsPreflopMigration {
+                    Text("Only this device can see the hand. In Supabase, open SQL Editor and run supabase/migrations/20260905090000_open_tables_preflop_hand.sql.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.negative)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             .padding(14)
             .background(AppTheme.card)
@@ -209,15 +250,103 @@ struct TableSeatSelectionView: View {
         .padding(.horizontal)
     }
 
-    private var hundredthsSliderBinding: Binding<Double> {
-        Binding(
-            get: {
-                clampedHundredths(Double(MoneyAmountKeypad.normalizedText(amountText)) ?? 0)
-            },
-            set: { newValue in
-                amountText = hundredthsText(newValue)
+    @ViewBuilder
+    private func handActions(for hand: SharedTableHand) -> some View {
+        if let winnerSeat = hand.winnerSeat, let winner = hand.seat(at: winnerSeat) {
+            HandPrompt(
+                title: "\(winner.playerKey == repo.localPlayerKey ? "You take" : "\(winner.playerName) takes") \(MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode))",
+                detail: hand.contenders.count == 1 ? "Everyone else folded." : "Pot pushed to the winner."
+            )
+            HandActionButton(title: "Next hand", tint: AppTheme.positive, action: dealNextHand)
+        } else if hand.isBettingComplete {
+            HandPrompt(
+                title: "Who took the pot?",
+                detail: "Pre-flop betting is done. Tap whoever won \(MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode))."
+            )
+            WinnerPicker(
+                contenders: hand.contenders,
+                localPlayerKey: repo.localPlayerKey,
+                onPick: awardPot
+            )
+        } else if isLocalTurn, let seat = localHandSeat {
+            HandPrompt(
+                title: "Are you in?",
+                detail: turnDetail(for: hand, seat: seat)
+            )
+            HStack(spacing: 10) {
+                HandActionButton(
+                    title: amountToCall > 0
+                        ? "I'm in \(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode))"
+                        : "I'm in",
+                    tint: AppTheme.positive,
+                    action: { submit(.stayIn) }
+                )
+                HandActionButton(
+                    title: "Bet",
+                    tint: AppTheme.gold,
+                    action: presentBetEditor
+                )
+                HandActionButton(
+                    title: amountToCall > 0 ? "Fold" : "Check",
+                    tint: amountToCall > 0 ? AppTheme.negative : AppTheme.card,
+                    action: { submit(amountToCall > 0 ? .fold : .check) }
+                )
             }
-        )
+        } else if localHandSeat == nil {
+            HandPrompt(
+                title: "You are in from the next hand",
+                detail: "This hand started before you sat down."
+            )
+        } else if localHandSeat?.isFolded == true {
+            HandPrompt(
+                title: "You folded",
+                detail: waitingDetail(for: hand)
+            )
+        } else {
+            HandPrompt(
+                title: waitingDetail(for: hand),
+                detail: "You are in for \(MoneyFormatting.plain(localHandSeat?.committedDecimal ?? 0, currencyCode: tableCurrencyCode))."
+            )
+        }
+    }
+
+    private func turnDetail(for hand: SharedTableHand, seat: SharedTableHandSeat) -> String {
+        let stack = MoneyFormatting.plain(seat.remaining, currencyCode: tableCurrencyCode)
+        if amountToCall <= 0 {
+            return "Nothing to put in yet · \(stack) behind"
+        }
+        if hand.callTarget == hand.anteDecimal {
+            return "Ante \(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode)) to stay in · \(stack) behind"
+        }
+        return "\(MoneyFormatting.plain(amountToCall, currencyCode: tableCurrencyCode)) to call · \(stack) behind"
+    }
+
+    private func waitingDetail(for hand: SharedTableHand) -> String {
+        guard let name = hand.actingSeatName else { return "Waiting for the table" }
+        return "Waiting for \(name)"
+    }
+
+    private func potStatus(for hand: SharedTableHand) -> String {
+        if let winnerSeat = hand.winnerSeat, let winner = hand.seat(at: winnerSeat) {
+            return "\(winner.playerName) wins"
+        }
+        if hand.isBettingComplete {
+            return "Who won?"
+        }
+        if isLocalTurn {
+            return "Your turn"
+        }
+        return waitingDetail(for: hand)
+    }
+
+    private func stackAmount(for seat: SharedTableSeat) -> Decimal {
+        if let handSeat = hand?.seat(forPlayerKey: seat.playerKey) {
+            return handSeat.remaining
+        }
+        if seat.playerKey == repo.localPlayerKey, !isGameStarted {
+            return seatedAmount
+        }
+        return seat.amountDecimal
     }
 
     private func startGame() {
@@ -225,59 +354,126 @@ struct TableSeatSelectionView: View {
         withAnimation(.easeOut(duration: 0.18)) {
             isGameStarted = true
         }
-        if let table {
+        guard let table else { return }
+        persistSelectedSeat()
+        repo.updateAnte(anteAmount, on: table)
+        dealHandIfPossible(on: table)
+    }
+
+    private func dealHandIfPossible(on table: OpenTableModel) {
+        if table.hand == nil, (try? repo.dealHand(on: table)) == nil {
             repo.markStarted(table)
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            hand = table.hand
+        }
+    }
+
+    private func submit(_ move: PreflopMove, amount: Decimal? = nil) {
+        guard let table, let hand else { return }
+        do {
+            let next = try PreflopRound.apply(
+                move: move,
+                amount: amount,
+                playerKey: repo.localPlayerKey,
+                to: hand
+            )
+            handMessage = nil
+            withAnimation(.easeOut(duration: 0.18)) {
+                self.hand = next
+            }
+            repo.updateHand(next, on: table)
+        } catch {
+            handMessage = error.localizedDescription
+        }
+    }
+
+    private func awardPot(to seatNumber: Int) {
+        guard let table, let hand else { return }
+        do {
+            let next = try PreflopRound.award(potTo: seatNumber, in: hand)
+            handMessage = nil
+            withAnimation(.easeOut(duration: 0.18)) {
+                self.hand = next
+            }
+            repo.updateHand(next, on: table)
+        } catch {
+            handMessage = error.localizedDescription
+        }
+    }
+
+    private func dealNextHand() {
+        guard let table else { return }
+        do {
+            try repo.settleHandAndDealNext(on: table)
+            handMessage = nil
+            withAnimation(.easeOut(duration: 0.18)) {
+                hand = table.hand
+                occupants = table.seats
+            }
+        } catch {
+            handMessage = error.localizedDescription
         }
     }
 
     private func handleSeatTap(_ seat: Int) {
+        guard canChangeSeat else { return }
+
         if occupants.contains(where: { $0.seatNumber == seat && $0.playerKey != repo.localPlayerKey }) {
             return
         }
 
         if selectedSeat == seat {
-            presentAmountEditor()
             return
         }
 
         withAnimation(.easeOut(duration: 0.18)) {
             selectedSeat = seat
             storedSeatNumber = seat
-            resetAmountToFullStack()
         }
         persistSelectedSeat()
     }
 
-    private func presentAmountEditor() {
-        guard hasMoney else { return }
-        editingAmount = MoneyAmountEditorState(
-            id: UUID(),
-            currencyCode: tableCurrencyCode,
-            text: amountText.isEmpty ? "0" : amountText,
-            maximum: Decimal(string: hundredthsText(availableMoney))
+    private func presentAnteEditor() {
+        amountEditor = .ante(
+            MoneyAmountEditorState(
+                id: UUID(),
+                title: "Ante",
+                subtitle: "Per hand",
+                currencyCode: tableCurrencyCode,
+                text: TableMoney.string(anteAmount),
+                maximum: tableBuyInAmount
+            )
         )
     }
 
-    private func resetAmountToFullStack() {
-        amountText = hundredthsText(availableMoney)
-    }
-
-    private func applyAmountText(_ text: String) {
-        let committed = MoneyAmountKeypad.committedText(
-            text,
-            maximum: Decimal(string: hundredthsText(availableMoney))
+    private func presentBetEditor() {
+        guard let hand, let seat = localHandSeat else { return }
+        amountEditor = .bet(
+            MoneyAmountEditorState(
+                id: UUID(),
+                title: "Pre-flop bet",
+                subtitle: "Total in the pot",
+                currencyCode: tableCurrencyCode,
+                text: TableMoney.string(PreflopRound.suggestedBet(in: hand, forPlayerKey: seat.playerKey)),
+                maximum: seat.stackDecimal
+            )
         )
-        amountText = hundredthsText(Double(committed) ?? 0)
-        persistSelectedSeat()
     }
 
-    private func clampedHundredths(_ value: Double) -> Double {
-        let clamped = min(max(value, 0), availableMoney)
-        return (clamped * 100).rounded() / 100
+    private func apply(editedAmount text: String, for editor: TableAmountEditor) {
+        switch editor {
+        case .ante:
+            applyAnteText(text)
+        case .bet:
+            submit(.bet, amount: Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0)
+        }
     }
 
-    private func hundredthsText(_ value: Double) -> String {
-        String(format: "%.2f", clampedHundredths(value))
+    private func applyAnteText(_ text: String) {
+        guard let table else { return }
+        let amount = Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0
+        repo.updateAnte(amount, on: table)
     }
 
     private func persistSelectedSeat() {
@@ -309,6 +505,11 @@ struct TableSeatSelectionView: View {
         table = resolved
         occupants = resolved?.seats ?? []
         isGameStarted = resolved?.isStarted ?? false
+        hand = resolved?.hand
+
+        if let resolved, resolved.isHostLocally, !resolved.isStarted, resolved.anteDecimal == 0 {
+            repo.updateAnte(TableAnte.defaultAmount(forBuyIn: tableBuyInAmount), on: resolved)
+        }
 
         if let mine = resolved?.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
             selectedSeat = mine.seatNumber
@@ -324,17 +525,29 @@ struct TableSeatSelectionView: View {
 
     private func syncSharedTable() async {
         guard let table else { return }
-        if selectedSeat != nil {
+        if selectedSeat != nil, !repo.isDealtIn(table) {
             repo.updateLocalAmount(on: table, amount: seatedAmount)
         }
         await repo.refresh(table: table)
-        mergeLocalSeat(into: table)
+        if !repo.isDealtIn(table) {
+            mergeLocalSeat(into: table)
+        }
         occupants = table.seats
         isGameStarted = table.isStarted || isGameStarted
+
+        if isGameStarted, table.hand == nil, table.isHostLocally {
+            try? repo.dealHand(on: table)
+        }
+        withAnimation(.easeOut(duration: 0.18)) {
+            hand = table.hand
+        }
+
         if let mine = table.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
             selectedSeat = mine.seatNumber
             storedSeatNumber = mine.seatNumber
         }
+
+        needsPreflopMigration = repo.needsPreflopMigration
     }
 
     private func mergeLocalSeat(into table: OpenTableModel) {
@@ -361,19 +574,43 @@ struct TableSeatSelectionView: View {
     }
 }
 
+private enum TableAmountEditor: Identifiable {
+    case ante(MoneyAmountEditorState)
+    case bet(MoneyAmountEditorState)
+
+    var state: MoneyAmountEditorState {
+        switch self {
+        case .ante(let state), .bet(let state):
+            state
+        }
+    }
+
+    var id: UUID { state.id }
+}
+
+private enum TableCenterContent: Equatable {
+    case play(isEnabled: Bool)
+    case waiting(String)
+    case pot(handNumber: Int, potLabel: String, status: String)
+}
+
 private struct TableSeatOccupant: Equatable {
     var seatNumber: Int
     var playerName: String
     var stackLabel: String
+    var committedLabel: String?
     var isLocalUser: Bool
     var isLeader: Bool
+    var isDealer: Bool
+    var isActing: Bool
+    var isFolded: Bool
+    var isWinner: Bool
 }
 
 private struct PokerTableSeatLayout: View {
     let seatCount: Int
     let occupants: [TableSeatOccupant]
-    let canStart: Bool
-    let isStarted: Bool
+    let center: TableCenterContent
     let onSelect: (Int) -> Void
     let onPlay: () -> Void
 
@@ -393,18 +630,14 @@ private struct PokerTableSeatLayout: View {
                         height: max(size.height - seatHeight * 1.55, 80)
                     )
 
-                TablePlayButton(isEnabled: canStart, isStarted: isStarted, action: onPlay)
+                TableCenterView(content: center, onPlay: onPlay)
 
                 ForEach(1...seatCount, id: \.self) { seat in
                     let occupant = occupants.first { $0.seatNumber == seat }
                     let angle = seatAngle(for: seat)
                     SeatChip(
                         seatNumber: seat,
-                        isOccupied: occupant != nil,
-                        isLeader: occupant?.isLeader ?? false,
-                        playerName: occupant?.playerName ?? "",
-                        stackLabel: occupant?.stackLabel ?? "",
-                        isTakenByOther: occupant?.isLocalUser == false,
+                        occupant: occupant,
                         action: { onSelect(seat) }
                     )
                     .frame(width: seatWidth, height: seatHeight)
@@ -424,34 +657,78 @@ private struct PokerTableSeatLayout: View {
     }
 }
 
+private struct TableCenterView: View {
+    let content: TableCenterContent
+    let onPlay: () -> Void
+
+    var body: some View {
+        switch content {
+        case .play(let isEnabled):
+            TablePlayButton(isEnabled: isEnabled, action: onPlay)
+        case .waiting(let text):
+            Text(text)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(AppTheme.muted)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(AppTheme.card))
+        case .pot(let handNumber, let potLabel, let status):
+            VStack(spacing: 2) {
+                Text("Hand \(handNumber) · pot")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(AppTheme.muted)
+                Text(potLabel)
+                    .font(.system(.title2, design: .rounded).weight(.bold))
+                    .foregroundStyle(AppTheme.gold)
+                    .monospacedDigit()
+                Text(status)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                    .fill(AppTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                    .stroke(AppTheme.gold.opacity(0.5), lineWidth: 2)
+            )
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
 private struct TablePlayButton: View {
     let isEnabled: Bool
-    let isStarted: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Text("Play")
                 .font(.headline.weight(.bold))
-                .foregroundStyle(isEnabled || isStarted ? AppTheme.contrastText : AppTheme.muted)
+                .foregroundStyle(isEnabled ? AppTheme.contrastText : AppTheme.muted)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 12)
                 .background(
                     Capsule()
-                        .fill(isEnabled || isStarted ? AppTheme.positive : AppTheme.card)
+                        .fill(isEnabled ? AppTheme.positive : AppTheme.card)
                 )
                 .overlay(
                     Capsule()
                         .stroke(
-                            isEnabled || isStarted ? AppTheme.positive : AppTheme.cardBorder,
+                            isEnabled ? AppTheme.positive : AppTheme.cardBorder,
                             lineWidth: 2
                         )
                 )
         }
         .buttonStyle(.plain)
         .disabled(!isEnabled)
-        .accessibilityLabel(isStarted ? "Game started" : "Play")
-        .accessibilityHint(isEnabled ? "Starts the game" : "Sit down to start")
+        .accessibilityLabel("Play")
+        .accessibilityHint(isEnabled ? "Deals the first hand" : "Sit down to start")
     }
 }
 
@@ -466,35 +743,128 @@ private struct TableFelt: View {
     }
 }
 
-private struct SeatChip: View {
-    let seatNumber: Int
-    let isOccupied: Bool
-    let isLeader: Bool
-    let playerName: String
-    let stackLabel: String
-    let isTakenByOther: Bool
+private struct HandPrompt: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(AppTheme.text)
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct HandActionButton: View {
+    let title: String
+    let tint: Color
     let action: () -> Void
+
+    private var usesContrastText: Bool {
+        tint != AppTheme.card
+    }
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 2) {
-                if isOccupied {
+            Text(title)
+                .font(.subheadline.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(tint)
+                .foregroundStyle(usesContrastText ? AppTheme.contrastText : AppTheme.text)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(usesContrastText ? .clear : AppTheme.cardBorder)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct WinnerPicker: View {
+    let contenders: [SharedTableHandSeat]
+    let localPlayerKey: String
+    let onPick: (Int) -> Void
+
+    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 8)]
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 8) {
+            ForEach(contenders) { seat in
+                Button {
+                    onPick(seat.seatNumber)
+                } label: {
+                    Text(seat.playerKey == localPlayerKey ? "You" : seat.playerName)
+                        .font(.subheadline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(AppTheme.background)
+                        .foregroundStyle(AppTheme.text)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(AppTheme.cardBorder)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Gives the pot to this player")
+            }
+        }
+    }
+}
+
+private struct SeatChip: View {
+    let seatNumber: Int
+    let occupant: TableSeatOccupant?
+    let action: () -> Void
+
+    private var isOccupied: Bool { occupant != nil }
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 1) {
+                if let occupant {
                     HStack(spacing: 3) {
-                        if isLeader {
+                        if occupant.isLeader {
                             Image(systemName: "crown.fill")
                                 .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(AppTheme.gold)
                         }
-                        Text(playerName)
+                        Text(occupant.playerName)
                             .font(.caption.weight(.bold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.6)
                     }
-                    Text(stackLabel)
+                    Text(occupant.stackLabel)
                         .font(.caption2.weight(.semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                         .foregroundStyle(AppTheme.contrastText.opacity(0.8))
+                    if occupant.isFolded {
+                        Text("Folded")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(AppTheme.contrastText.opacity(0.7))
+                    } else if let committedLabel = occupant.committedLabel {
+                        Text("in \(committedLabel)")
+                            .font(.system(size: 9, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                            .foregroundStyle(AppTheme.contrastText)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(AppTheme.gold))
+                    }
                 } else {
                     Image(systemName: "chair.lounge.fill")
                         .font(.system(size: 16, weight: .semibold))
@@ -507,30 +877,60 @@ private struct SeatChip: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(isOccupied ? AppTheme.positive : AppTheme.card)
+                    .fill(fillColor)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(isOccupied ? AppTheme.positive : AppTheme.cardBorder, lineWidth: isOccupied ? 2 : 1)
+                    .stroke(strokeColor, lineWidth: strokeWidth)
             )
+            .opacity(occupant?.isFolded == true ? 0.55 : 1)
         }
         .buttonStyle(.plain)
-        .disabled(isTakenByOther)
+        .disabled(occupant?.isLocalUser == false)
         .accessibilityHint(accessibilityHint)
         .accessibilityLabel(occupancyAccessibilityLabel)
     }
 
-    private var occupancyAccessibilityLabel: String {
-        if isOccupied {
-            return isLeader ? "\(playerName), party leader" : playerName
+    private var fillColor: Color {
+        guard isOccupied else { return AppTheme.card }
+        return occupant?.isFolded == true ? AppTheme.muted : AppTheme.positive
+    }
+
+    private var strokeColor: Color {
+        if occupant?.isActing == true || occupant?.isWinner == true {
+            return AppTheme.gold
         }
-        return "Seat \(seatNumber)"
+        return isOccupied ? AppTheme.positive : AppTheme.cardBorder
+    }
+
+    private var strokeWidth: CGFloat {
+        if occupant?.isActing == true || occupant?.isWinner == true {
+            return 3
+        }
+        return isOccupied ? 2 : 1
+    }
+
+    private var occupancyAccessibilityLabel: String {
+        guard let occupant else { return "Seat \(seatNumber)" }
+        var label = occupant.isLeader ? "\(occupant.playerName), party leader" : occupant.playerName
+        if occupant.isDealer {
+            label += ", dealer"
+        }
+        if occupant.isFolded {
+            label += ", folded"
+        } else if occupant.isActing {
+            label += ", to act"
+        }
+        return label
     }
 
     private var accessibilityHint: String {
-        if isTakenByOther {
+        if occupant?.isLocalUser == false {
             return "Seat taken"
         }
-        return isOccupied ? "Edits the amount at this seat" : "Sits at this seat"
+        if isOccupied {
+            return "Your buy-in. This amount cannot be changed."
+        }
+        return "Sits at this seat"
     }
 }

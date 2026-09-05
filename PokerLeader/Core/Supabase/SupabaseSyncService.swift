@@ -7,6 +7,15 @@ final class SupabaseSyncService {
 
     private init() {}
 
+    /// Cleared for the rest of the session the first time the cloud rejects the
+    /// pre-flop columns, so a table without the migration is only asked once.
+    private(set) var openTablesHasHandColumns = true
+
+    /// Cleared once the cloud says the atomic seat-merge function is not there,
+    /// so seating falls back to writing the whole seat list instead of asking
+    /// for a function that this project has not been given yet.
+    private(set) var openTablesHasSeatMerge = true
+
     var isReady: Bool {
         SupabaseBootstrap.isConfigured
     }
@@ -449,30 +458,18 @@ final class SupabaseSyncService {
             sessionCurrencyCode: table.sessionCurrencyCode,
             isStarted: table.isStarted,
             seats: table.seats,
+            anteAmount: table.anteAmount,
+            hand: table.hand,
             createdAt: table.createdAt,
-            updatedAt: table.updatedAt
+            updatedAt: table.updatedAt,
+            includesHandColumns: openTablesHasHandColumns
         )
 
         do {
-            try await client.from("open_tables").insert(row).execute()
+            try await client.from("open_tables").upsert(row).execute()
         } catch {
-            try await client
-                .from("open_tables")
-                .update(
-                    OpenTableMetadataUpdate(
-                        hostDisplayName: table.hostDisplayName,
-                        hostPlayerKey: table.hostPlayerKey,
-                        sessionCurrencyCode: table.sessionCurrencyCode,
-                        isStarted: table.isStarted,
-                        updatedAt: table.updatedAt
-                    )
-                )
-                .eq("id", value: table.id.uuidString)
-                .execute()
-        }
-
-        guard try await fetchOpenTable(inviteCode: table.inviteCode) != nil else {
-            throw SupabaseSyncError.tablePublishFailed
+            guard shouldRetryWithoutHandColumns(after: error) else { throw error }
+            try await client.from("open_tables").upsert(row.withoutHandColumns).execute()
         }
     }
 
@@ -480,20 +477,56 @@ final class SupabaseSyncService {
         _ = try await ensureReady()
         let client = try SupabaseBootstrap.requireClient()
 
+        let update = OpenTablePlayUpdate(
+            isStarted: table.isStarted,
+            seats: table.seats,
+            anteAmount: table.anteAmount,
+            hand: table.hand,
+            updatedAt: table.updatedAt,
+            includesHandColumns: openTablesHasHandColumns
+        )
+
+        do {
+            try await client
+                .from("open_tables")
+                .update(update)
+                .eq("invite_code", value: table.inviteCode)
+                .execute()
+        } catch {
+            guard shouldRetryWithoutHandColumns(after: error) else { throw error }
+            try await client
+                .from("open_tables")
+                .update(update.withoutHandColumns)
+                .eq("invite_code", value: table.inviteCode)
+                .execute()
+        }
+    }
+
+    /// The ante and the hand only reach the cloud once the pre-flop migration has
+    /// been run. Until then a table keeps syncing its seats and the hand stays on
+    /// the device that deals it, instead of every write being rejected.
+    private func shouldRetryWithoutHandColumns(after error: Error) -> Bool {
+        guard openTablesHasHandColumns, OpenTableSchema.isMissingHandColumn(error) else { return false }
+        openTablesHasHandColumns = false
+        return true
+    }
+
+    func deleteOpenTable(inviteCode: String) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+
         try await client
             .from("open_tables")
-            .update(
-                OpenTablePlayUpdate(
-                    isStarted: table.isStarted,
-                    seats: table.seats,
-                    updatedAt: table.updatedAt
-                )
-            )
-            .eq("invite_code", value: table.inviteCode)
+            .delete()
+            .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
             .execute()
     }
 
-    func mergeOpenTableSeat(_ seat: SharedTableSeat, inviteCode: String) async throws -> [SharedTableSeat] {
+    /// Seats one player under a row lock in the cloud, so two phones sitting down
+    /// at the same moment cannot overwrite each other's seat. Returns nil when the
+    /// project has not been given the seat-merge function yet.
+    func mergeOpenTableSeat(_ seat: SharedTableSeat, inviteCode: String) async throws -> [SharedTableSeat]? {
+        guard openTablesHasSeatMerge else { return nil }
         _ = try await ensureReady()
         let client = try SupabaseBootstrap.requireClient()
         let params = MergeOpenTableSeatParams(
@@ -501,11 +534,17 @@ final class SupabaseSyncService {
             seat: seat
         )
 
-        let seats: [SharedTableSeat] = try await client
-            .rpc("merge_open_table_seat", params: params)
-            .execute()
-            .value
-        return seats.sorted { $0.seatNumber < $1.seatNumber }
+        do {
+            let seats: [SharedTableSeat] = try await client
+                .rpc("merge_open_table_seat", params: params)
+                .execute()
+                .value
+            return seats.sorted { $0.seatNumber < $1.seatNumber }
+        } catch {
+            guard OpenTableSchema.isMissingSeatMerge(error) else { throw error }
+            openTablesHasSeatMerge = false
+            return nil
+        }
     }
 
     func markOpenTableStarted(inviteCode: String) async throws {
@@ -1026,8 +1065,11 @@ private struct OpenTableRow: Codable {
     let sessionCurrencyCode: String
     let isStarted: Bool
     let seats: [SharedTableSeat]
+    let anteAmount: String?
+    let hand: SharedTableHand?
     let createdAt: Date
     let updatedAt: Date
+    var includesHandColumns = true
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -1038,8 +1080,37 @@ private struct OpenTableRow: Codable {
         case sessionCurrencyCode = "session_currency_code"
         case isStarted = "is_started"
         case seats
+        case anteAmount = "ante_amount"
+        case hand
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    /// Written by hand so that clearing the hand sends an explicit null instead
+    /// of leaving the finished hand behind in the row, and so the pre-flop
+    /// columns can be left out for a project without the migration.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(inviteCode, forKey: .inviteCode)
+        try container.encode(hostUserId, forKey: .hostUserId)
+        try container.encode(hostDisplayName, forKey: .hostDisplayName)
+        try container.encode(hostPlayerKey, forKey: .hostPlayerKey)
+        try container.encode(sessionCurrencyCode, forKey: .sessionCurrencyCode)
+        try container.encode(isStarted, forKey: .isStarted)
+        try container.encode(seats, forKey: .seats)
+        if includesHandColumns {
+            try container.encode(anteAmount, forKey: .anteAmount)
+            try container.encode(hand, forKey: .hand)
+        }
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
+    var withoutHandColumns: OpenTableRow {
+        var row = self
+        row.includesHandColumns = false
+        return row
     }
 
     var snapshot: CloudOpenTableSnapshot {
@@ -1051,6 +1122,8 @@ private struct OpenTableRow: Codable {
             sessionCurrencyCode: sessionCurrencyCode,
             isStarted: isStarted,
             seats: seats,
+            anteAmount: anteAmount ?? "0",
+            hand: hand,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -1060,12 +1133,34 @@ private struct OpenTableRow: Codable {
 private struct OpenTablePlayUpdate: Encodable {
     let isStarted: Bool
     let seats: [SharedTableSeat]
+    let anteAmount: String
+    let hand: SharedTableHand?
     let updatedAt: Date
+    var includesHandColumns = true
 
     enum CodingKeys: String, CodingKey {
         case isStarted = "is_started"
         case seats
+        case anteAmount = "ante_amount"
+        case hand
         case updatedAt = "updated_at"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(isStarted, forKey: .isStarted)
+        try container.encode(seats, forKey: .seats)
+        if includesHandColumns {
+            try container.encode(anteAmount, forKey: .anteAmount)
+            try container.encode(hand, forKey: .hand)
+        }
+        try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
+    var withoutHandColumns: OpenTablePlayUpdate {
+        var update = self
+        update.includesHandColumns = false
+        return update
     }
 }
 
@@ -1074,22 +1169,6 @@ private struct OpenTableStartedUpdate: Encodable {
     let updatedAt: Date
 
     enum CodingKeys: String, CodingKey {
-        case isStarted = "is_started"
-        case updatedAt = "updated_at"
-    }
-}
-
-private struct OpenTableMetadataUpdate: Encodable {
-    let hostDisplayName: String
-    let hostPlayerKey: String
-    let sessionCurrencyCode: String
-    let isStarted: Bool
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case hostDisplayName = "host_display_name"
-        case hostPlayerKey = "host_player_key"
-        case sessionCurrencyCode = "session_currency_code"
         case isStarted = "is_started"
         case updatedAt = "updated_at"
     }
