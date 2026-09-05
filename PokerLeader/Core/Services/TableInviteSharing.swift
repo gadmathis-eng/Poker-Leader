@@ -25,36 +25,6 @@ enum TableInviteDeepLink {
         code.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
     }
 
-    /// Accepts a 6-character code, a share URL, or the share message itself.
-    static func pastedInviteCode(_ raw: String) -> String {
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return "" }
-
-        for candidate in [trimmed, "https://\(trimmed)"] {
-            if let url = URL(string: candidate), let code = inviteCode(from: url) {
-                return code
-            }
-        }
-
-        let tokens = normalizedCode(trimmed)
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .filter { !$0.isEmpty }
-
-        if let marker = tokens.firstIndex(where: { $0 == "TABLE" || $0 == "CODE" }),
-           tokens.index(after: marker) < tokens.endIndex {
-            let next = tokens[tokens.index(after: marker)]
-            if (4...8).contains(next.count) {
-                return next
-            }
-        }
-
-        if let token = tokens.last(where: { (4...8).contains($0.count) }) {
-            return token
-        }
-
-        return normalizedCode(trimmed)
-    }
-
     private static func appInviteCode(from url: URL) -> String? {
         guard url.scheme?.caseInsensitiveCompare(CircleInviteDeepLink.scheme) == .orderedSame else {
             return nil
@@ -118,12 +88,10 @@ enum TableInviteSharing {
     static func message(forInviteCode code: String, hostName: String) -> String {
         let trimmedName = hostName.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = MemberModel.isPlaceholderName(trimmedName) ? "my" : "\(trimmedName)'s"
-        let normalized = TableInviteDeepLink.normalizedCode(code)
-        let link = url(forInviteCode: normalized).absoluteString
+        let link = url(forInviteCode: code).absoluteString
         return """
         Join \(host) Pot Master table!
 
-        Table code: \(normalized)
         Tap to sit down: \(link)
         """
     }

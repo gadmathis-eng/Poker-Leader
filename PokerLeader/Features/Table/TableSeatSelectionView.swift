@@ -281,13 +281,9 @@ struct TableSeatSelectionView: View {
     }
 
     private func persistSelectedSeat() {
-        Task { await persistSelectedSeatNow() }
-    }
-
-    private func persistSelectedSeatNow() async {
         guard let table, let selectedSeat else { return }
         do {
-            try await repo.occupySeat(
+            try repo.occupySeat(
                 on: table,
                 seatNumber: selectedSeat,
                 playerName: playerName,
@@ -296,7 +292,7 @@ struct TableSeatSelectionView: View {
             )
             occupants = table.seats
         } catch {
-            await syncSharedTable()
+            Task { await syncSharedTable() }
         }
     }
 
@@ -313,12 +309,11 @@ struct TableSeatSelectionView: View {
         if let mine = resolved?.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
             selectedSeat = mine.seatNumber
             storedSeatNumber = mine.seatNumber
+        } else if selectedSeat != nil {
+            persistSelectedSeat()
         }
 
         await publishIfPossible()
-        if selectedSeat != nil {
-            await persistSelectedSeatNow()
-        }
         await syncSharedTable()
     }
 

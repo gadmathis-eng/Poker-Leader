@@ -12,7 +12,7 @@ struct JoinTableSheet: View {
     @State private var isJoining = false
 
     init(initialInviteCode: String? = nil) {
-        _inviteCode = State(initialValue: TableInviteDeepLink.pastedInviteCode(initialInviteCode ?? ""))
+        _inviteCode = State(initialValue: TableInviteDeepLink.normalizedCode(initialInviteCode ?? ""))
     }
 
     var body: some View {
@@ -53,7 +53,7 @@ struct JoinTableSheet: View {
     }
 
     private var normalizedInviteCode: String {
-        TableInviteDeepLink.pastedInviteCode(inviteCode)
+        TableInviteDeepLink.normalizedCode(inviteCode)
     }
 
     private func join() {

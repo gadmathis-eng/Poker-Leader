@@ -93,11 +93,9 @@ Run the account deletion migration before release:
 
 `supabase/migrations/20250625120000_delete_own_account.sql`
 
-**Required for two-person table sharing.** If you see `Could not find the table 'public.open_tables' in the schema cache`, the live Supabase project is missing this table. In the Supabase dashboard open **SQL Editor**, paste the entire file, and click **Run**:
+Run the open-table sharing migration so friends can join a table from a link:
 
 `supabase/migrations/20260904120000_open_tables.sql`
-
-That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 
