@@ -12,7 +12,6 @@ struct TableSeatSelectionView: View {
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
 
     @State private var selectedSeat: Int?
-    @State private var amountText = ""
     @State private var amountEditor: TableAmountEditor?
     @State private var isGameStarted = false
     @State private var table: OpenTableModel?
@@ -20,8 +19,6 @@ struct TableSeatSelectionView: View {
     @State private var hand: SharedTableHand?
     @State private var handMessage: String?
     @State private var needsPreflopMigration = false
-
-    private static let amountStep = 0.01
 
     private var repo: TableRepository { TableRepository(context: context) }
 
@@ -44,28 +41,8 @@ struct TableSeatSelectionView: View {
         )
     }
 
-    private var availableMoney: Double {
-        max(NSDecimalNumber(decimal: tableBuyInAmount).doubleValue, 0)
-    }
-
-    private var hasMoney: Bool {
-        availableMoney > 0
-    }
-
-    private var sliderRange: ClosedRange<Double> {
-        0...max(availableMoney, Self.amountStep)
-    }
-
     private var seatedAmount: Decimal {
-        let committed = MoneyAmountKeypad.committedText(
-            amountText,
-            maximum: Decimal(string: hundredthsText(availableMoney))
-        )
-        return Decimal(string: committed) ?? 0
-    }
-
-    private var stackLabel: String {
-        MoneyFormatting.plain(seatedAmount, currencyCode: tableCurrencyCode)
+        tableBuyInAmount
     }
 
     private var anteAmount: Decimal {
@@ -77,8 +54,7 @@ struct TableSeatSelectionView: View {
         hand?.anteDecimal ?? anteAmount
     }
 
-    /// Money in stays editable until the player is dealt into a hand.
-    private var canEditSeatMoney: Bool {
+    private var canChangeSeat: Bool {
         !isGameStarted || localHandSeat == nil
     }
 
@@ -156,12 +132,8 @@ struct TableSeatSelectionView: View {
 
                 if isGameStarted {
                     handSection
-                    if selectedSeat != nil, localHandSeat == nil {
-                        amountControls
-                    }
                 } else if selectedSeat != nil {
                     anteControls
-                    amountControls
                 }
             }
             .padding(.vertical)
@@ -187,7 +159,6 @@ struct TableSeatSelectionView: View {
             if selectedSeat == nil, storedSeatNumber > 0 {
                 selectedSeat = storedSeatNumber
             }
-            resetAmountToFullStack()
         }
         .task {
             await prepareSharedTable()
@@ -231,64 +202,6 @@ struct TableSeatSelectionView: View {
             RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                 .stroke(AppTheme.cardBorder)
         )
-        .padding(.horizontal)
-    }
-
-    private var amountControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                SectionHeader(title: "Money in")
-                Spacer()
-                Button(action: presentAmountEditor) {
-                    Text(stackLabel)
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
-                .buttonStyle(.plain)
-                .disabled(!hasMoney)
-            }
-
-            VStack(spacing: 8) {
-                HStack(spacing: 10) {
-                    Slider(value: hundredthsSliderBinding, in: sliderRange, step: Self.amountStep)
-                        .tint(AppTheme.positive)
-                        .disabled(!hasMoney)
-
-                    Button(action: presentAmountEditor) {
-                        Text(amountText.isEmpty ? "0.00" : amountText)
-                            .multilineTextAlignment(.center)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(hasMoney ? AppTheme.text : AppTheme.muted)
-                            .frame(width: 72)
-                            .padding(.vertical, 8)
-                            .background(AppTheme.background)
-                            .clipShape(RoundedRectangle(cornerRadius: 9))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 9)
-                                    .stroke(AppTheme.cardBorder)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!hasMoney)
-                    .accessibilityLabel("Edit money in")
-                }
-
-                HStack {
-                    Text(MoneyFormatting.plain(0, currencyCode: tableCurrencyCode))
-                    Spacer()
-                    Text(MoneyFormatting.plain(tableBuyInAmount, currencyCode: tableCurrencyCode))
-                }
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(AppTheme.muted)
-            }
-            .padding(14)
-            .background(AppTheme.card)
-            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                    .stroke(AppTheme.cardBorder)
-            )
-        }
         .padding(.horizontal)
     }
 
@@ -395,17 +308,6 @@ struct TableSeatSelectionView: View {
                 detail: "You are in for \(MoneyFormatting.plain(localHandSeat?.committedDecimal ?? 0, currencyCode: tableCurrencyCode))."
             )
         }
-    }
-
-    private var hundredthsSliderBinding: Binding<Double> {
-        Binding(
-            get: {
-                clampedHundredths(Double(MoneyAmountKeypad.normalizedText(amountText)) ?? 0)
-            },
-            set: { newValue in
-                amountText = hundredthsText(newValue)
-            }
-        )
     }
 
     private func turnDetail(for hand: SharedTableHand, seat: SharedTableHandSeat) -> String {
@@ -515,36 +417,21 @@ struct TableSeatSelectionView: View {
     }
 
     private func handleSeatTap(_ seat: Int) {
-        guard canEditSeatMoney else { return }
+        guard canChangeSeat else { return }
 
         if occupants.contains(where: { $0.seatNumber == seat && $0.playerKey != repo.localPlayerKey }) {
             return
         }
 
         if selectedSeat == seat {
-            presentAmountEditor()
             return
         }
 
         withAnimation(.easeOut(duration: 0.18)) {
             selectedSeat = seat
             storedSeatNumber = seat
-            resetAmountToFullStack()
         }
         persistSelectedSeat()
-    }
-
-    private func presentAmountEditor() {
-        guard hasMoney else { return }
-        amountEditor = .seat(
-            MoneyAmountEditorState(
-                id: UUID(),
-                title: "Money in",
-                currencyCode: tableCurrencyCode,
-                text: amountText.isEmpty ? "0" : amountText,
-                maximum: Decimal(string: hundredthsText(availableMoney))
-            )
-        )
     }
 
     private func presentAnteEditor() {
@@ -576,8 +463,6 @@ struct TableSeatSelectionView: View {
 
     private func apply(editedAmount text: String, for editor: TableAmountEditor) {
         switch editor {
-        case .seat:
-            applyAmountText(text)
         case .ante:
             applyAnteText(text)
         case .bet:
@@ -585,32 +470,10 @@ struct TableSeatSelectionView: View {
         }
     }
 
-    private func resetAmountToFullStack() {
-        amountText = hundredthsText(availableMoney)
-    }
-
-    private func applyAmountText(_ text: String) {
-        let committed = MoneyAmountKeypad.committedText(
-            text,
-            maximum: Decimal(string: hundredthsText(availableMoney))
-        )
-        amountText = hundredthsText(Double(committed) ?? 0)
-        persistSelectedSeat()
-    }
-
     private func applyAnteText(_ text: String) {
         guard let table else { return }
         let amount = Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0
         repo.updateAnte(amount, on: table)
-    }
-
-    private func clampedHundredths(_ value: Double) -> Double {
-        let clamped = min(max(value, 0), availableMoney)
-        return (clamped * 100).rounded() / 100
-    }
-
-    private func hundredthsText(_ value: Double) -> String {
-        String(format: "%.2f", clampedHundredths(value))
     }
 
     private func persistSelectedSeat() {
@@ -707,13 +570,12 @@ struct TableSeatSelectionView: View {
 }
 
 private enum TableAmountEditor: Identifiable {
-    case seat(MoneyAmountEditorState)
     case ante(MoneyAmountEditorState)
     case bet(MoneyAmountEditorState)
 
     var state: MoneyAmountEditorState {
         switch self {
-        case .seat(let state), .ante(let state), .bet(let state):
+        case .ante(let state), .bet(let state):
             state
         }
     }
@@ -1061,6 +923,9 @@ private struct SeatChip: View {
         if occupant?.isLocalUser == false {
             return "Seat taken"
         }
-        return isOccupied ? "Edits the amount at this seat" : "Sits at this seat"
+        if isOccupied {
+            return "Your buy-in. This amount cannot be changed."
+        }
+        return "Sits at this seat"
     }
 }
