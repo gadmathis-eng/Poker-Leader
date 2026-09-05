@@ -15,6 +15,22 @@ struct SharedTableSeat: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
+enum TableNaming {
+    static func normalized(_ name: String?) -> String? {
+        guard
+            let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !trimmed.isEmpty
+        else {
+            return nil
+        }
+        return trimmed
+    }
+
+    static func title(name: String?, inviteCode: String) -> String {
+        normalized(name) ?? "Table \(TableInviteDeepLink.normalizedCode(inviteCode))"
+    }
+}
+
 enum SharedTableSeatingError: LocalizedError, Equatable {
     case invalidSeat
     case seatTaken
@@ -64,12 +80,17 @@ enum SharedTableSeating {
         )
         return next.sorted { $0.seatNumber < $1.seatNumber }
     }
+
+    static func removing(playerKey: String, from seats: [SharedTableSeat]) -> [SharedTableSeat] {
+        seats.filter { $0.playerKey != playerKey }
+    }
 }
 
 @Model
 final class OpenTableModel {
     @Attribute(.unique) var id: UUID
     @Attribute(.unique) var inviteCode: String
+    var name: String?
     var hostDisplayName: String
     var hostPlayerKey: String
     var sessionCurrencyCode: String
@@ -90,9 +111,18 @@ final class OpenTableModel {
         }
     }
 
+    var displayTitle: String {
+        TableNaming.title(name: name, inviteCode: inviteCode)
+    }
+
+    func seat(forPlayerKey playerKey: String) -> SharedTableSeat? {
+        seats.first { $0.playerKey == playerKey }
+    }
+
     init(
         id: UUID = UUID(),
         inviteCode: String,
+        name: String? = nil,
         hostDisplayName: String,
         hostPlayerKey: String,
         sessionCurrencyCode: String,
@@ -104,6 +134,7 @@ final class OpenTableModel {
     ) {
         self.id = id
         self.inviteCode = TableInviteDeepLink.normalizedCode(inviteCode)
+        self.name = TableNaming.normalized(name)
         self.hostDisplayName = hostDisplayName
         self.hostPlayerKey = hostPlayerKey
         self.sessionCurrencyCode = sessionCurrencyCode

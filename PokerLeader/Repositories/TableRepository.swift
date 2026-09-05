@@ -92,6 +92,14 @@ final class TableRepository {
         return try context.fetch(descriptor).first
     }
 
+    func makeActive(_ table: OpenTableModel) {
+        activeInviteCode = table.inviteCode
+    }
+
+    func mySeat(on table: OpenTableModel) -> SharedTableSeat? {
+        table.seat(forPlayerKey: localPlayerKey)
+    }
+
     func ensureHostTable(
         sessionCurrencyCode: String,
         hostDisplayName: String
@@ -174,6 +182,30 @@ final class TableRepository {
         publish(table)
     }
 
+    func rename(_ table: OpenTableModel, to name: String) {
+        table.name = TableNaming.normalized(name)
+        try? context.save()
+    }
+
+    func updateSessionCurrency(on table: OpenTableModel, to currencyCode: String) {
+        guard table.isHostLocally else { return }
+        let normalized = CurrencyPreferences.normalizedCurrencyCode(currencyCode)
+        guard normalized != table.sessionCurrencyCode else { return }
+
+        table.sessionCurrencyCode = normalized
+        table.updatedAt = .now
+        try? context.save()
+        publish(table)
+    }
+
+    func remove(_ table: OpenTableModel) async {
+        if table.isHostLocally {
+            await deleteHosted(table)
+        } else {
+            await leave(table)
+        }
+    }
+
     func updateLocalAmount(on table: OpenTableModel, amount: Decimal) {
         var seats = table.seats
         guard let index = seats.firstIndex(where: { $0.playerKey == localPlayerKey }) else { return }
@@ -232,6 +264,33 @@ final class TableRepository {
         } catch {
             throw TableRepositoryError.wrapping(error)
         }
+    }
+
+    private func leave(_ table: OpenTableModel) async {
+        if mySeat(on: table) != nil {
+            await refresh(table: table)
+            table.seats = SharedTableSeating.removing(playerKey: localPlayerKey, from: table.seats)
+            try? context.save()
+            if SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn {
+                try? await SupabaseSyncService.shared.updateOpenTableSeats(table)
+            }
+        }
+        forget(table)
+    }
+
+    private func deleteHosted(_ table: OpenTableModel) async {
+        if SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn {
+            try? await SupabaseSyncService.shared.deleteOpenTable(inviteCode: table.inviteCode)
+        }
+        forget(table)
+    }
+
+    private func forget(_ table: OpenTableModel) {
+        if activeInviteCode == table.inviteCode {
+            activeInviteCode = nil
+        }
+        context.delete(table)
+        try? context.save()
     }
 
     @discardableResult

@@ -13,6 +13,7 @@ struct TableView: View {
     @State private var draftBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInText = "0"
     @State private var showingSeatSelection = false
+    @State private var showMyTables = false
     @State private var activeTable: OpenTableModel?
     @State private var joinError: String?
     @State private var joinCodeText = ""
@@ -165,6 +166,11 @@ struct TableView: View {
                             .foregroundStyle(AppTheme.text)
 
                         if let activeTable {
+                            if let name = activeTable.name {
+                                Text(name)
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.text)
+                            }
                             InviteCodeCopyLabel(code: activeTable.inviteCode, style: .headline)
                         } else {
                             Text("No active table")
@@ -226,6 +232,15 @@ struct TableView: View {
             }
             .background(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showMyTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Your tables")
+                    }
+                }
+            }
             .onAppear(perform: loadDraftValues)
             .task {
                 loadActiveTable()
@@ -240,6 +255,9 @@ struct TableView: View {
                     buyInCurrencyCode: personalBuyInCurrencyCode,
                     sessionCurrencyCode: tableSessionCurrencyCode
                 )
+            }
+            .sheet(isPresented: $showMyTables, onDismiss: handleTablesChanged) {
+                MyTablesSheet(onTablesChanged: handleTablesChanged)
             }
             .sheet(isPresented: $showSignIn) {
                 SignInSheet()
@@ -323,6 +341,11 @@ struct TableView: View {
         if let table = activeTable, !table.isHostLocally {
             draftSessionCurrencyCode = table.sessionCurrencyCode
         }
+    }
+
+    private func handleTablesChanged() {
+        activeTable = try? repo.activeTable()
+        draftSessionCurrencyCode = tableSessionCurrencyCode
     }
 
     private func savePersonalBuyIn() {
