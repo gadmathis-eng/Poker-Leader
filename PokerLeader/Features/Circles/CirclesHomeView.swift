@@ -42,6 +42,18 @@ struct CirclesHomeView: View {
                     }
                     .padding(.horizontal)
 
+                    Button { showJoinTable = true } label: {
+                        Label("Join a table", systemImage: "table.furniture")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(AppTheme.positive)
+                            .foregroundStyle(AppTheme.contrastText)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal)
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("ALL CIRCLES")
                             .font(.caption2.weight(.bold))
@@ -102,13 +114,6 @@ struct CirclesHomeView: View {
                         }
                         Button { showNewCircle = true } label: {
                             Label("New circle", systemImage: "plus.circle")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(AppTheme.card)
-                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                        }
-                        Button { showJoinTable = true } label: {
-                            Label("Join a table", systemImage: "table.furniture")
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(AppTheme.card)

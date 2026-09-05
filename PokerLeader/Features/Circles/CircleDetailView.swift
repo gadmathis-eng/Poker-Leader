@@ -8,6 +8,7 @@ struct CircleDetailView: View {
 
     @Query private var circles: [CircleModel]
     @State private var showCircleSettings = false
+    @State private var showJoinTable = false
 
     private var circle: CircleModel? { circles.first { $0.id == circleId } }
 
@@ -29,6 +30,17 @@ struct CircleDetailView: View {
                         if CircleCreatorStore.isCreator(of: circle.id) {
                             creatorInviteCard(circle)
                         }
+
+                        Button { showJoinTable = true } label: {
+                            Label("Join a table", systemImage: "table.furniture")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(AppTheme.positive)
+                                .foregroundStyle(AppTheme.contrastText)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
 
                         SectionHeader(title: "Members")
                         ForEach(circle.members) { member in
@@ -69,6 +81,9 @@ struct CircleDetailView: View {
                     CircleCurrencySettingsView(circle: circle)
                         .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
+                }
+                .sheet(isPresented: $showJoinTable) {
+                    JoinTableSheet()
                 }
             } else {
                 ContentUnavailableView("Circle not found", systemImage: "person.3")
