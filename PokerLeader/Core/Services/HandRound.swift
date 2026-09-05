@@ -5,6 +5,7 @@ enum HandRoundError: LocalizedError, Equatable {
     case notYourTurn
     case bettingClosed
     case handInProgress
+    case betTooSmall
     case moveNotAllowed
 
     var errorDescription: String? {
@@ -17,6 +18,8 @@ enum HandRoundError: LocalizedError, Equatable {
             "The betting on this street is already done."
         case .handInProgress:
             "The hand is still being played."
+        case .betTooSmall:
+            "A bet has to be more than the table has already put in. Call instead, or raise it."
         case .moveNotAllowed:
             "That move is not available right now."
         }
@@ -153,11 +156,10 @@ enum HandRound {
             let target = Swift.min(requested, seat.streetCap)
             let isAllIn = target == seat.streetCap
             guard target > seat.streetCommittedDecimal, target > callTarget || isAllIn else {
-                throw HandRoundError.moveNotAllowed
+                throw HandRoundError.betTooSmall
             }
             commit(target - seat.streetCommittedDecimal, to: &seat)
         }
-
 
         seat.hasActed = true
         next.seats[index] = seat

@@ -156,7 +156,7 @@ final class HandRoundTests: XCTestCase {
         hand = try HandRound.apply(move: .bet, amount: 4, playerKey: "ben", to: hand)
 
         XCTAssertThrowsError(try HandRound.apply(move: .bet, amount: 3, playerKey: "cal", to: hand)) { error in
-            XCTAssertEqual(error as? HandRoundError, .moveNotAllowed)
+            XCTAssertEqual(error as? HandRoundError, .betTooSmall)
         }
     }
 
