@@ -8,7 +8,7 @@ final class SupabaseSyncService {
     private init() {}
 
     /// Cleared for the rest of the session the first time the cloud rejects the
-    /// pre-flop columns, so a table without the migration is only asked once.
+    /// pre-flop columns. After that the ante and the hand ride inside `seats`.
     private(set) var openTablesHasHandColumns = true
 
     /// Cleared once the cloud says the atomic seat-merge function is not there,
@@ -502,9 +502,9 @@ final class SupabaseSyncService {
         }
     }
 
-    /// The ante and the hand only reach the cloud once the pre-flop migration has
-    /// been run. Until then a table keeps syncing its seats and the hand stays on
-    /// the device that deals it, instead of every write being rejected.
+    /// Dedicated hand columns are preferred. When they are missing the same
+    /// write is sent again with the ante and the hand packed into `seats`, so
+    /// friends still see the pot without a new migration.
     private func shouldRetryWithoutHandColumns(after error: Error) -> Bool {
         guard openTablesHasHandColumns, OpenTableSchema.isMissingHandColumn(error) else { return false }
         openTablesHasHandColumns = false
@@ -539,7 +539,7 @@ final class SupabaseSyncService {
                 .rpc("merge_open_table_seat", params: params)
                 .execute()
                 .value
-            return seats.sorted { $0.seatNumber < $1.seatNumber }
+            return OpenTableSeatsPacking.players(in: seats)
         } catch {
             guard OpenTableSchema.isMissingSeatMerge(error) else { throw error }
             openTablesHasSeatMerge = false
@@ -1086,9 +1086,57 @@ private struct OpenTableRow: Codable {
         case updatedAt = "updated_at"
     }
 
+    init(
+        id: UUID,
+        inviteCode: String,
+        hostUserId: UUID,
+        hostDisplayName: String,
+        hostPlayerKey: String,
+        sessionCurrencyCode: String,
+        isStarted: Bool,
+        seats: [SharedTableSeat],
+        anteAmount: String?,
+        hand: SharedTableHand?,
+        createdAt: Date,
+        updatedAt: Date,
+        includesHandColumns: Bool = true
+    ) {
+        self.id = id
+        self.inviteCode = inviteCode
+        self.hostUserId = hostUserId
+        self.hostDisplayName = hostDisplayName
+        self.hostPlayerKey = hostPlayerKey
+        self.sessionCurrencyCode = sessionCurrencyCode
+        self.isStarted = isStarted
+        self.seats = OpenTableSeatsPacking.players(in: seats)
+        self.anteAmount = anteAmount
+        self.hand = hand
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.includesHandColumns = includesHandColumns
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        inviteCode = try container.decode(String.self, forKey: .inviteCode)
+        hostUserId = try container.decode(UUID.self, forKey: .hostUserId)
+        hostDisplayName = try container.decode(String.self, forKey: .hostDisplayName)
+        hostPlayerKey = try container.decode(String.self, forKey: .hostPlayerKey)
+        sessionCurrencyCode = try container.decode(String.self, forKey: .sessionCurrencyCode)
+        isStarted = try container.decode(Bool.self, forKey: .isStarted)
+        let packed = try container.decode(OpenTablePackedSeats.self, forKey: .seats)
+        seats = packed.seats
+        anteAmount = try container.decodeIfPresent(String.self, forKey: .anteAmount) ?? packed.anteAmount
+        hand = try container.decodeIfPresent(SharedTableHand.self, forKey: .hand) ?? packed.hand
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        includesHandColumns = true
+    }
+
     /// Written by hand so that clearing the hand sends an explicit null instead
-    /// of leaving the finished hand behind in the row, and so the pre-flop
-    /// columns can be left out for a project without the migration.
+    /// of leaving the finished hand behind in the row. When the project has no
+    /// pre-flop columns the ante and the hand ride inside `seats` instead.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
@@ -1098,10 +1146,15 @@ private struct OpenTableRow: Codable {
         try container.encode(hostPlayerKey, forKey: .hostPlayerKey)
         try container.encode(sessionCurrencyCode, forKey: .sessionCurrencyCode)
         try container.encode(isStarted, forKey: .isStarted)
-        try container.encode(seats, forKey: .seats)
         if includesHandColumns {
+            try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
             try container.encode(hand, forKey: .hand)
+        } else {
+            try container.encode(
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount ?? "0", hand: hand),
+                forKey: .seats
+            )
         }
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
@@ -1149,10 +1202,15 @@ private struct OpenTablePlayUpdate: Encodable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(isStarted, forKey: .isStarted)
-        try container.encode(seats, forKey: .seats)
         if includesHandColumns {
+            try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
             try container.encode(hand, forKey: .hand)
+        } else {
+            try container.encode(
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount, hand: hand),
+                forKey: .seats
+            )
         }
         try container.encode(updatedAt, forKey: .updatedAt)
     }

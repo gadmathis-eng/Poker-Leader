@@ -13,6 +13,8 @@ create table if not exists public.open_tables (
     session_currency_code text not null default 'GBP',
     is_started boolean not null default false,
     seats jsonb not null default '[]'::jsonb,
+    ante_amount text not null default '0',
+    hand jsonb,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
@@ -123,5 +125,12 @@ exception
         null;
 end;
 $$;
+
+-- Idempotent if this file is pasted again after the table already exists.
+alter table public.open_tables
+    add column if not exists ante_amount text not null default '0';
+
+alter table public.open_tables
+    add column if not exists hand jsonb;
 
 notify pgrst, 'reload schema';

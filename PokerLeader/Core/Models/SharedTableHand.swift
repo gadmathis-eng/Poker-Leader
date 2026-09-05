@@ -59,6 +59,151 @@ enum OpenTableSchema {
     }
 }
 
+/// The ante and the hand in progress ride inside the existing `seats` JSON so a
+/// live project that already has `open_tables` can share a hand without a new
+/// column. The reserved marker looks like a seat to the seat-merge function,
+/// which copies unknown array items through, and is stripped before the table
+/// is shown.
+enum OpenTableSeatsPacking {
+    static let markerPlayerKey = "__potmaster_hand__"
+    static let markerId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
+    static func isMarker(_ seat: SharedTableSeat) -> Bool {
+        seat.playerKey == markerPlayerKey || seat.seatNumber < 1
+    }
+
+    static func players(in seats: [SharedTableSeat]) -> [SharedTableSeat] {
+        seats
+            .filter { !isMarker($0) }
+            .sorted { $0.seatNumber < $1.seatNumber }
+    }
+}
+
+/// One cloud `seats` value: the people at the table, plus an optional marker
+/// that carries the ante and the hand when those columns are not on the row.
+struct OpenTablePackedSeats: Codable, Equatable {
+    var seats: [SharedTableSeat]
+    var anteAmount: String
+    var hand: SharedTableHand?
+
+    init(seats: [SharedTableSeat], anteAmount: String, hand: SharedTableHand?) {
+        self.seats = OpenTableSeatsPacking.players(in: seats)
+        self.anteAmount = anteAmount
+        self.hand = hand
+    }
+
+    init(from decoder: Decoder) throws {
+        let items = try [OpenTableSeatItem](from: decoder)
+        var players: [SharedTableSeat] = []
+        var ante = "0"
+        var packedHand: SharedTableHand?
+        for item in items {
+            switch item {
+            case .player(let seat):
+                players.append(seat)
+            case .marker(let marker):
+                ante = marker.anteAmount
+                packedHand = marker.hand
+            }
+        }
+        self.seats = OpenTableSeatsPacking.players(in: players)
+        self.anteAmount = ante
+        self.hand = packedHand
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var items = seats.map { OpenTableSeatItem.player($0) }
+        items.append(.marker(OpenTableHandMarker(anteAmount: anteAmount, hand: hand)))
+        try items.encode(to: encoder)
+    }
+}
+
+private enum OpenTableSeatItem: Codable {
+    case player(SharedTableSeat)
+    case marker(OpenTableHandMarker)
+
+    init(from decoder: Decoder) throws {
+        let keyed = try decoder.container(keyedBy: OpenTableHandMarker.CodingKeys.self)
+        let playerKey = try keyed.decode(String.self, forKey: .playerKey)
+        if playerKey == OpenTableSeatsPacking.markerPlayerKey {
+            self = .marker(try OpenTableHandMarker(from: decoder))
+        } else {
+            self = .player(try SharedTableSeat(from: decoder))
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .player(let seat):
+            try seat.encode(to: encoder)
+        case .marker(let marker):
+            try marker.encode(to: encoder)
+        }
+    }
+}
+
+private struct OpenTableHandMarker: Codable, Equatable {
+    var id: UUID
+    var seatNumber: Int
+    var playerName: String
+    var handle: String?
+    var playerKey: String
+    var amount: String
+    var isHost: Bool
+    var anteAmount: String
+    var hand: SharedTableHand?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case seatNumber
+        case playerName
+        case handle
+        case playerKey
+        case amount
+        case isHost
+        case anteAmount
+        case hand
+    }
+
+    init(anteAmount: String, hand: SharedTableHand?) {
+        self.id = OpenTableSeatsPacking.markerId
+        self.seatNumber = 0
+        self.playerName = ""
+        self.handle = nil
+        self.playerKey = OpenTableSeatsPacking.markerPlayerKey
+        self.amount = "0"
+        self.isHost = false
+        self.anteAmount = anteAmount
+        self.hand = hand
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? OpenTableSeatsPacking.markerId
+        seatNumber = try container.decodeIfPresent(Int.self, forKey: .seatNumber) ?? 0
+        playerName = try container.decodeIfPresent(String.self, forKey: .playerName) ?? ""
+        handle = try container.decodeIfPresent(String.self, forKey: .handle)
+        playerKey = try container.decodeIfPresent(String.self, forKey: .playerKey) ?? OpenTableSeatsPacking.markerPlayerKey
+        amount = try container.decodeIfPresent(String.self, forKey: .amount) ?? "0"
+        isHost = try container.decodeIfPresent(Bool.self, forKey: .isHost) ?? false
+        anteAmount = try container.decodeIfPresent(String.self, forKey: .anteAmount) ?? "0"
+        hand = try container.decodeIfPresent(SharedTableHand.self, forKey: .hand)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(seatNumber, forKey: .seatNumber)
+        try container.encode(playerName, forKey: .playerName)
+        try container.encodeIfPresent(handle, forKey: .handle)
+        try container.encode(playerKey, forKey: .playerKey)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(isHost, forKey: .isHost)
+        try container.encode(anteAmount, forKey: .anteAmount)
+        try container.encode(hand, forKey: .hand)
+    }
+}
+
 enum TableAnte {
     static func defaultAmount(forBuyIn buyIn: Decimal) -> Decimal {
         let stack = buyIn.clampedToNonNegative
@@ -356,9 +501,8 @@ enum PreflopRound {
     }
 
     private static func playableSeats(_ seats: [SharedTableSeat]) -> [SharedTableSeat] {
-        seats
+        OpenTableSeatsPacking.players(in: seats)
             .filter { $0.amountDecimal > 0 }
-            .sorted { $0.seatNumber < $1.seatNumber }
     }
 
     private static func automaticWinnerSeat(in hand: SharedTableHand) -> Int? {

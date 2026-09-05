@@ -85,7 +85,7 @@ enum SharedTableSeating {
             throw SharedTableSeatingError.seatTaken
         }
 
-        var next = seats.filter { $0.playerKey != playerKey }
+        var next = OpenTableSeatsPacking.players(in: seats).filter { $0.playerKey != playerKey }
         let existing = seats.first(where: { $0.playerKey == playerKey })
         next.append(
             SharedTableSeat(
@@ -102,7 +102,7 @@ enum SharedTableSeating {
     }
 
     static func removing(playerKey: String, from seats: [SharedTableSeat]) -> [SharedTableSeat] {
-        seats.filter { $0.playerKey != playerKey }
+        OpenTableSeatsPacking.players(in: seats).filter { $0.playerKey != playerKey }
     }
 }
 
@@ -125,10 +125,11 @@ final class OpenTableModel {
     var seats: [SharedTableSeat] {
         get {
             guard !seatsData.isEmpty else { return [] }
-            return (try? JSONDecoder().decode([SharedTableSeat].self, from: seatsData)) ?? []
+            let decoded = (try? JSONDecoder().decode([SharedTableSeat].self, from: seatsData)) ?? []
+            return OpenTableSeatsPacking.players(in: decoded)
         }
         set {
-            seatsData = (try? JSONEncoder().encode(newValue)) ?? Data()
+            seatsData = (try? JSONEncoder().encode(OpenTableSeatsPacking.players(in: newValue))) ?? Data()
             updatedAt = .now
         }
     }
@@ -179,7 +180,7 @@ final class OpenTableModel {
         self.sessionCurrencyCode = sessionCurrencyCode
         self.isStarted = isStarted
         self.isHostLocally = isHostLocally
-        self.seatsData = (try? JSONEncoder().encode(seats)) ?? Data()
+        self.seatsData = (try? JSONEncoder().encode(OpenTableSeatsPacking.players(in: seats))) ?? Data()
         self.anteAmount = anteAmount
         self.handData = hand.flatMap { try? JSONEncoder().encode($0) } ?? Data()
         self.createdAt = createdAt
