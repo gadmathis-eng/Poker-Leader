@@ -5,16 +5,44 @@ enum TableRepositoryError: LocalizedError, Equatable {
     case tableNotFound
     case notSignedIn
     case cloudUnavailable
+    case schemaMissing
 
     var errorDescription: String? {
         switch self {
         case .tableNotFound:
-            "No table found for that link. Ask the host to share it again."
+            "No table found for that code. Ask the host to share it again."
         case .notSignedIn:
             "Sign in to join a shared table."
         case .cloudUnavailable:
             "Cloud sync is needed so other people can join this table."
+        case .schemaMissing:
+            "Shared tables aren't set up yet. In Supabase, open SQL Editor and run supabase/migrations/20260904120000_open_tables.sql, then try again."
         }
+    }
+
+    static func wrapping(_ error: Error) -> Error {
+        if isMissingOpenTablesSchema(error) {
+            return schemaMissing
+        }
+        return error
+    }
+
+    static func isMissingOpenTablesSchema(_ error: Error) -> Bool {
+        let text = [
+            error.localizedDescription,
+            String(describing: error),
+            (error as? LocalizedError)?.errorDescription,
+            (error as? LocalizedError)?.failureReason
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+
+        let mentionsTable = text.contains("open_tables")
+        let looksMissing = text.contains("schema cache")
+            || text.contains("could not find the table")
+            || text.contains("does not exist")
+        return mentionsTable && looksMissing
     }
 }
 
@@ -111,13 +139,19 @@ final class TableRepository {
             throw TableRepositoryError.notSignedIn
         }
 
-        guard let snapshot = try await SupabaseSyncService.shared.fetchOpenTable(inviteCode: normalized) else {
-            throw TableRepositoryError.tableNotFound
-        }
+        do {
+            guard let snapshot = try await SupabaseSyncService.shared.fetchOpenTable(inviteCode: normalized) else {
+                throw TableRepositoryError.tableNotFound
+            }
 
-        let table = apply(snapshot: snapshot, isHostLocally: snapshot.hostPlayerKey == localPlayerKey)
-        activeInviteCode = table.inviteCode
-        return table
+            let table = apply(snapshot: snapshot, isHostLocally: snapshot.hostPlayerKey == localPlayerKey)
+            activeInviteCode = table.inviteCode
+            return table
+        } catch let error as TableRepositoryError {
+            throw error
+        } catch {
+            throw TableRepositoryError.wrapping(error)
+        }
     }
 
     func occupySeat(
@@ -189,10 +223,14 @@ final class TableRepository {
         table.updatedAt = .now
         try context.save()
 
-        if table.isHostLocally {
-            try await SupabaseSyncService.shared.upsertOpenTable(table)
-        } else {
-            try await SupabaseSyncService.shared.updateOpenTableSeats(table)
+        do {
+            if table.isHostLocally {
+                try await SupabaseSyncService.shared.upsertOpenTable(table)
+            } else {
+                try await SupabaseSyncService.shared.updateOpenTableSeats(table)
+            }
+        } catch {
+            throw TableRepositoryError.wrapping(error)
         }
     }
 

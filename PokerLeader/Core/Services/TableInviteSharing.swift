@@ -88,10 +88,12 @@ enum TableInviteSharing {
     static func message(forInviteCode code: String, hostName: String) -> String {
         let trimmedName = hostName.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = MemberModel.isPlaceholderName(trimmedName) ? "my" : "\(trimmedName)'s"
-        let link = url(forInviteCode: code).absoluteString
+        let normalized = TableInviteDeepLink.normalizedCode(code)
+        let link = url(forInviteCode: normalized).absoluteString
         return """
         Join \(host) Pot Master table!
 
+        Table code: \(normalized)
         Tap to sit down: \(link)
         """
     }
