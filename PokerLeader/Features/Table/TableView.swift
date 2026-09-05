@@ -13,6 +13,8 @@ struct TableView: View {
     @State private var draftBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var draftBuyInText = "0"
     @State private var showingSeatSelection = false
+    @State private var showMyTables = false
+    @State private var showJoinTable = false
     @State private var activeTable: OpenTableModel?
     @State private var joinError: String?
     @State private var isJoiningTable = false
@@ -128,7 +130,7 @@ struct TableView: View {
                             .font(.system(size: 44))
                             .foregroundStyle(AppTheme.text)
 
-                        Text(activeTable == nil ? "No active table" : "Table \(activeTable?.inviteCode ?? "")")
+                        Text(activeTable?.displayTitle ?? "No active table")
                             .font(.headline)
                             .foregroundStyle(AppTheme.text)
 
@@ -171,6 +173,18 @@ struct TableView: View {
                             .background(AppTheme.positive)
                             .clipShape(Capsule())
                         }
+
+                        Button { showJoinTable = true } label: {
+                            Label("Join a table", systemImage: "table.furniture")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(AppTheme.text)
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 10)
+                                .background(AppTheme.background)
+                                .clipShape(Capsule())
+                                .overlay(Capsule().stroke(AppTheme.cardBorder))
+                        }
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                     .padding(28)
@@ -186,6 +200,15 @@ struct TableView: View {
             }
             .background(AppTheme.background)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showMyTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Your tables")
+                    }
+                }
+            }
             .onAppear(perform: loadDraftValues)
             .task {
                 loadActiveTable()
@@ -200,6 +223,12 @@ struct TableView: View {
                     buyInCurrencyCode: personalBuyInCurrencyCode,
                     sessionCurrencyCode: tableSessionCurrencyCode
                 )
+            }
+            .sheet(isPresented: $showMyTables, onDismiss: handleTablesChanged) {
+                MyTablesSheet(onTablesChanged: handleTablesChanged)
+            }
+            .sheet(isPresented: $showJoinTable) {
+                JoinTableSheet()
             }
             .sheet(isPresented: $showSignIn) {
                 SignInSheet()
@@ -283,6 +312,11 @@ struct TableView: View {
         if let table = activeTable, !table.isHostLocally {
             draftSessionCurrencyCode = table.sessionCurrencyCode
         }
+    }
+
+    private func handleTablesChanged() {
+        activeTable = try? repo.activeTable()
+        draftSessionCurrencyCode = tableSessionCurrencyCode
     }
 
     private func savePersonalBuyIn() {

@@ -472,6 +472,17 @@ final class SupabaseSyncService {
             .eq("invite_code", value: table.inviteCode)
             .execute()
     }
+
+    func deleteOpenTable(inviteCode: String) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+
+        try await client
+            .from("open_tables")
+            .delete()
+            .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
+            .execute()
+    }
 }
 
 // MARK: - Database rows
