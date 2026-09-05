@@ -97,6 +97,8 @@ final class OpenTableModel {
     var isStarted: Bool
     var isHostLocally: Bool
     var seatsData: Data
+    var anteAmount: String = "0"
+    var handData: Data = Data()
     var createdAt: Date
     var updatedAt: Date
 
@@ -109,6 +111,21 @@ final class OpenTableModel {
             seatsData = (try? JSONEncoder().encode(newValue)) ?? Data()
             updatedAt = .now
         }
+    }
+
+    var hand: SharedTableHand? {
+        get {
+            guard !handData.isEmpty else { return nil }
+            return try? JSONDecoder().decode(SharedTableHand.self, from: handData)
+        }
+        set {
+            handData = newValue.flatMap { try? JSONEncoder().encode($0) } ?? Data()
+            updatedAt = .now
+        }
+    }
+
+    var anteDecimal: Decimal {
+        TableMoney.decimal(anteAmount)
     }
 
     var displayTitle: String {
@@ -129,6 +146,8 @@ final class OpenTableModel {
         isStarted: Bool = false,
         isHostLocally: Bool,
         seats: [SharedTableSeat] = [],
+        anteAmount: String = "0",
+        hand: SharedTableHand? = nil,
         createdAt: Date = .now,
         updatedAt: Date = .now
     ) {
@@ -141,6 +160,8 @@ final class OpenTableModel {
         self.isStarted = isStarted
         self.isHostLocally = isHostLocally
         self.seatsData = (try? JSONEncoder().encode(seats)) ?? Data()
+        self.anteAmount = anteAmount
+        self.handData = hand.flatMap { try? JSONEncoder().encode($0) } ?? Data()
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
