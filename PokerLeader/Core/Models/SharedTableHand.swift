@@ -380,7 +380,10 @@ struct SharedTableHand: Codable, Equatable, Hashable {
     var street: HandStreet
     /// The cards face up in the middle of the table.
     var board: [PlayingCard]
-    /// What is left in the deck, so every phone deals the same next card.
+    /// What is left in the deck, so every phone deals the same next card. A
+    /// shared table trusts the people sitting at it: the whole hand travels in
+    /// one row, cards and all, and it is the app that keeps them face down
+    /// until the showdown.
     var deck: [PlayingCard]
     var actingSeat: Int?
     var isComplete: Bool
