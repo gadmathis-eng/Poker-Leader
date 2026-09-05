@@ -87,39 +87,6 @@ struct TableView: View {
                             .padding(.horizontal)
                     }
 
-                    yourTablesSection
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Join with code")
-
-                        TextField("Paste table code", text: $joinCodeText)
-                            .textInputAutocapitalization(.characters)
-                            .autocorrectionDisabled()
-                            .font(.headline.monospaced())
-                            .padding(14)
-                            .background(AppTheme.card)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                                    .stroke(AppTheme.cardBorder)
-                            )
-
-                        Button {
-                            Task { await joinWithTypedCode() }
-                        } label: {
-                            Text(isJoiningTable ? "Joining..." : "Join with code")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(canJoinWithTypedCode ? AppTheme.positive : AppTheme.card)
-                                .foregroundStyle(canJoinWithTypedCode ? AppTheme.contrastText : AppTheme.muted)
-                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!canJoinWithTypedCode || isJoiningTable)
-                    }
-                    .padding(.horizontal)
-
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader(title: "New session")
 
@@ -176,63 +143,36 @@ struct TableView: View {
                             .font(.system(size: 44))
                             .foregroundStyle(AppTheme.text)
 
-                        if let activeTable {
-                            if let name = activeTable.name {
-                                Text(name)
-                                    .font(.headline)
-                                    .foregroundStyle(AppTheme.text)
-                            }
-                            InviteCodeCopyLabel(code: activeTable.inviteCode, style: .headline)
-                            Text(tableListSummary(for: activeTable))
-                                .font(.caption)
-                                .foregroundStyle(AppTheme.muted)
-                        } else {
-                            Text("No active table")
-                                .font(.headline)
-                                .foregroundStyle(AppTheme.text)
-                        }
+                        Text(activeTable == nil ? "No active table" : "Table \(activeTable?.inviteCode ?? "")")
+                            .font(.headline)
+                            .foregroundStyle(AppTheme.text)
 
                         Text(activeTable == nil
-                             ? "Paste a friend's table code above, or set your buy-in and share your own table. Hosted and joined tables are listed under Your tables."
-                             : "Open the table to pick a seat, share the code, or tap Edit on a table in Your tables.")
+                             ? "Set your buy-in above, then share the table so friends can tap the link to join."
+                             : "Open the table to pick a seat, or share the invite so others can join.")
                             .font(.subheadline)
                             .foregroundStyle(AppTheme.muted)
                             .multilineTextAlignment(.center)
 
                         if let activeTable {
-                            HStack(spacing: 10) {
-                                NavigationLink {
-                                    EditTableView(table: activeTable, onChange: handleTablesChanged)
-                                } label: {
-                                    Label("Edit table", systemImage: "pencil")
+                            if authManager.isSignedIn {
+                                ShareLink(
+                                    item: TableInviteSharing.url(forInviteCode: activeTable.inviteCode),
+                                    subject: Text("Join my Pot Master table"),
+                                    message: Text(
+                                        TableInviteSharing.message(
+                                            forInviteCode: activeTable.inviteCode,
+                                            hostName: activeTable.hostDisplayName
+                                        )
+                                    )
+                                ) {
+                                    Label("Share table", systemImage: "square.and.arrow.up")
                                         .font(.headline.weight(.semibold))
                                         .foregroundStyle(AppTheme.contrastText)
                                         .padding(.horizontal, 18)
                                         .padding(.vertical, 10)
                                         .background(AppTheme.positive)
                                         .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-
-                                if authManager.isSignedIn {
-                                    ShareLink(
-                                        item: TableInviteSharing.url(forInviteCode: activeTable.inviteCode),
-                                        subject: Text("Join my Pot Master table"),
-                                        message: Text(
-                                            TableInviteSharing.message(
-                                                forInviteCode: activeTable.inviteCode,
-                                                hostName: activeTable.hostDisplayName
-                                            )
-                                        )
-                                    ) {
-                                        Label("Share", systemImage: "square.and.arrow.up")
-                                            .font(.headline.weight(.semibold))
-                                            .foregroundStyle(AppTheme.contrastText)
-                                            .padding(.horizontal, 18)
-                                            .padding(.vertical, 10)
-                                            .background(AppTheme.positive)
-                                            .clipShape(Capsule())
-                                    }
                                 }
                             }
 
@@ -266,6 +206,39 @@ struct TableView: View {
                         RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
                             .stroke(AppTheme.cardBorder)
                     )
+                    .padding(.horizontal)
+
+                    yourTablesSection
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "Join with code")
+
+                        TextField("Paste table code", text: $joinCodeText)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                            .font(.headline.monospaced())
+                            .padding(14)
+                            .background(AppTheme.card)
+                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                                    .stroke(AppTheme.cardBorder)
+                            )
+
+                        Button {
+                            Task { await joinWithTypedCode() }
+                        } label: {
+                            Text(isJoiningTable ? "Joining..." : "Join with code")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(canJoinWithTypedCode ? AppTheme.positive : AppTheme.card)
+                                .foregroundStyle(canJoinWithTypedCode ? AppTheme.contrastText : AppTheme.muted)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canJoinWithTypedCode || isJoiningTable)
+                    }
                     .padding(.horizontal)
                 }
                 .padding(.vertical)
