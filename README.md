@@ -104,11 +104,11 @@ Run the account deletion migration before release:
 
 That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
-Run the pre-flop migration so the ante and the hand in progress sync between players:
+The ante and the hand in progress sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
 
 `supabase/migrations/20260905090000_open_tables_preflop_hand.sql`
 
-Without it the table still shares its seats, but a hand dealt with **Play** stays on the device that dealt it.
+If those columns are not there yet, the app keeps the seats, ante and hand together in the `seats` JSON so every signed-in device sees the same pot.
 
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 

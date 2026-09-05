@@ -18,7 +18,6 @@ struct TableSeatSelectionView: View {
     @State private var occupants: [SharedTableSeat] = []
     @State private var hand: SharedTableHand?
     @State private var handMessage: String?
-    @State private var needsPreflopMigration = false
 
     private var repo: TableRepository { TableRepository(context: context) }
 
@@ -228,13 +227,6 @@ struct TableSeatSelectionView: View {
                 if let handMessage {
                     Text(handMessage)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.negative)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if needsPreflopMigration {
-                    Text("Only this device can see the hand. In Supabase, open SQL Editor and run supabase/migrations/20260905090000_open_tables_preflop_hand.sql.")
-                        .font(.caption)
                         .foregroundStyle(AppTheme.negative)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -546,8 +538,6 @@ struct TableSeatSelectionView: View {
             selectedSeat = mine.seatNumber
             storedSeatNumber = mine.seatNumber
         }
-
-        needsPreflopMigration = repo.needsPreflopMigration
     }
 
     private func mergeLocalSeat(into table: OpenTableModel) {

@@ -1,9 +1,9 @@
--- Pre-flop hands on a shared table: the ante everyone posts to stay in,
--- and the round that goes seat by seat asking who is in the hand.
+-- Optional dedicated columns for the ante and the hand in progress.
+-- The app also packs those into the existing seats JSON, so a live project
+-- that already has open_tables shares a hand without running this file.
 --
--- If the app shows:
---   Could not find the 'hand' column of 'open_tables' in the schema cache
--- paste this entire file into the Supabase SQL Editor and click Run.
+-- Paste this entire file into the Supabase SQL Editor and click Run if you
+-- want separate columns instead of the packed seats fallback.
 
 alter table public.open_tables
     add column if not exists ante_amount text not null default '0';
