@@ -24,10 +24,11 @@ xcrun simctl list devices available
 
 ## Open & run
 
-1. Open `~/Projects/PokerLeader/PokerLeader.xcodeproj` in Xcode.
-2. Select an **iPhone** simulator (after installing the iOS platform).
-3. Set your **Team** under Signing & Capabilities if building to a device.
-4. Press **Run** (⌘R).
+1. In Terminal: `cd ~/Projects/PokerLeader && git checkout main && git pull origin main`
+2. Open `~/Projects/PokerLeader/PokerLeader.xcodeproj` in Xcode.
+3. Select an **iPhone** simulator (after installing the iOS platform).
+4. Set your **Team** under Signing & Capabilities if building to a device.
+5. Press **Run** (⌘R). Clean the build folder (⇧⌘K) if you already had the app installed, then run again so you pick up files added on `main`.
 
 CLI build (once a simulator runtime exists):
 
@@ -51,6 +52,10 @@ PokerLeader/
 ## What works now (local)
 
 - **Circles** home with sample data (Uni Boys, London, Work)
+- **Join a table** on the Circles tab (top of the list) and on a circle's detail page
+- **Table** tab: personal buy-in, join with a 6-character code, share a table link
+- **Your tables** on the Table tab — hosted and joined tables, tap any one to edit its name, currency, or seat money
+- **8-seat table** with a Play button after you save a buy-in and sit down
 - **New session → Live table** (+ buy-in only, no voice/type)
 - **Final stacks → Confirmation → Settlement → WhatsApp share**
 - **History**, **Leaderboard**, **You** settings tab
