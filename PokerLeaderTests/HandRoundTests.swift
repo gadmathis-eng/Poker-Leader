@@ -508,15 +508,15 @@ final class HandRoundTests: XCTestCase {
         XCTAssertEqual(next.id, hand.id)
     }
 
-    func testSuggestedBetDoublesWhatIsInFront() throws {
+    func testTheSmallestBetIsAPennyMoreThanTheTableHasIn() throws {
         var hand = try HandRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 2)
-        XCTAssertEqual(HandRound.suggestedBet(in: hand, forPlayerKey: "ben"), 4)
+        XCTAssertEqual(HandRound.minimumBet(in: hand, forPlayerKey: "ben"), dec("2.01"))
 
         hand = try HandRound.apply(move: .bet, amount: 5, playerKey: "ben", to: hand)
-        XCTAssertEqual(HandRound.suggestedBet(in: hand, forPlayerKey: "cal"), 10)
+        XCTAssertEqual(HandRound.minimumBet(in: hand, forPlayerKey: "cal"), dec("5.01"))
     }
 
-    func testSuggestedBetOnACheckedFlopIsHalfThePot() throws {
+    func testTheSmallestBetOnACheckedFlopIsAPenny() throws {
         var hand = try HandRound.start(seats: threeHandedTable(), dealerSeat: nil, ante: 2)
         for key in ["ben", "cal", "ana"] {
             hand = try HandRound.apply(move: .call, playerKey: key, to: hand)
@@ -524,7 +524,17 @@ final class HandRoundTests: XCTestCase {
 
         XCTAssertEqual(hand.street, .flop)
         XCTAssertEqual(hand.pot, 6)
-        XCTAssertEqual(HandRound.suggestedBet(in: hand, forPlayerKey: "ben"), 3)
+        XCTAssertEqual(HandRound.minimumBet(in: hand, forPlayerKey: "ben"), dec("0.01"))
+    }
+
+    func testTheSmallestBetIsNeverMoreThanTheStack() throws {
+        let seats = [
+            seat(1, key: "ana", amount: "20", isHost: true),
+            seat(2, key: "ben", amount: "3")
+        ]
+        let hand = try HandRound.start(seats: seats, dealerSeat: nil, ante: 5)
+
+        XCTAssertEqual(HandRound.minimumBet(in: hand, forPlayerKey: "ben"), 3, "Ben can only get his last chips in")
     }
 
     func testABetIsCappedAtTheStackAndCountsAsAllIn() throws {
@@ -583,7 +593,7 @@ final class HandRoundTests: XCTestCase {
                 let playerKey = try XCTUnwrap(hand.seat(at: actingSeat)?.playerKey)
                 hand = try HandRound.apply(
                     move: randomMove(in: hand, forPlayerKey: playerKey, using: &generator),
-                    amount: HandRound.suggestedBet(in: hand, forPlayerKey: playerKey),
+                    amount: randomBet(in: hand, forPlayerKey: playerKey, using: &generator),
                     playerKey: playerKey,
                     to: hand
                 )
@@ -602,12 +612,25 @@ final class HandRoundTests: XCTestCase {
         using generator: inout SystemRandomNumberGenerator
     ) -> HandMove {
         let owed = hand.amountToCall(forPlayerKey: playerKey)
-        let canBet = HandRound.suggestedBet(in: hand, forPlayerKey: playerKey) > hand.callTarget
+        let canBet = HandRound.minimumBet(in: hand, forPlayerKey: playerKey) > hand.callTarget
         var moves: [HandMove] = owed > 0 ? [.call, .fold] : [.check]
         if canBet {
             moves.append(.bet)
         }
         return moves.randomElement(using: &generator) ?? .fold
+    }
+
+    /// A legal total to bet to: the smallest raise, a bigger one, or everything
+    /// behind, so the hands played out make side pots as well as min-raises.
+    private func randomBet(
+        in hand: SharedTableHand,
+        forPlayerKey playerKey: String,
+        using generator: inout SystemRandomNumberGenerator
+    ) -> Decimal {
+        let smallest = HandRound.minimumBet(in: hand, forPlayerKey: playerKey)
+        let cap = hand.seat(forPlayerKey: playerKey)?.streetCap ?? smallest
+        let sizes = [smallest, (smallest * 2).roundedToHundredths, hand.pot, cap]
+        return min(max(sizes.randomElement(using: &generator) ?? smallest, smallest), cap)
     }
 }
 

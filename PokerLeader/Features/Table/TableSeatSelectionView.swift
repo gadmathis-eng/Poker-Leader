@@ -641,15 +641,19 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    /// The keypad opens empty so the whole bet is typed in, rather than starting
+    /// on a size nobody asked for.
     private func presentBetEditor() {
         guard let hand, let seat = localHandSeat else { return }
+        let smallest = HandRound.minimumBet(in: hand, forPlayerKey: seat.playerKey)
         amountEditor = .bet(
             MoneyAmountEditorState(
                 id: UUID(),
                 title: amountToCall > 0 ? "Raise to" : "\(hand.street.title) bet",
-                subtitle: "Total in front of you on this street",
+                subtitle: "Total on this street · at least \(MoneyFormatting.plain(smallest, currencyCode: tableCurrencyCode))",
                 currencyCode: tableCurrencyCode,
-                text: TableMoney.string(HandRound.suggestedBet(in: hand, forPlayerKey: seat.playerKey)),
+                text: "0",
+                minimum: smallest,
                 maximum: seat.streetCap
             )
         )
