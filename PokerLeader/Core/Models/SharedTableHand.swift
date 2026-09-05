@@ -12,6 +12,42 @@ enum TableMoney {
     }
 }
 
+enum OpenTableSchema {
+    /// True when the cloud rejected a write because the pre-flop columns are not
+    /// there yet, which reads like: Could not find the 'hand' column of
+    /// 'open_tables' in the schema cache.
+    static func isMissingHandColumn(_ error: Error) -> Bool {
+        let text = describe(error)
+        guard text.contains("ante_amount") || text.contains("'hand'") || text.contains("\"hand\"") else {
+            return false
+        }
+        return text.contains("column") || text.contains("schema cache")
+    }
+
+    /// True when the whole `open_tables` table is missing, rather than one column.
+    static func isMissingTable(_ error: Error) -> Bool {
+        let text = describe(error)
+        guard text.contains("open_tables") else { return false }
+        guard !isMissingHandColumn(error) else { return false }
+        let looksMissing = text.contains("schema cache")
+            || text.contains("could not find the table")
+            || text.contains("does not exist")
+        return looksMissing && !text.contains("column")
+    }
+
+    private static func describe(_ error: Error) -> String {
+        [
+            error.localizedDescription,
+            String(describing: error),
+            (error as? LocalizedError)?.errorDescription,
+            (error as? LocalizedError)?.failureReason
+        ]
+        .compactMap { $0 }
+        .joined(separator: " ")
+        .lowercased()
+    }
+}
+
 enum TableAnte {
     static func defaultAmount(forBuyIn buyIn: Decimal) -> Decimal {
         let stack = buyIn.clampedToNonNegative
@@ -241,6 +277,31 @@ enum PreflopRound {
 
         next.revision += 1
         next.actingSeat = nextActingSeat(in: next, after: actingSeat)
+        next.winnerSeat = automaticWinnerSeat(in: next)
+        return next
+    }
+
+    /// Folds a player who has walked away from the table so the round keeps
+    /// moving instead of waiting on a seat nobody is sitting in. Whatever they
+    /// already put in stays in the pot. Nil when they were not in this hand.
+    static func withdraw(playerKey: String, from hand: SharedTableHand) -> SharedTableHand? {
+        guard let index = hand.seats.firstIndex(where: { $0.playerKey == playerKey }),
+              !hand.seats[index].isFolded else {
+            return nil
+        }
+
+        let seatNumber = hand.seats[index].seatNumber
+        var next = hand
+        next.seats[index].isFolded = true
+        next.seats[index].hasActed = true
+        next.revision += 1
+
+        if hand.actingSeat == seatNumber {
+            next.actingSeat = nextActingSeat(in: next, after: seatNumber)
+        } else if next.contenders.count < 2 {
+            next.actingSeat = nil
+        }
+
         next.winnerSeat = automaticWinnerSeat(in: next)
         return next
     }

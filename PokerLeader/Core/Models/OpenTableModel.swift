@@ -113,14 +113,6 @@ final class OpenTableModel {
         }
     }
 
-    var displayTitle: String {
-        TableNaming.title(name: name, inviteCode: inviteCode)
-    }
-
-    func seat(forPlayerKey playerKey: String) -> SharedTableSeat? {
-        seats.first { $0.playerKey == playerKey }
-    }
-
     var hand: SharedTableHand? {
         get {
             guard !handData.isEmpty else { return nil }
@@ -134,6 +126,14 @@ final class OpenTableModel {
 
     var anteDecimal: Decimal {
         TableMoney.decimal(anteAmount)
+    }
+
+    var displayTitle: String {
+        TableNaming.title(name: name, inviteCode: inviteCode)
+    }
+
+    func seat(forPlayerKey playerKey: String) -> SharedTableSeat? {
+        seats.first { $0.playerKey == playerKey }
     }
 
     init(

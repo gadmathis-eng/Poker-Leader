@@ -28,21 +28,7 @@ enum TableRepositoryError: LocalizedError, Equatable {
     }
 
     static func isMissingOpenTablesSchema(_ error: Error) -> Bool {
-        let text = [
-            error.localizedDescription,
-            String(describing: error),
-            (error as? LocalizedError)?.errorDescription,
-            (error as? LocalizedError)?.failureReason
-        ]
-        .compactMap { $0 }
-        .joined(separator: " ")
-        .lowercased()
-
-        let mentionsTable = text.contains("open_tables")
-        let looksMissing = text.contains("schema cache")
-            || text.contains("could not find the table")
-            || text.contains("does not exist")
-        return mentionsTable && looksMissing
+        OpenTableSchema.isMissingTable(error)
     }
 }
 
@@ -206,7 +192,21 @@ final class TableRepository {
         }
     }
 
+    /// True when the cloud is turning away the hand, so it can only be played on
+    /// the device that dealt it until the pre-flop migration has been run.
+    var needsPreflopMigration: Bool {
+        guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return false }
+        return !SupabaseSyncService.shared.openTablesHasHandColumns
+    }
+
+    /// A stack that is already in a hand belongs to the hand, so money in only
+    /// moves between hands.
+    func isDealtIn(_ table: OpenTableModel) -> Bool {
+        table.hand?.seat(forPlayerKey: localPlayerKey) != nil
+    }
+
     func updateLocalAmount(on table: OpenTableModel, amount: Decimal) {
+        guard !isDealtIn(table) else { return }
         var seats = table.seats
         guard let index = seats.firstIndex(where: { $0.playerKey == localPlayerKey }) else { return }
         seats[index].amount = NSDecimalNumber(decimal: amount.clampedToNonNegative).stringValue
@@ -320,6 +320,10 @@ final class TableRepository {
     private func leave(_ table: OpenTableModel) async {
         if mySeat(on: table) != nil {
             await refresh(table: table)
+            if let hand = table.hand,
+               let withdrawn = PreflopRound.withdraw(playerKey: localPlayerKey, from: hand) {
+                table.hand = withdrawn
+            }
             table.seats = SharedTableSeating.removing(playerKey: localPlayerKey, from: table.seats)
             try? context.save()
             if SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn {
