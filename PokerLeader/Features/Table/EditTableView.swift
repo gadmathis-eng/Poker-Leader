@@ -14,10 +14,9 @@ struct EditTableView: View {
     @State private var name: String
     @State private var currencyCode: String
     @State private var seatNumber: Int?
-    @State private var seatAmountText: String?
+    @State private var seatAmount: Decimal = 0
     @State private var activeInviteCode: String?
     @State private var showCurrencyPicker = false
-    @State private var editingAmount: MoneyAmountEditorState?
     @State private var showRemoveConfirmation = false
     @State private var isRemoving = false
     @State private var isDealtIn = false
@@ -56,11 +55,6 @@ struct EditTableView: View {
         isHost ? "Delete this table?" : "Leave this table?"
     }
 
-    private var seatAmount: Decimal {
-        let text = MoneyAmountKeypad.normalizedText(seatAmountText ?? "0")
-        return (Decimal(string: text) ?? 0).clampedToNonNegative
-    }
-
     var body: some View {
         Form {
             Section {
@@ -89,20 +83,9 @@ struct EditTableView: View {
             Section {
                 if let seatNumber {
                     LabeledContent("Seat", value: "Seat \(seatNumber)")
-                    if isDealtIn {
-                        LabeledContent("Money in") {
-                            Text(MoneyFormatting.plain(seatAmount, currencyCode: currencyCode))
-                                .foregroundStyle(AppTheme.gold)
-                        }
-                    } else {
-                        Button(action: presentAmountEditor) {
-                            editableRow(
-                                title: "Money in",
-                                value: MoneyFormatting.plain(seatAmount, currencyCode: currencyCode),
-                                valueColor: AppTheme.gold
-                            )
-                        }
-                        .buttonStyle(.plain)
+                    LabeledContent("Money in") {
+                        Text(MoneyFormatting.plain(seatAmount, currencyCode: currencyCode))
+                            .foregroundStyle(AppTheme.gold)
                     }
                 } else {
                     Text("You haven't taken a seat here yet. Open the table to sit down.")
@@ -112,8 +95,10 @@ struct EditTableView: View {
             } header: {
                 Text("Your seat")
             } footer: {
-                if isDealtIn {
-                    Text("You are in a hand. Money in changes again once the pot is settled.")
+                if seatNumber != nil {
+                    Text(isDealtIn
+                         ? "This is your buy-in. You are in a hand, so it changes again once the pot is settled."
+                         : "This is your buy-in. It cannot be changed after you sit down.")
                 }
             }
 
@@ -167,13 +152,6 @@ struct EditTableView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .sheet(item: $editingAmount) { editor in
-            MoneyAmountEditorSheet(editor: editor) { text in
-                seatAmountText = text
-            }
-            .presentationDetents([.height(420)])
-            .presentationDragIndicator(.visible)
-        }
         .confirmationDialog(
             removeConfirmationTitle,
             isPresented: $showRemoveConfirmation,
@@ -204,24 +182,12 @@ struct EditTableView: View {
 
         guard let seat = repo.mySeat(on: table) else {
             seatNumber = nil
-            seatAmountText = nil
+            seatAmount = 0
             return
         }
 
         seatNumber = seat.seatNumber
-        if seatAmountText == nil {
-            seatAmountText = seat.amount
-        }
-    }
-
-    private func presentAmountEditor() {
-        guard seatNumber != nil else { return }
-        editingAmount = MoneyAmountEditorState(
-            id: UUID(),
-            title: "Money in",
-            currencyCode: currencyCode,
-            text: seatAmountText ?? "0"
-        )
+        seatAmount = seat.amountDecimal.clampedToNonNegative
     }
 
     private func makeActive() {
@@ -236,10 +202,6 @@ struct EditTableView: View {
 
         if isHost {
             repo.updateSessionCurrency(on: table, to: currencyCode)
-        }
-
-        if seatNumber != nil, seatAmountText != nil {
-            repo.updateLocalAmount(on: table, amount: seatAmount)
         }
 
         onChange()
