@@ -54,7 +54,7 @@ struct TableView: View {
     }
 
     private var canJoinWithTypedCode: Bool {
-        !TableInviteDeepLink.normalizedCode(joinCodeText).isEmpty
+        !TableInviteDeepLink.pastedInviteCode(joinCodeText).isEmpty
     }
 
     var body: some View {
@@ -76,7 +76,7 @@ struct TableView: View {
                         joiningBanner(activeTable)
                     }
 
-                    if router.pendingTableInviteCode != nil, SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
+                    if SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
                         signInToJoinBanner
                     }
 
@@ -130,7 +130,7 @@ struct TableView: View {
                         )
 
                         Button {
-                            savePersonalBuyIn()
+                            Task { await savePersonalBuyIn() }
                         } label: {
                             Text(activeTable?.isHostLocally == false ? "Join table" : "Save buy-in")
                                 .font(.headline)
@@ -214,25 +214,36 @@ struct TableView: View {
                                 }
                                 .buttonStyle(.plain)
 
-                                ShareLink(
-                                    item: TableInviteSharing.url(forInviteCode: activeTable.inviteCode),
-                                    subject: Text("Join my Pot Master table"),
-                                    message: Text(
-                                        TableInviteSharing.message(
-                                            forInviteCode: activeTable.inviteCode,
-                                            hostName: activeTable.hostDisplayName
+                                if authManager.isSignedIn {
+                                    ShareLink(
+                                        item: TableInviteSharing.url(forInviteCode: activeTable.inviteCode),
+                                        subject: Text("Join my Pot Master table"),
+                                        message: Text(
+                                            TableInviteSharing.message(
+                                                forInviteCode: activeTable.inviteCode,
+                                                hostName: activeTable.hostDisplayName
+                                            )
                                         )
-                                    )
-                                ) {
-                                    Label("Share", systemImage: "square.and.arrow.up")
-                                        .font(.headline.weight(.semibold))
-                                        .foregroundStyle(AppTheme.contrastText)
-                                        .padding(.horizontal, 18)
-                                        .padding(.vertical, 10)
-                                        .background(AppTheme.positive)
-                                        .clipShape(Capsule())
+                                    ) {
+                                        Label("Share", systemImage: "square.and.arrow.up")
+                                            .font(.headline.weight(.semibold))
+                                            .foregroundStyle(AppTheme.contrastText)
+                                            .padding(.horizontal, 18)
+                                            .padding(.vertical, 10)
+                                            .background(AppTheme.positive)
+                                            .clipShape(Capsule())
+                                    }
                                 }
                             }
+
+                            Text(
+                                authManager.isSignedIn
+                                    ? "Friends type \(activeTable.inviteCode) on the Table tab."
+                                    : "Sign in, then tap Save buy-in so this table uploads before you share."
+                            )
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.muted)
+                            .multilineTextAlignment(.center)
                         }
 
                         if hasJoinableBuyIn {
@@ -273,6 +284,9 @@ struct TableView: View {
             .onAppear(perform: loadDraftValues)
             .task {
                 loadActiveTable()
+                if router.pendingTableInviteCode == nil {
+                    await republishHostTableIfNeeded()
+                }
                 await handlePendingJoin()
             }
             .onChange(of: router.pendingTableInviteCode) { _, _ in
@@ -302,7 +316,10 @@ struct TableView: View {
             .onChange(of: authManager.isSignedIn) { _, signedIn in
                 if signedIn {
                     showSignIn = false
-                    Task { await handlePendingJoin() }
+                    Task {
+                        await republishHostTableIfNeeded()
+                        await handlePendingJoin()
+                    }
                 }
             }
         }
@@ -394,10 +411,14 @@ struct TableView: View {
 
     private var signInToJoinBanner: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Sign in to join this table")
+            Text(router.pendingTableInviteCode == nil ? "Sign in to share a table" : "Sign in to join this table")
                 .font(.headline)
                 .foregroundStyle(AppTheme.text)
-            Text("The host shared a link. Use the same Pot Master account on this device, then you'll sit at their table.")
+            Text(
+                router.pendingTableInviteCode == nil
+                    ? "A table on this phone stays private until you sign in and tap Save buy-in. Then friends can join with the 6-character code."
+                    : "The host shared a link. Use a different Pot Master account on this device, then you'll sit at their table."
+            )
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
             Button("Sign in") {
@@ -461,7 +482,7 @@ struct TableView: View {
         draftSessionCurrencyCode = tableSessionCurrencyCode
     }
 
-    private func savePersonalBuyIn() {
+    private func savePersonalBuyIn() async {
         guard let amount = draftBuyInAmount else { return }
         personalBuyInCurrencyCode = draftBuyInCurrencyCode
         personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
@@ -471,6 +492,11 @@ struct TableView: View {
         }
 
         if activeTable == nil {
+            if SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
+                joinError = TableRepositoryError.notSignedIn.localizedDescription
+                showSignIn = true
+                return
+            }
             activeTable = try? repo.ensureHostTable(
                 sessionCurrencyCode: draftSessionCurrencyCode,
                 hostDisplayName: displayName
@@ -478,18 +504,28 @@ struct TableView: View {
         } else if let table = activeTable, table.isHostLocally {
             table.sessionCurrencyCode = draftSessionCurrencyCode
             table.hostDisplayName = displayName
-            repo.publish(table)
         }
 
         if let table = activeTable, table.isHostLocally {
-            Task { await publishHostTable(table) }
+            await publishHostTable(table)
+            if joinError != nil {
+                return
+            }
         }
 
         showingSeatSelection = true
     }
 
+    /// A table created before the host signed in never reached the cloud, so it
+    /// is uploaded again as soon as an account is available.
+    private func republishHostTableIfNeeded() async {
+        guard let table = activeTable, table.isHostLocally else { return }
+        guard SupabaseBootstrap.isConfigured, authManager.isSignedIn else { return }
+        await publishHostTable(table)
+    }
+
     private func joinWithTypedCode() async {
-        let code = TableInviteDeepLink.normalizedCode(joinCodeText)
+        let code = TableInviteDeepLink.pastedInviteCode(joinCodeText)
         guard !code.isEmpty else { return }
 
         router.pendingTableInviteCode = code
@@ -499,6 +535,7 @@ struct TableView: View {
     private func publishHostTable(_ table: OpenTableModel) async {
         do {
             try await repo.publishForSharing(table)
+            joinError = nil
         } catch {
             joinError = error.localizedDescription
         }

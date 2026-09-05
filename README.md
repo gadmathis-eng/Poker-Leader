@@ -102,7 +102,7 @@ Run the account deletion migration before release:
 
 `supabase/migrations/20260904120000_open_tables.sql`
 
-Friends can then join from the share link, or type the 6-character table code on the Table tab.
+That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
 Run the pre-flop migration so the ante and the hand in progress sync between players:
 

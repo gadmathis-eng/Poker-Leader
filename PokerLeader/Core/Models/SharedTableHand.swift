@@ -35,6 +35,17 @@ enum OpenTableSchema {
         return looksMissing && !text.contains("column")
     }
 
+    /// True when the atomic seat-merge function is missing, which reads like:
+    /// Could not find the function public.merge_open_table_seat in the schema cache.
+    static func isMissingSeatMerge(_ error: Error) -> Bool {
+        let text = describe(error)
+        guard text.contains("merge_open_table_seat") else { return false }
+        return text.contains("schema cache")
+            || text.contains("could not find the function")
+            || text.contains("does not exist")
+            || text.contains("pgrst202")
+    }
+
     private static func describe(_ error: Error) -> String {
         [
             error.localizedDescription,

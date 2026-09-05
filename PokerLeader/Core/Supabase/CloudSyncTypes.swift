@@ -7,6 +7,7 @@ enum SupabaseSyncError: LocalizedError {
     case nicknameTaken(String)
     case displayNameTaken(String)
     case accountDeletionFailed
+    case tablePublishFailed
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +23,8 @@ enum SupabaseSyncError: LocalizedError {
             "\(name) is already taken. Choose a different real name."
         case .accountDeletionFailed:
             "We couldn't delete your account right now. Try again in a moment."
+        case .tablePublishFailed:
+            "The table did not upload. Sign in on the You tab, then tap Save buy-in again."
         }
     }
 }

@@ -10,9 +10,9 @@ enum TableRepositoryError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .tableNotFound:
-            "No table found for that code. Ask the host to share it again."
+            "That code is not on the cloud yet. The host must be signed in, tap Save buy-in again so the table uploads, then share the 6-character code (not the full link)."
         case .notSignedIn:
-            "Sign in to join a shared table."
+            "Sign in to share or join a table."
         case .cloudUnavailable:
             "Cloud sync is needed so other people can join this table."
         case .schemaMissing:
@@ -24,11 +24,14 @@ enum TableRepositoryError: LocalizedError, Equatable {
         if isMissingOpenTablesSchema(error) {
             return schemaMissing
         }
+        if let seating = SharedTableSeatingError.matching(error) {
+            return seating
+        }
         return error
     }
 
     static func isMissingOpenTablesSchema(_ error: Error) -> Bool {
-        OpenTableSchema.isMissingTable(error)
+        OpenTableSchema.isMissingTable(error) || OpenTableSchema.isMissingSeatMerge(error)
     }
 }
 
@@ -115,7 +118,7 @@ final class TableRepository {
     }
 
     func join(inviteCode: String, displayName: String) async throws -> OpenTableModel {
-        let normalized = TableInviteDeepLink.normalizedCode(inviteCode)
+        let normalized = TableInviteDeepLink.pastedInviteCode(inviteCode)
         guard !normalized.isEmpty else {
             throw TableRepositoryError.tableNotFound
         }
@@ -154,7 +157,7 @@ final class TableRepository {
         playerName: String,
         handle: String?,
         amount: Decimal
-    ) throws {
+    ) async throws {
         table.seats = try SharedTableSeating.occupy(
             seats: table.seats,
             seatNumber: seatNumber,
@@ -165,7 +168,7 @@ final class TableRepository {
             isHost: table.hostPlayerKey == localPlayerKey
         )
         try context.save()
-        publish(table)
+        try await publishLocalSeatNow(on: table)
     }
 
     func rename(_ table: OpenTableModel, to name: String) {
@@ -212,14 +215,22 @@ final class TableRepository {
         seats[index].amount = NSDecimalNumber(decimal: amount.clampedToNonNegative).stringValue
         table.seats = seats
         try? context.save()
-        publish(table)
+        publishLocalSeat(on: table)
     }
 
     func markStarted(_ table: OpenTableModel) {
         table.isStarted = true
         table.updatedAt = .now
         try? context.save()
-        publish(table)
+
+        guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return }
+        Task {
+            do {
+                try await SupabaseSyncService.shared.markOpenTableStarted(inviteCode: table.inviteCode)
+            } catch {
+                try? await publishForSharing(table)
+            }
+        }
     }
 
     func updateAnte(_ amount: Decimal, on table: OpenTableModel) {
@@ -309,12 +320,90 @@ final class TableRepository {
         do {
             if table.isHostLocally {
                 try await SupabaseSyncService.shared.upsertOpenTable(table)
+                try await confirmPublished(table)
             } else {
                 try await SupabaseSyncService.shared.updateOpenTableSeats(table)
             }
         } catch {
             throw TableRepositoryError.wrapping(error)
         }
+    }
+
+    /// A write the cloud quietly turned away still looks like a success, so the
+    /// row is read back before the host is told the code is shareable.
+    private func confirmPublished(_ table: OpenTableModel) async throws {
+        guard try await SupabaseSyncService.shared.fetchOpenTable(inviteCode: table.inviteCode) != nil else {
+            throw SupabaseSyncError.tablePublishFailed
+        }
+    }
+
+    private func publishLocalSeat(on table: OpenTableModel) {
+        table.updatedAt = .now
+        try? context.save()
+
+        guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return }
+        Task {
+            try? await publishLocalSeatNow(on: table)
+        }
+    }
+
+    /// Writes only this player's seat, so two phones sitting down at the same
+    /// moment cannot overwrite each other. Falls back to the whole seat list when
+    /// the seat-merge function has not been added to the project yet.
+    private func publishLocalSeatNow(on table: OpenTableModel) async throws {
+        guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return }
+        guard let seat = table.seats.first(where: { $0.playerKey == localPlayerKey }) else {
+            try await publishForSharing(table)
+            return
+        }
+
+        let merged: Bool
+        do {
+            merged = try await mergeSeatCreatingTableIfNeeded(seat, on: table)
+        } catch {
+            throw TableRepositoryError.wrapping(error)
+        }
+
+        if !merged {
+            try await publishForSharing(table)
+        }
+    }
+
+    /// A host whose row never reached the cloud uploads it and seats again, since
+    /// the seat-merge function can only seat a table it can find.
+    private func mergeSeatCreatingTableIfNeeded(
+        _ seat: SharedTableSeat,
+        on table: OpenTableModel
+    ) async throws -> Bool {
+        do {
+            return try await applyMergedSeat(seat, on: table)
+        } catch {
+            guard table.isHostLocally, isMissingCloudRow(error) else { throw error }
+            try await SupabaseSyncService.shared.upsertOpenTable(table)
+            return try await applyMergedSeat(seat, on: table)
+        }
+    }
+
+    private func applyMergedSeat(_ seat: SharedTableSeat, on table: OpenTableModel) async throws -> Bool {
+        guard let seats = try await SupabaseSyncService.shared.mergeOpenTableSeat(
+            seat,
+            inviteCode: table.inviteCode
+        ) else {
+            return false
+        }
+        table.seats = seats
+        try? context.save()
+        return true
+    }
+
+    /// The seat-merge function turns away a code whose row never reached the
+    /// cloud, which the host answers by uploading the table and seating again.
+    private func isMissingCloudRow(_ error: Error) -> Bool {
+        guard !TableRepositoryError.isMissingOpenTablesSchema(error) else { return false }
+        let text = [error.localizedDescription, String(describing: error)]
+            .joined(separator: " ")
+            .lowercased()
+        return text.contains("table not found") || text.contains("no rows")
     }
 
     private func leave(_ table: OpenTableModel) async {

@@ -11,6 +11,11 @@ final class SupabaseSyncService {
     /// pre-flop columns, so a table without the migration is only asked once.
     private(set) var openTablesHasHandColumns = true
 
+    /// Cleared once the cloud says the atomic seat-merge function is not there,
+    /// so seating falls back to writing the whole seat list instead of asking
+    /// for a function that this project has not been given yet.
+    private(set) var openTablesHasSeatMerge = true
+
     var isReady: Bool {
         SupabaseBootstrap.isConfigured
     }
@@ -513,6 +518,42 @@ final class SupabaseSyncService {
         try await client
             .from("open_tables")
             .delete()
+            .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
+            .execute()
+    }
+
+    /// Seats one player under a row lock in the cloud, so two phones sitting down
+    /// at the same moment cannot overwrite each other's seat. Returns nil when the
+    /// project has not been given the seat-merge function yet.
+    func mergeOpenTableSeat(_ seat: SharedTableSeat, inviteCode: String) async throws -> [SharedTableSeat]? {
+        guard openTablesHasSeatMerge else { return nil }
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        let params = MergeOpenTableSeatParams(
+            inviteCode: TableInviteDeepLink.normalizedCode(inviteCode),
+            seat: seat
+        )
+
+        do {
+            let seats: [SharedTableSeat] = try await client
+                .rpc("merge_open_table_seat", params: params)
+                .execute()
+                .value
+            return seats.sorted { $0.seatNumber < $1.seatNumber }
+        } catch {
+            guard OpenTableSchema.isMissingSeatMerge(error) else { throw error }
+            openTablesHasSeatMerge = false
+            return nil
+        }
+    }
+
+    func markOpenTableStarted(inviteCode: String) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+
+        try await client
+            .from("open_tables")
+            .update(OpenTableStartedUpdate(isStarted: true, updatedAt: .now))
             .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
             .execute()
     }
@@ -1120,5 +1161,25 @@ private struct OpenTablePlayUpdate: Encodable {
         var update = self
         update.includesHandColumns = false
         return update
+    }
+}
+
+private struct OpenTableStartedUpdate: Encodable {
+    let isStarted: Bool
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case isStarted = "is_started"
+        case updatedAt = "updated_at"
+    }
+}
+
+private struct MergeOpenTableSeatParams: Encodable {
+    let inviteCode: String
+    let seat: SharedTableSeat
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+        case seat = "p_seat"
     }
 }

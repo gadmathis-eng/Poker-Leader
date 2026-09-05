@@ -53,7 +53,7 @@ struct JoinTableSheet: View {
     }
 
     private var normalizedInviteCode: String {
-        TableInviteDeepLink.normalizedCode(inviteCode)
+        TableInviteDeepLink.pastedInviteCode(inviteCode)
     }
 
     private func join() {
