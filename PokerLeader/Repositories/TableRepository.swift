@@ -192,6 +192,13 @@ final class TableRepository {
         }
     }
 
+    /// True when the cloud is turning away the hand, so it can only be played on
+    /// the device that dealt it until the pre-flop migration has been run.
+    var needsPreflopMigration: Bool {
+        guard SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn else { return false }
+        return !SupabaseSyncService.shared.openTablesHasHandColumns
+    }
+
     /// A stack that is already in a hand belongs to the hand, so money in only
     /// moves between hands.
     func isDealtIn(_ table: OpenTableModel) -> Bool {

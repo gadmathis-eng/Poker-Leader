@@ -9,7 +9,7 @@ final class SupabaseSyncService {
 
     /// Cleared for the rest of the session the first time the cloud rejects the
     /// pre-flop columns, so a table without the migration is only asked once.
-    private var openTablesHasHandColumns = true
+    private(set) var openTablesHasHandColumns = true
 
     var isReady: Bool {
         SupabaseBootstrap.isConfigured
