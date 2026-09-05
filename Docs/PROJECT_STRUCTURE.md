@@ -7,9 +7,10 @@ PokerLeader/
 │   ├── MainTabView.swift         Tab bar (Circles, History, Board, You)
 │   └── AppRouter.swift           Navigation routes & path state
 ├── Core/
-│   ├── Models/                   SwiftData @Model types
+│   ├── Models/                   SwiftData @Model types, shared table + hand, cards
 │   ├── Persistence/              ModelContainer + sample data
 │   ├── Services/                 Settlement, leaderboard, badges, WhatsApp text
+│   │                             HandRound + PokerHandEvaluator deal and read a hand
 │   ├── Theme/                    Colors, spacing
 │   ├── Extensions/               Money + date formatting
 │   └── Firebase/                 Placeholder until GoogleService-Info.plist
@@ -20,6 +21,7 @@ PokerLeader/
 │   └── SessionFlowViewModel.swift
 ├── Features/
 │   ├── Circles/
+│   ├── Table/                    Shared table, seats, and playing a hand
 │   ├── Session/
 │   ├── Settlement/
 │   ├── History/

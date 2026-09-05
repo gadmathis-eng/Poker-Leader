@@ -56,6 +56,8 @@ PokerLeader/
 - **Table** tab: personal buy-in, join with a 6-character code, share a table link
 - **Your tables** on the Table tab — hosted and joined tables, tap any one to edit its name, currency, or seat money
 - **8-seat table** with a Play button after you save a buy-in and sit down
+- **A real hand of hold'em** dealt by the app — two cards each, then the ante round, the flop, the turn, and the river, each asking you to bet, check, or fold
+- **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table
 - **New session → Live table** (+ buy-in only, no voice/type)
 - **Final stacks → Confirmation → Settlement → WhatsApp share**
 - **History**, **Leaderboard**, **You** settings tab
@@ -104,7 +106,7 @@ Run the account deletion migration before release:
 
 That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
-The ante and the hand in progress sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
+The ante and the hand in progress — cards, board, pot, and whose turn it is — sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
 
 `supabase/migrations/20260905090000_open_tables_preflop_hand.sql`
 

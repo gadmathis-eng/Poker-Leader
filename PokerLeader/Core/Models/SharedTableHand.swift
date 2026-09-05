@@ -10,6 +10,21 @@ enum TableMoney {
     static func decimal(_ text: String) -> Decimal {
         Decimal(string: text) ?? 0
     }
+
+    /// Splits a pot without inventing or losing a penny: the odd penny goes to
+    /// the first share.
+    static func shares(of amount: Decimal, ways: Int) -> [Decimal] {
+        let total = amount.clampedToNonNegative.roundedToHundredths
+        guard ways > 1 else { return [total] }
+
+        var divided = total / Decimal(ways)
+        var base = Decimal()
+        NSDecimalRound(&base, &divided, 2, .down)
+
+        var shares = Array(repeating: base, count: ways)
+        shares[0] += total - base * Decimal(ways)
+        return shares
+    }
 }
 
 enum OpenTableSchema {
@@ -213,20 +228,106 @@ enum TableAnte {
     }
 }
 
-/// One player's position in the pre-flop round.
+/// How far a hand has got: the ante round, then the three cards of the flop, the
+/// turn, the river, and finally cards on their backs.
+enum HandStreet: String, Codable, CaseIterable {
+    case preflop
+    case flop
+    case turn
+    case river
+    case showdown
+
+    var title: String {
+        switch self {
+        case .preflop: "Pre-flop"
+        case .flop: "Flop"
+        case .turn: "Turn"
+        case .river: "River"
+        case .showdown: "Showdown"
+        }
+    }
+
+    /// How many cards are face up in the middle of the table on this street.
+    var boardCount: Int {
+        switch self {
+        case .preflop: 0
+        case .flop: 3
+        case .turn: 4
+        case .river, .showdown: 5
+        }
+    }
+
+    var next: HandStreet? {
+        switch self {
+        case .preflop: .flop
+        case .flop: .turn
+        case .turn: .river
+        case .river: .showdown
+        case .showdown: nil
+        }
+    }
+
+    /// True while the table can still be asked to bet, check, or fold.
+    var isBettable: Bool {
+        self != .showdown
+    }
+}
+
+/// One player in the hand: their two cards, their stack, and what they have put
+/// in the pot.
 struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
     var id: UUID
     var seatNumber: Int
     var playerKey: String
     var playerName: String
+    /// The stack this player sat down with at the start of the hand.
     var stack: String
+    /// Everything this player has put in the pot this hand.
     var committed: String
+    /// What this player has put in on the street being bet right now.
+    var streetCommitted: String
     var hasActed: Bool
     var isFolded: Bool
+    var cards: [PlayingCard]
+    /// What the hand paid this player once it was over.
+    var awarded: String
+    /// The five cards this player showed down, such as "Flush, ace high".
+    var handSummary: String?
+
+    init(
+        id: UUID,
+        seatNumber: Int,
+        playerKey: String,
+        playerName: String,
+        stack: String,
+        committed: String,
+        streetCommitted: String = "0",
+        hasActed: Bool = false,
+        isFolded: Bool = false,
+        cards: [PlayingCard] = [],
+        awarded: String = "0",
+        handSummary: String? = nil
+    ) {
+        self.id = id
+        self.seatNumber = seatNumber
+        self.playerKey = playerKey
+        self.playerName = playerName
+        self.stack = stack
+        self.committed = committed
+        self.streetCommitted = streetCommitted
+        self.hasActed = hasActed
+        self.isFolded = isFolded
+        self.cards = cards
+        self.awarded = awarded
+        self.handSummary = handSummary
+    }
 
     var stackDecimal: Decimal { TableMoney.decimal(stack) }
     var committedDecimal: Decimal { TableMoney.decimal(committed) }
+    var streetCommittedDecimal: Decimal { TableMoney.decimal(streetCommitted) }
+    var awardedDecimal: Decimal { TableMoney.decimal(awarded) }
 
+    /// Chips still behind this player, which is all they can bet.
     var remaining: Decimal {
         (stackDecimal - committedDecimal).clampedToNonNegative
     }
@@ -234,19 +335,98 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
     var isAllIn: Bool {
         !isFolded && committedDecimal > 0 && remaining == 0
     }
+
+    /// The most this player can put in on the street being bet.
+    var streetCap: Decimal {
+        streetCommittedDecimal + remaining
+    }
+
+    /// A hand a table shared before cards were dealt has no cards to turn over.
+    var isDealtCards: Bool {
+        cards.count == 2
+    }
+
+    /// Written by hand so a hand shared by an older build still decodes.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        seatNumber = try container.decode(Int.self, forKey: .seatNumber)
+        playerKey = try container.decode(String.self, forKey: .playerKey)
+        playerName = try container.decode(String.self, forKey: .playerName)
+        stack = try container.decode(String.self, forKey: .stack)
+        committed = try container.decode(String.self, forKey: .committed)
+        streetCommitted = try container.decodeIfPresent(String.self, forKey: .streetCommitted) ?? committed
+        hasActed = try container.decodeIfPresent(Bool.self, forKey: .hasActed) ?? false
+        isFolded = try container.decodeIfPresent(Bool.self, forKey: .isFolded) ?? false
+        cards = try container.decodeIfPresent([PlayingCard].self, forKey: .cards) ?? []
+        awarded = try container.decodeIfPresent(String.self, forKey: .awarded) ?? "0"
+        handSummary = try container.decodeIfPresent(String.self, forKey: .handSummary)
+    }
 }
 
-/// The pre-flop betting round for a shared table. Cards stay on the real table;
-/// this only tracks who is in the hand and what everyone has put in the pot.
+/// A whole hand of poker on a shared table: the cards, the pot, whose turn it is,
+/// and who ended up taking the money.
 struct SharedTableHand: Codable, Equatable, Hashable {
+    /// Bumped when a build deals hands the older one cannot play, so the table
+    /// deals a fresh one instead of trying to carry on.
+    static let currentVersion = 2
+
     var id: UUID
+    var version: Int
     var handNumber: Int
     var revision: Int
     var dealerSeat: Int
     var ante: String
+    var street: HandStreet
+    /// The cards face up in the middle of the table.
+    var board: [PlayingCard]
+    /// What is left in the deck, so every phone deals the same next card. A
+    /// shared table trusts the people sitting at it: the whole hand travels in
+    /// one row, cards and all, and it is the app that keeps them face down
+    /// until the showdown.
+    var deck: [PlayingCard]
     var actingSeat: Int?
-    var winnerSeat: Int?
+    var isComplete: Bool
+    /// True once everyone still in the hand has turned their cards over.
+    var isRevealed: Bool
+    var winnerSeats: [Int]
+    /// Why the hand was won, such as "Two pair, aces and eights".
+    var resultSummary: String?
     var seats: [SharedTableHandSeat]
+
+    init(
+        id: UUID,
+        version: Int = SharedTableHand.currentVersion,
+        handNumber: Int,
+        revision: Int,
+        dealerSeat: Int,
+        ante: String,
+        street: HandStreet = .preflop,
+        board: [PlayingCard] = [],
+        deck: [PlayingCard] = [],
+        actingSeat: Int? = nil,
+        isComplete: Bool = false,
+        isRevealed: Bool = false,
+        winnerSeats: [Int] = [],
+        resultSummary: String? = nil,
+        seats: [SharedTableHandSeat]
+    ) {
+        self.id = id
+        self.version = version
+        self.handNumber = handNumber
+        self.revision = revision
+        self.dealerSeat = dealerSeat
+        self.ante = ante
+        self.street = street
+        self.board = board
+        self.deck = deck
+        self.actingSeat = actingSeat
+        self.isComplete = isComplete
+        self.isRevealed = isRevealed
+        self.winnerSeats = winnerSeats
+        self.resultSummary = resultSummary
+        self.seats = seats
+    }
 
     var anteDecimal: Decimal { TableMoney.decimal(ante) }
 
@@ -254,15 +434,18 @@ struct SharedTableHand: Codable, Equatable, Hashable {
         seats.reduce(Decimal(0)) { $0 + $1.committedDecimal }
     }
 
-    var highestCommitted: Decimal {
-        seats.map(\.committedDecimal).max() ?? 0
+    /// The most anyone has put in on the street being bet.
+    var highestStreetCommitted: Decimal {
+        seats.map(\.streetCommittedDecimal).max() ?? 0
     }
 
-    /// What a player has to have in the pot to still be in the hand: the ante
-    /// until somebody bets more than it.
+    /// What a player has to have in front of them to still be in the hand: the
+    /// ante before the flop, until somebody bets more than it.
     var callTarget: Decimal {
-        Swift.max(highestCommitted, anteDecimal)
+        guard street == .preflop else { return highestStreetCommitted }
+        return Swift.max(highestStreetCommitted, anteDecimal)
     }
+
 
     var contenders: [SharedTableHandSeat] {
         seats.filter { !$0.isFolded }
@@ -270,6 +453,18 @@ struct SharedTableHand: Codable, Equatable, Hashable {
 
     var isBettingComplete: Bool {
         actingSeat == nil
+    }
+
+    var winners: [SharedTableHandSeat] {
+        winnerSeats.compactMap { seat(at: $0) }
+    }
+
+    /// True when this hand was dealt by a build that did not deal cards, so it
+    /// cannot be played to a showdown and the table deals again.
+    var needsRedeal: Bool {
+        guard !isComplete else { return false }
+        if version < Self.currentVersion { return true }
+        return contenders.contains { !$0.isDealtCards }
     }
 
     func seat(at seatNumber: Int) -> SharedTableHandSeat? {
@@ -292,246 +487,75 @@ struct SharedTableHand: Codable, Equatable, Hashable {
     /// What this player still has to put in to stay in the hand.
     func amountToCall(forPlayerKey playerKey: String) -> Decimal {
         guard let seat = seat(forPlayerKey: playerKey) else { return 0 }
-        return Swift.min((callTarget - seat.committedDecimal).clampedToNonNegative, seat.remaining)
-    }
-}
-
-enum PreflopRoundError: LocalizedError, Equatable {
-    case notEnoughPlayers
-    case notYourTurn
-    case bettingClosed
-    case bettingOpen
-    case moveNotAllowed
-
-    var errorDescription: String? {
-        switch self {
-        case .notEnoughPlayers:
-            "Two players need money on the table to deal a hand."
-        case .notYourTurn:
-            "It is not your turn yet."
-        case .bettingClosed:
-            "Pre-flop betting is already done."
-        case .bettingOpen:
-            "The table is still betting."
-        case .moveNotAllowed:
-            "That move is not available right now."
-        }
-    }
-}
-
-enum PreflopMove: String, Codable, Equatable {
-    /// Ante up, or match whatever the table has bet, to stay in the hand.
-    case stayIn = "in"
-    /// A pre-flop bet, sized as the total this player wants in the pot.
-    case bet
-    case check
-    case fold
-}
-
-enum PreflopRound {
-    static func openingDealerSeat(seats: [SharedTableSeat]) -> Int? {
-        let players = playableSeats(seats)
-        if let host = players.first(where: \.isHost) {
-            return host.seatNumber
-        }
-        return players.first?.seatNumber
-    }
-
-    static func nextDealerSeat(after dealerSeat: Int, seats: [SharedTableSeat]) -> Int? {
-        let numbers = playableSeats(seats).map(\.seatNumber)
-        return actionOrder(seatNumbers: numbers, dealerSeat: dealerSeat).first
-    }
-
-    /// Seat numbers in the order they get asked, starting left of the dealer.
-    static func actionOrder(seatNumbers: [Int], dealerSeat: Int) -> [Int] {
-        let sorted = seatNumbers.sorted()
-        guard let pivot = sorted.firstIndex(where: { $0 > dealerSeat }) else { return sorted }
-        return Array(sorted[pivot...]) + Array(sorted[..<pivot])
-    }
-
-    static func start(
-        seats: [SharedTableSeat],
-        dealerSeat: Int?,
-        ante: Decimal,
-        handNumber: Int = 1,
-        id: UUID = UUID()
-    ) throws -> SharedTableHand {
-        let players = playableSeats(seats)
-        guard players.count > 1 else { throw PreflopRoundError.notEnoughPlayers }
-
-        let resolvedDealer = players.contains(where: { $0.seatNumber == dealerSeat })
-            ? (dealerSeat ?? players[0].seatNumber)
-            : (openingDealerSeat(seats: seats) ?? players[0].seatNumber)
-
-        var hand = SharedTableHand(
-            id: id,
-            handNumber: Swift.max(handNumber, 1),
-            revision: 1,
-            dealerSeat: resolvedDealer,
-            ante: TableMoney.string(ante),
-            actingSeat: nil,
-            winnerSeat: nil,
-            seats: players.map { seat in
-                SharedTableHandSeat(
-                    id: UUID(),
-                    seatNumber: seat.seatNumber,
-                    playerKey: seat.playerKey,
-                    playerName: seat.playerName,
-                    stack: TableMoney.string(seat.amountDecimal),
-                    committed: "0",
-                    hasActed: false,
-                    isFolded: false
-                )
-            }
+        return Swift.min(
+            (callTarget - seat.streetCommittedDecimal).clampedToNonNegative,
+            seat.remaining
         )
-        hand.actingSeat = nextActingSeat(in: hand, after: nil)
-        hand.winnerSeat = automaticWinnerSeat(in: hand)
-        return hand
     }
 
-    static func apply(
-        move: PreflopMove,
-        amount: Decimal? = nil,
-        playerKey: String,
-        to hand: SharedTableHand
-    ) throws -> SharedTableHand {
-        guard let actingSeat = hand.actingSeat else { throw PreflopRoundError.bettingClosed }
-        guard let index = hand.seats.firstIndex(where: { $0.playerKey == playerKey }),
-              hand.seats[index].seatNumber == actingSeat else {
-            throw PreflopRoundError.notYourTurn
-        }
-
-        var next = hand
-        var seat = next.seats[index]
-        let toCall = hand.amountToCall(forPlayerKey: playerKey)
-
-        switch move {
-        case .fold:
-            seat.isFolded = true
-        case .check:
-            guard toCall == 0 else { throw PreflopRoundError.moveNotAllowed }
-        case .stayIn:
-            seat.committed = TableMoney.string(seat.committedDecimal + toCall)
-        case .bet:
-            let requested = (amount ?? 0).clampedToNonNegative.roundedToHundredths
-            let target = Swift.min(requested, seat.stackDecimal)
-            let isAllIn = target == seat.stackDecimal
-            guard target > seat.committedDecimal, target > hand.callTarget || isAllIn else {
-                throw PreflopRoundError.moveNotAllowed
-            }
-            seat.committed = TableMoney.string(target)
-        }
-
-        seat.hasActed = true
-        next.seats[index] = seat
-
-        if seat.committedDecimal > hand.callTarget {
-            for other in next.seats.indices where other != index && !next.seats[other].isFolded {
-                next.seats[other].hasActed = false
-            }
-        }
-
-        next.revision += 1
-        next.actingSeat = nextActingSeat(in: next, after: actingSeat)
-        next.winnerSeat = automaticWinnerSeat(in: next)
-        return next
+    /// Whether this player's two cards are face up for the whole table.
+    func showsCards(forSeat seatNumber: Int) -> Bool {
+        guard isRevealed, let seat = seat(at: seatNumber) else { return false }
+        return !seat.isFolded && seat.isDealtCards
     }
 
-    /// Folds a player who has walked away from the table so the round keeps
-    /// moving instead of waiting on a seat nobody is sitting in. Whatever they
-    /// already put in stays in the pot. Nil when they were not in this hand.
-    static func withdraw(playerKey: String, from hand: SharedTableHand) -> SharedTableHand? {
-        guard let index = hand.seats.firstIndex(where: { $0.playerKey == playerKey }),
-              !hand.seats[index].isFolded else {
-            return nil
-        }
-
-        let seatNumber = hand.seats[index].seatNumber
-        var next = hand
-        next.seats[index].isFolded = true
-        next.seats[index].hasActed = true
-        next.revision += 1
-
-        if hand.actingSeat == seatNumber {
-            next.actingSeat = nextActingSeat(in: next, after: seatNumber)
-        } else if next.contenders.count < 2 {
-            next.actingSeat = nil
-        }
-
-        next.winnerSeat = automaticWinnerSeat(in: next)
-        return next
+    /// Written by hand so a hand shared by an older build still decodes.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        handNumber = try container.decode(Int.self, forKey: .handNumber)
+        revision = try container.decode(Int.self, forKey: .revision)
+        dealerSeat = try container.decode(Int.self, forKey: .dealerSeat)
+        ante = try container.decode(String.self, forKey: .ante)
+        street = try container.decodeIfPresent(HandStreet.self, forKey: .street) ?? .preflop
+        board = try container.decodeIfPresent([PlayingCard].self, forKey: .board) ?? []
+        deck = try container.decodeIfPresent([PlayingCard].self, forKey: .deck) ?? []
+        actingSeat = try container.decodeIfPresent(Int.self, forKey: .actingSeat)
+        isComplete = try container.decodeIfPresent(Bool.self, forKey: .isComplete) ?? false
+        isRevealed = try container.decodeIfPresent(Bool.self, forKey: .isRevealed) ?? false
+        winnerSeats = try container.decodeIfPresent([Int].self, forKey: .winnerSeats)
+            ?? [try container.decodeIfPresent(Int.self, forKey: .winnerSeat)].compactMap { $0 }
+        resultSummary = try container.decodeIfPresent(String.self, forKey: .resultSummary)
+        seats = try container.decode([SharedTableHandSeat].self, forKey: .seats)
     }
 
-    static func award(potTo seatNumber: Int, in hand: SharedTableHand) throws -> SharedTableHand {
-        guard hand.isBettingComplete else { throw PreflopRoundError.bettingOpen }
-        guard let seat = hand.seat(at: seatNumber), !seat.isFolded else {
-            throw PreflopRoundError.moveNotAllowed
-        }
-
-        var next = hand
-        next.winnerSeat = seatNumber
-        next.revision += 1
-        return next
+    enum CodingKeys: String, CodingKey {
+        case id
+        case version
+        case handNumber
+        case revision
+        case dealerSeat
+        case ante
+        case street
+        case board
+        case deck
+        case actingSeat
+        case isComplete
+        case isRevealed
+        case winnerSeats
+        /// Only read, so the one winner an older build wrote is not lost.
+        case winnerSeat
+        case resultSummary
+        case seats
     }
 
-    /// The smallest total a pre-flop bet can be raised to.
-    static func minimumBet(in hand: SharedTableHand, forPlayerKey playerKey: String) -> Decimal {
-        guard let seat = hand.seat(forPlayerKey: playerKey) else { return 0 }
-        return Swift.min(hand.callTarget + TableMoney.penny, seat.stackDecimal)
-    }
-
-    /// A sensible opening size for the bet keypad: twice the table's ante or bet so far.
-    static func suggestedBet(in hand: SharedTableHand, forPlayerKey playerKey: String) -> Decimal {
-        guard let seat = hand.seat(forPlayerKey: playerKey) else { return 0 }
-        let doubled = (hand.callTarget * 2).roundedToHundredths
-        let target = Swift.max(doubled, minimumBet(in: hand, forPlayerKey: playerKey))
-        return Swift.min(target, seat.stackDecimal)
-    }
-
-    /// Every player's stack once the pot has been pushed to the winner.
-    static func stacksAfter(_ hand: SharedTableHand) -> [String: Decimal] {
-        var stacks: [String: Decimal] = [:]
-        for seat in hand.seats {
-            stacks[seat.playerKey] = seat.remaining
-        }
-        if let winnerSeat = hand.winnerSeat, let winner = hand.seat(at: winnerSeat) {
-            stacks[winner.playerKey] = (winner.remaining + hand.pot).roundedToHundredths
-        }
-        return stacks
-    }
-
-    private static func playableSeats(_ seats: [SharedTableSeat]) -> [SharedTableSeat] {
-        OpenTableSeatsPacking.players(in: seats)
-            .filter { $0.amountDecimal > 0 }
-    }
-
-    private static func automaticWinnerSeat(in hand: SharedTableHand) -> Int? {
-        guard hand.isBettingComplete else { return nil }
-        guard hand.contenders.count == 1 else { return hand.winnerSeat }
-        return hand.contenders[0].seatNumber
-    }
-
-    private static func nextActingSeat(in hand: SharedTableHand, after current: Int?) -> Int? {
-        guard hand.contenders.count > 1 else { return nil }
-
-        let order = actionOrder(seatNumbers: hand.seats.map(\.seatNumber), dealerSeat: hand.dealerSeat)
-        guard !order.isEmpty else { return nil }
-
-        let callTarget = hand.callTarget
-        let start = current.flatMap { order.firstIndex(of: $0) }.map { $0 + 1 } ?? 0
-
-        for offset in 0..<order.count {
-            let seatNumber = order[(start + offset) % order.count]
-            guard let seat = hand.seat(at: seatNumber) else { continue }
-            if needsAction(seat, callTarget: callTarget) {
-                return seatNumber
-            }
-        }
-        return nil
-    }
-
-    private static func needsAction(_ seat: SharedTableHandSeat, callTarget: Decimal) -> Bool {
-        guard !seat.isFolded, seat.remaining > 0 else { return false }
-        return !seat.hasActed || seat.committedDecimal < callTarget
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(version, forKey: .version)
+        try container.encode(handNumber, forKey: .handNumber)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(dealerSeat, forKey: .dealerSeat)
+        try container.encode(ante, forKey: .ante)
+        try container.encode(street, forKey: .street)
+        try container.encode(board, forKey: .board)
+        try container.encode(deck, forKey: .deck)
+        try container.encodeIfPresent(actingSeat, forKey: .actingSeat)
+        try container.encode(isComplete, forKey: .isComplete)
+        try container.encode(isRevealed, forKey: .isRevealed)
+        try container.encode(winnerSeats, forKey: .winnerSeats)
+        try container.encodeIfPresent(resultSummary, forKey: .resultSummary)
+        try container.encode(seats, forKey: .seats)
     }
 }
