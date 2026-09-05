@@ -187,7 +187,9 @@ struct TableSeatSelectionView: View {
             if selectedSeat == nil, storedSeatNumber > 0 {
                 selectedSeat = storedSeatNumber
             }
-            resetAmountToFullStack()
+            if amountText.isEmpty {
+                resetAmountToFullStack()
+            }
         }
         .task {
             await prepareSharedTable()
