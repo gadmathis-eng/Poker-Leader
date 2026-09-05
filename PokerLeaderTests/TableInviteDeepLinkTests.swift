@@ -44,6 +44,22 @@ final class TableInviteDeepLinkTests: XCTestCase {
         XCTAssertNil(TableInviteDeepLink.inviteCode(from: url))
     }
 
+    func testParsesPastedShareURL() {
+        XCTAssertEqual(
+            TableInviteDeepLink.pastedInviteCode("https://potmaster.app/?table=ab12cd"),
+            "AB12CD"
+        )
+    }
+
+    func testParsesPastedShareMessage() {
+        let paste = TableInviteSharing.message(forInviteCode: "ab12cd", hostName: "Alex")
+        XCTAssertEqual(TableInviteDeepLink.pastedInviteCode(paste), "AB12CD")
+    }
+
+    func testParsesBareTableCode() {
+        XCTAssertEqual(TableInviteDeepLink.pastedInviteCode(" ab12cd "), "AB12CD")
+    }
+
     func testShareMessageIncludesTapableLink() {
         let message = TableInviteSharing.message(forInviteCode: "abc123", hostName: "Alex")
         XCTAssertTrue(message.contains("https://potmaster.app/?table=ABC123"))

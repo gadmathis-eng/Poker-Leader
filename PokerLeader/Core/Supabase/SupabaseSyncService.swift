@@ -470,6 +470,10 @@ final class SupabaseSyncService {
                 .eq("id", value: table.id.uuidString)
                 .execute()
         }
+
+        guard try await fetchOpenTable(inviteCode: table.inviteCode) != nil else {
+            throw SupabaseSyncError.tablePublishFailed
+        }
     }
 
     func updateOpenTableSeats(_ table: OpenTableModel) async throws {

@@ -6,15 +6,18 @@ enum TableRepositoryError: LocalizedError, Equatable {
     case notSignedIn
     case cloudUnavailable
     case schemaMissing
+    case notPublished
 
     var errorDescription: String? {
         switch self {
         case .tableNotFound:
-            "No table found for that code. Ask the host to share it again."
+            "That code is not on the cloud yet. The host must be signed in, tap Save buy-in again so the table uploads, then share the 6-character code (not the full link)."
         case .notSignedIn:
-            "Sign in to join a shared table."
+            "Sign in to share or join a table."
         case .cloudUnavailable:
             "Cloud sync is needed so other people can join this table."
+        case .notPublished:
+            "The table did not upload. Sign in on the You tab, then tap Save buy-in again."
         case .schemaMissing:
             "Shared tables aren't set up yet. In Supabase, open SQL Editor and run supabase/migrations/20260904120000_open_tables.sql, then try again."
         }
@@ -130,7 +133,7 @@ final class TableRepository {
     }
 
     func join(inviteCode: String, displayName: String) async throws -> OpenTableModel {
-        let normalized = TableInviteDeepLink.normalizedCode(inviteCode)
+        let normalized = TableInviteDeepLink.pastedInviteCode(inviteCode)
         guard !normalized.isEmpty else {
             throw TableRepositoryError.tableNotFound
         }
