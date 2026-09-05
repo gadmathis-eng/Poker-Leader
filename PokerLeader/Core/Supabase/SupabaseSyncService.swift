@@ -453,7 +453,27 @@ final class SupabaseSyncService {
             updatedAt: table.updatedAt
         )
 
-        try await client.from("open_tables").upsert(row).execute()
+        do {
+            try await client.from("open_tables").insert(row).execute()
+        } catch {
+            try await client
+                .from("open_tables")
+                .update(
+                    OpenTableMetadataUpdate(
+                        hostDisplayName: table.hostDisplayName,
+                        hostPlayerKey: table.hostPlayerKey,
+                        sessionCurrencyCode: table.sessionCurrencyCode,
+                        isStarted: table.isStarted,
+                        updatedAt: table.updatedAt
+                    )
+                )
+                .eq("id", value: table.id.uuidString)
+                .execute()
+        }
+
+        guard try await fetchOpenTable(inviteCode: table.inviteCode) != nil else {
+            throw SupabaseSyncError.tablePublishFailed
+        }
     }
 
     func updateOpenTableSeats(_ table: OpenTableModel) async throws {
@@ -470,6 +490,32 @@ final class SupabaseSyncService {
                 )
             )
             .eq("invite_code", value: table.inviteCode)
+            .execute()
+    }
+
+    func mergeOpenTableSeat(_ seat: SharedTableSeat, inviteCode: String) async throws -> [SharedTableSeat] {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        let params = MergeOpenTableSeatParams(
+            inviteCode: TableInviteDeepLink.normalizedCode(inviteCode),
+            seat: seat
+        )
+
+        let seats: [SharedTableSeat] = try await client
+            .rpc("merge_open_table_seat", params: params)
+            .execute()
+            .value
+        return seats.sorted { $0.seatNumber < $1.seatNumber }
+    }
+
+    func markOpenTableStarted(inviteCode: String) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+
+        try await client
+            .from("open_tables")
+            .update(OpenTableStartedUpdate(isStarted: true, updatedAt: .now))
+            .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
             .execute()
     }
 
@@ -1031,5 +1077,41 @@ private struct OpenTablePlayUpdate: Encodable {
         case isStarted = "is_started"
         case seats
         case updatedAt = "updated_at"
+    }
+}
+
+private struct OpenTableStartedUpdate: Encodable {
+    let isStarted: Bool
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case isStarted = "is_started"
+        case updatedAt = "updated_at"
+    }
+}
+
+private struct OpenTableMetadataUpdate: Encodable {
+    let hostDisplayName: String
+    let hostPlayerKey: String
+    let sessionCurrencyCode: String
+    let isStarted: Bool
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case hostDisplayName = "host_display_name"
+        case hostPlayerKey = "host_player_key"
+        case sessionCurrencyCode = "session_currency_code"
+        case isStarted = "is_started"
+        case updatedAt = "updated_at"
+    }
+}
+
+private struct MergeOpenTableSeatParams: Encodable {
+    let inviteCode: String
+    let seat: SharedTableSeat
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+        case seat = "p_seat"
     }
 }

@@ -43,6 +43,26 @@ enum SharedTableSeatingError: LocalizedError, Equatable {
             "That seat is already taken."
         }
     }
+
+    static func matching(_ error: Error) -> SharedTableSeatingError? {
+        if let seating = error as? SharedTableSeatingError {
+            return seating
+        }
+
+        let text = [
+            error.localizedDescription,
+            String(describing: error)
+        ]
+        .joined(separator: " ")
+        .lowercased()
+        if text.contains("seat taken") {
+            return .seatTaken
+        }
+        if text.contains("invalid seat") {
+            return .invalidSeat
+        }
+        return nil
+    }
 }
 
 enum SharedTableSeating {

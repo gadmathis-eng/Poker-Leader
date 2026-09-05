@@ -44,10 +44,77 @@ final class TableInviteDeepLinkTests: XCTestCase {
         XCTAssertNil(TableInviteDeepLink.inviteCode(from: url))
     }
 
+    func testParsesPastedShareURL() {
+        XCTAssertEqual(
+            TableInviteDeepLink.pastedInviteCode("https://potmaster.app/?table=ab12cd"),
+            "AB12CD"
+        )
+    }
+
+    func testParsesPastedShareMessage() {
+        let paste = TableInviteSharing.message(forInviteCode: "ab12cd", hostName: "Alex")
+        XCTAssertEqual(TableInviteDeepLink.pastedInviteCode(paste), "AB12CD")
+    }
+
+    func testParsesBareTableCode() {
+        XCTAssertEqual(TableInviteDeepLink.pastedInviteCode(" ab12cd "), "AB12CD")
+    }
+
     func testShareMessageIncludesTapableLink() {
         let message = TableInviteSharing.message(forInviteCode: "abc123", hostName: "Alex")
         XCTAssertTrue(message.contains("https://potmaster.app/?table=ABC123"))
+        XCTAssertTrue(message.contains("Table code: ABC123"))
         XCTAssertTrue(message.contains("Alex's"))
+    }
+}
+
+private struct DummyLocalizedError: LocalizedError {
+    let errorDescription: String?
+}
+
+final class TableRepositoryErrorTests: XCTestCase {
+    func testDetectsMissingOpenTablesSchemaCacheError() {
+        let error = DummyLocalizedError(
+            errorDescription: "Could not find the table 'public.open_tables' in the schema cache"
+        )
+
+        XCTAssertTrue(TableRepositoryError.isMissingOpenTablesSchema(error))
+        XCTAssertEqual(TableRepositoryError.wrapping(error) as? TableRepositoryError, .schemaMissing)
+    }
+
+    func testDetectsPostgRESTMissingTableCode() {
+        let error = DummyLocalizedError(
+            errorDescription: "PGRST205: Could not find the table 'public.open_tables'"
+        )
+
+        XCTAssertTrue(TableRepositoryError.isMissingOpenTablesSchema(error))
+    }
+
+    func testDetectsMissingSeatMergeFunction() {
+        let error = DummyLocalizedError(
+            errorDescription: "PGRST202: Could not find the function public.merge_open_table_seat"
+        )
+
+        XCTAssertTrue(TableRepositoryError.isMissingOpenTablesSchema(error))
+        XCTAssertEqual(TableRepositoryError.wrapping(error) as? TableRepositoryError, .schemaMissing)
+    }
+
+    func testIgnoresUnrelatedCloudErrors() {
+        let error = DummyLocalizedError(errorDescription: "No table found for that code.")
+
+        XCTAssertFalse(TableRepositoryError.isMissingOpenTablesSchema(error))
+        XCTAssertFalse(TableRepositoryError.wrapping(error) is TableRepositoryError)
+    }
+
+    func testSchemaMissingMessageTellsHostToRunMigration() {
+        XCTAssertTrue(
+            TableRepositoryError.schemaMissing.localizedDescription.contains("open_tables.sql")
+        )
+    }
+
+    func testMapsRemoteSeatTakenError() {
+        let error = DummyLocalizedError(errorDescription: "seat taken")
+        XCTAssertEqual(SharedTableSeatingError.matching(error), .seatTaken)
     }
 }
 
