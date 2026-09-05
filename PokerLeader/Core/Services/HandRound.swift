@@ -314,9 +314,9 @@ enum HandRound {
 
         pay(pots: sidePots(in: hand), ranks: ranks, in: &hand)
         hand.isComplete = true
-        hand.resultSummary = hand.winnerSeats
-            .compactMap { ranks[$0]?.summary }
-            .first
+        hand.resultSummary = hand.winners
+            .max { $0.awardedDecimal < $1.awardedDecimal }?
+            .handSummary
     }
 
     /// Pushes every pot to whoever has the best hand in it, and records who was
@@ -356,7 +356,7 @@ enum HandRound {
         let ranked = live.compactMap { seatNumber in ranks[seatNumber].map { (seatNumber, $0) } }
         guard let best = ranked.map(\.1).max() else { return live }
 
-        let winners = ranked.filter { !($0.1 < best) && !(best < $0.1) }.map(\.0)
+        let winners = ranked.filter { $0.1 == best }.map(\.0)
         return orderedFromTheDealer(winners, in: hand)
     }
 

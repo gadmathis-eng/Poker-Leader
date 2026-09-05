@@ -330,6 +330,9 @@ final class HandRoundTests: XCTestCase {
         XCTAssertEqual(hand.seat(forPlayerKey: "ana")?.handSummary, "Pair of queens")
         XCTAssertEqual(hand.seat(forPlayerKey: "ben")?.handSummary, "Pair of twos")
 
+        XCTAssertEqual(hand.winnerSeats, [1, 4], "Ana took the side pot, Cal the main pot")
+        XCTAssertEqual(hand.resultSummary, "Straight, queen high", "The hand that won the biggest pot")
+
         let stacks = HandRound.stacksAfter(hand)
         XCTAssertEqual(stacks["cal"], 15, "The main pot only, since Cal could not cover the rest")
         XCTAssertEqual(stacks["ana"], 20, "Ana takes the side pot back off Ben")

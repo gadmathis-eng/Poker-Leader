@@ -73,6 +73,12 @@ struct PokerHandRank: Comparable, Equatable {
         return false
     }
 
+    /// Two hands are the same when they are the same strength, which is what a
+    /// split pot is: the cards they are made of do not have to match.
+    static func == (lhs: PokerHandRank, rhs: PokerHandRank) -> Bool {
+        lhs.category == rhs.category && lhs.tiebreakers == rhs.tiebreakers
+    }
+
     private func name(_ index: Int) -> String {
         guard index < tiebreakers.count else { return "" }
         return PlayingCard.name(forRank: tiebreakers[index])

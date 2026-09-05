@@ -102,6 +102,7 @@ final class PokerHandEvaluatorTests: XCTestCase {
         let left = rank(["As", "Ah", "9d", "9c", "Ks"])
         let right = rank(["Ad", "Ac", "9h", "9s", "Kh"])
 
+        XCTAssertEqual(left, right, "Different cards, same hand")
         XCTAssertFalse(left > right)
         XCTAssertFalse(right > left)
     }
