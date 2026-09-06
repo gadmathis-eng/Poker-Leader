@@ -46,7 +46,7 @@ struct NewSessionView: View {
         selectedPlayerTotals != nil
     }
     private var canStartTable: Bool {
-        (buyInAmount ?? 0) > 0
+        (buyInAmount ?? 0) > 0 && !selectedMemberIds.isEmpty
     }
     private var tableDisplayName: String {
         let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -402,7 +402,9 @@ struct NewSessionView: View {
     }
 
     private func startTable() {
-        guard circle != nil, let buyInAmount, buyInAmount > 0 else { return }
+        guard let circle, let buyInAmount, buyInAmount > 0 else { return }
+        let members = selectedMembers(in: circle)
+        guard !members.isEmpty else { return }
 
         tableStartError = nil
         if isValidSetup {
@@ -413,11 +415,23 @@ struct NewSessionView: View {
         personalBuyInCurrencyCode = currencyCode
         personalBuyInAmountString = decimalText(buyInAmount)
 
+        let repo = TableRepository(context: context)
+        let hostMemberId = router.currentUserMemberId ?? members.first(where: \.isCurrentUser)?.id
+        let sessionSeats = SessionTableSeating.seats(
+            from: members,
+            moneyIn: selectedPlayerTotals ?? [:],
+            standardBuyIn: buyInAmount,
+            hostMemberId: hostMemberId,
+            hostPlayerKey: repo.localPlayerKey,
+            preferredHandle: playerHandle
+        )
+
         do {
-            _ = try TableRepository(context: context).startHostedTable(
+            _ = try repo.startHostedTable(
                 name: tableDisplayName,
                 sessionCurrencyCode: currencyCode,
-                hostDisplayName: displayName
+                hostDisplayName: displayName,
+                sessionSeats: sessionSeats
             )
             router.push(
                 .playTable(

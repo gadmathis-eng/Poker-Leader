@@ -104,3 +104,43 @@ enum SharedTableSeating {
         OpenTableSeatsPacking.players(in: seats).filter { $0.playerKey != playerKey }
     }
 }
+
+struct SessionTableSeat: Equatable {
+    var playerKey: String
+    var playerName: String
+    var handle: String?
+    var amount: Decimal
+    var isHost: Bool
+}
+
+enum SessionTableSeating {
+    /// Builds seats for a new table from the people toggled into a session.
+    /// The host uses the local player key so this phone can act for them; everyone
+    /// else keeps their member id. A zero money-in falls back to the buy-in so
+    /// those players can be dealt in.
+    static func seats(
+        from members: [MemberModel],
+        moneyIn: [UUID: Decimal],
+        standardBuyIn: Decimal,
+        hostMemberId: UUID?,
+        hostPlayerKey: String,
+        preferredHandle: String
+    ) -> [SessionTableSeat] {
+        let seatedMembers = Array(members.prefix(SharedTableSeating.seatCount))
+        let hostId = seatedMembers.first(where: { $0.id == hostMemberId })?.id
+            ?? seatedMembers.first(where: \.isCurrentUser)?.id
+
+        return seatedMembers.map { member in
+            let isHost = member.id == hostId
+            let recorded = (moneyIn[member.id] ?? 0).clampedToNonNegative
+            return SessionTableSeat(
+                playerKey: isHost ? hostPlayerKey : member.id.uuidString,
+                playerName: member.displayName(preferredHandle: preferredHandle),
+                handle: MemberModel.normalizedHandle(member.handle)
+                    ?? (member.isCurrentUser ? MemberModel.normalizedHandle(preferredHandle) : nil),
+                amount: recorded > 0 ? recorded : standardBuyIn.clampedToNonNegative,
+                isHost: isHost
+            )
+        }
+    }
+}

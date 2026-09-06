@@ -111,28 +111,40 @@ final class TableRepository {
         )
     }
 
-    /// Starts a table you host from a circle session. Reuses the active hosted
-    /// table when there is one, and never takes over a table you only joined.
+    /// Starts a fresh hosted table for a circle session and sits only the people
+    /// from that session. An older active table is left as-is.
     func startHostedTable(
         name: String?,
         sessionCurrencyCode: String,
-        hostDisplayName: String
+        hostDisplayName: String,
+        sessionSeats: [SessionTableSeat] = []
     ) throws -> OpenTableModel {
-        if let existing = try activeTable(), existing.isHostLocally {
-            existing.sessionCurrencyCode = sessionCurrencyCode
-            existing.hostDisplayName = hostDisplayName
-            existing.hostPlayerKey = localPlayerKey
-            existing.name = TableNaming.normalized(name)
-            existing.updatedAt = .now
-            try context.save()
-            return existing
-        }
-
-        return try makeHostedTable(
+        let table = try makeHostedTable(
             name: name,
             sessionCurrencyCode: sessionCurrencyCode,
             hostDisplayName: hostDisplayName
         )
+        if !sessionSeats.isEmpty {
+            table.seats = try occupySessionSeats(sessionSeats)
+            try context.save()
+        }
+        return table
+    }
+
+    private func occupySessionSeats(_ sessionSeats: [SessionTableSeat]) throws -> [SharedTableSeat] {
+        var seats: [SharedTableSeat] = []
+        for (index, player) in sessionSeats.prefix(SharedTableSeating.seatCount).enumerated() {
+            seats = try SharedTableSeating.occupy(
+                seats: seats,
+                seatNumber: index + 1,
+                playerKey: player.playerKey,
+                playerName: player.playerName,
+                handle: player.handle,
+                amount: player.amount,
+                isHost: player.isHost
+            )
+        }
+        return seats
     }
 
     private func makeHostedTable(
