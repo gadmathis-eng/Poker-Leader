@@ -95,12 +95,22 @@ struct TableSeatSelectionView: View {
         table != nil && hand != nil && mySeat != nil
     }
 
+    /// Nothing in front of you and no pot left to win, so the game carries on
+    /// without you until you buy in again.
+    private var isOutOfMoney: Bool {
+        guard canAddMoney, let seat = mySeat else { return false }
+        return narration.isOutOfMoney(moneyOnTable: stackAmount(for: seat))
+    }
+
     /// What you have while a hand is out, or what is on the table between hands.
     private var moneyLine: String? {
+        guard let seat = mySeat else { return nil }
+        if isOutOfMoney {
+            return "Nothing left on the table"
+        }
         if let stackLine = narration.stackLine {
             return stackLine
         }
-        guard let seat = mySeat else { return nil }
         return "\(MoneyFormatting.plain(stackAmount(for: seat), currencyCode: tableCurrencyCode)) on the table"
     }
 
@@ -129,6 +139,7 @@ struct TableSeatSelectionView: View {
                 faceDownCount: isLocal || isShowingDown ? 0 : dealtCards,
                 handSummary: isShowingDown ? handSeat?.handSummary : nil,
                 isLocalUser: isLocal,
+                tapHint: isLocal ? localSeatTapHint : nil,
                 isLeader: seat.isHost || seat.playerKey == table?.hostPlayerKey,
                 isDealer: hand?.dealerSeat == seat.seatNumber,
                 isActing: hand?.actingSeat == seat.seatNumber,
@@ -136,6 +147,13 @@ struct TableSeatSelectionView: View {
                 isWinner: hand?.winnerSeats.contains(seat.seatNumber) ?? false
             )
         }
+    }
+
+    private var localSeatTapHint: String {
+        if canAddMoney {
+            return isOutOfMoney ? "Buys you in again" : "Puts more money on the table"
+        }
+        return "Your buy-in. Tap to edit the amount."
     }
 
     private var centerContent: TableCenterContent {
@@ -276,7 +294,7 @@ struct TableSeatSelectionView: View {
                             .foregroundStyle(AppTheme.muted)
                     }
                     Spacer(minLength: 8)
-                    if canAddMoney {
+                    if canAddMoney, !isOutOfMoney {
                         Button("Add money", action: presentTopUpEditor)
                             .font(.caption.weight(.bold))
                             .foregroundStyle(AppTheme.gold)
@@ -300,7 +318,12 @@ struct TableSeatSelectionView: View {
     private var handActions: some View {
         switch narration.turn {
         case .handOver:
-            HandActionButton(title: "Next hand", tint: AppTheme.positive, action: dealNextHand)
+            HStack(spacing: 10) {
+                if isOutOfMoney {
+                    buyInAgainButton
+                }
+                HandActionButton(title: "Next hand", tint: AppTheme.positive, action: dealNextHand)
+            }
         case .toAct(let toCall):
             HStack(spacing: 10) {
                 if toCall > 0 {
@@ -328,8 +351,14 @@ struct TableSeatSelectionView: View {
                 )
             }
         case .waitingForPlayers, .notDealtIn, .folded, .waitingForOthers:
-            EmptyView()
+            if isOutOfMoney {
+                buyInAgainButton
+            }
         }
+    }
+
+    private var buyInAgainButton: some View {
+        HandActionButton(title: "Buy in again", tint: AppTheme.gold, action: presentTopUpEditor)
     }
 
     /// Before the first hand: what you are sitting down with, and the stake.
@@ -483,16 +512,20 @@ struct TableSeatSelectionView: View {
     }
 
     private func handleSeatTap(_ seat: Int) {
-        guard canEditSeatMoney else { return }
-
         if occupants.contains(where: { $0.seatNumber == seat && $0.playerKey != repo.localPlayerKey }) {
             return
         }
 
         if selectedSeat == seat {
-            presentAmountEditor()
+            if canAddMoney {
+                presentTopUpEditor()
+            } else if canEditSeatMoney {
+                presentAmountEditor()
+            }
             return
         }
+
+        guard canEditSeatMoney else { return }
 
         withAnimation(.easeOut(duration: 0.18)) {
             selectedSeat = seat
@@ -528,11 +561,13 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    /// However much you want: buying back in is not held to the buy-in you sat
+    /// down with.
     private func presentTopUpEditor() {
         amountEditor = .topUp(
             MoneyAmountEditorState(
                 id: UUID(),
-                title: "Add money",
+                title: isOutOfMoney ? "Buy in again" : "Add money",
                 subtitle: localHandSeat == nil ? "Goes on the table now" : "Plays from the next hand",
                 currencyCode: tableCurrencyCode,
                 text: "0",
@@ -756,6 +791,8 @@ private struct TableSeatOccupant: Equatable {
     var faceDownCount: Int = 0
     var handSummary: String?
     var isLocalUser: Bool
+    /// What tapping your own seat does right now.
+    var tapHint: String?
     var isLeader: Bool
     var isDealer: Bool
     var isActing: Bool
@@ -1091,8 +1128,8 @@ private struct SeatChip: View {
         if occupant?.isLocalUser == false {
             return "Seat taken"
         }
-        if isOccupied {
-            return "Your buy-in. Tap to edit the amount."
+        if let occupant {
+            return occupant.tapHint ?? "Your buy-in. Tap to edit the amount."
         }
         return "Sits at this seat"
     }

@@ -107,6 +107,15 @@ struct HandNarration {
         }
     }
 
+    /// True when a player has nothing in front of them and no pot left to win,
+    /// so the only way back into the game is buying in again. A player who is
+    /// all in is not out: the hand can still pay them.
+    func isOutOfMoney(moneyOnTable: Decimal) -> Bool {
+        guard moneyOnTable <= 0 else { return false }
+        guard let hand, !hand.isComplete, let seat = localSeat else { return true }
+        return seat.isFolded
+    }
+
     /// The stake and what is left behind you, shown under the buttons so the
     /// prompt itself stays to one line.
     var stackLine: String? {

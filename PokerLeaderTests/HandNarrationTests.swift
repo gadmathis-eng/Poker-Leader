@@ -91,6 +91,63 @@ final class HandNarrationTests: XCTestCase {
         XCTAssertEqual(told.stackLine, "Ante £1 · £20 behind · £10 joins next hand")
     }
 
+    // MARK: - Running out of money
+
+    func testAPlayerAllInIsNotOutOfMoneyWhileThePotIsStillToBeWon() throws {
+        var hand = try HandRound.start(
+            seats: [
+                seat(1, key: "ana", amount: "20", isHost: true),
+                seat(2, key: "ben", amount: "1")
+            ],
+            dealerSeat: nil,
+            ante: 1
+        )
+        hand = try HandRound.apply(move: .call, playerKey: "ben", to: hand)
+
+        XCTAssertEqual(hand.seat(forPlayerKey: "ben")?.remaining, 0)
+        XCTAssertFalse(hand.isComplete)
+        XCTAssertFalse(narration(hand, for: "ben").isOutOfMoney(moneyOnTable: 0))
+    }
+
+    func testFoldingWithNothingBehindLeavesYouOutOfMoney() throws {
+        var hand = try HandRound.start(
+            seats: [
+                seat(1, key: "ana", amount: "20", isHost: true),
+                seat(2, key: "ben", amount: "1"),
+                seat(3, key: "cal", amount: "20")
+            ],
+            dealerSeat: nil,
+            ante: 1
+        )
+        hand = try HandRound.apply(move: .fold, playerKey: "ben", to: hand)
+
+        XCTAssertTrue(narration(hand, for: "ben").isOutOfMoney(moneyOnTable: 0))
+    }
+
+    func testLosingEverythingLeavesYouOutOfMoneyOnceTheHandIsOver() throws {
+        var hand = try HandRound.start(
+            seats: [
+                seat(1, key: "ana", amount: "20", isHost: true),
+                seat(2, key: "ben", amount: "1")
+            ],
+            dealerSeat: nil,
+            ante: 1,
+            deck: stacked(["2c", "as", "3d", "ah", "7s", "9d", "jc", "qh", "kd"])
+        )
+        hand = try HandRound.apply(move: .call, playerKey: "ben", to: hand)
+        hand = try HandRound.apply(move: .call, playerKey: "ana", to: hand)
+
+        XCTAssertTrue(hand.isComplete, "Ben is all in, so the board runs out")
+        XCTAssertEqual(HandRound.stacksAfter(hand)["ben"], 0)
+        XCTAssertTrue(narration(hand, for: "ben").isOutOfMoney(moneyOnTable: 0))
+    }
+
+    func testMoneyOnTheTableIsNotBeingOutOfMoney() throws {
+        let hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+
+        XCTAssertFalse(narration(hand, for: "ben").isOutOfMoney(moneyOnTable: 20))
+    }
+
     // MARK: - Waiting on somebody else
 
     func testWaitingNamesWhoeverTheTableIsWaitingFor() throws {
