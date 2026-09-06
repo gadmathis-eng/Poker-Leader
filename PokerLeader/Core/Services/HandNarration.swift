@@ -110,7 +110,7 @@ struct HandNarration {
     /// The stake and what is left behind you, shown under the buttons so the
     /// prompt itself stays to one line.
     var stackLine: String? {
-        guard let hand, let seat = localSeat else { return nil }
+        guard let hand, !hand.isComplete, let seat = localSeat else { return nil }
         return "Ante \(money(hand.anteDecimal)) · \(money(seat.remaining)) behind"
     }
 

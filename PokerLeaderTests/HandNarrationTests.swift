@@ -140,6 +140,7 @@ final class HandNarrationTests: XCTestCase {
         XCTAssertEqual(anaWasTold.title, "Ben takes £1")
         XCTAssertEqual(benWasTold.boardTitle, "Hand 1")
         XCTAssertEqual(benWasTold.boardStatus, "Ben wins")
+        XCTAssertNil(benWasTold.stackLine, "a finished hand has paid out, so what is behind you is the seat's job")
     }
 
     func testASplitPotNamesEverybodyInIt() throws {

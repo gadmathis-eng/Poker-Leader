@@ -222,7 +222,7 @@ struct TableView: View {
                         .foregroundStyle(AppTheme.muted)
                 }
                 Spacer(minLength: 0)
-                InviteCodeCopyLabel(code: table.inviteCode)
+                InviteCodeCopyLabel(code: table.inviteCode, fill: AppTheme.background)
             }
 
             if hasJoinableBuyIn {

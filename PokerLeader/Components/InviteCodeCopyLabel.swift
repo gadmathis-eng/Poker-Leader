@@ -10,6 +10,8 @@ struct InviteCodeCopyLabel: View {
 
     let code: String
     var style: Style = .badge
+    /// What the badge sits on, so the chip still reads when it is inside a card.
+    var fill: Color = AppTheme.card
 
     @State private var didCopy = false
 
@@ -33,7 +35,7 @@ struct InviteCodeCopyLabel: View {
                 copyIndicator
             }
             .padding(8)
-            .background(AppTheme.card)
+            .background(fill)
             .foregroundStyle(AppTheme.text)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         case .compact:
