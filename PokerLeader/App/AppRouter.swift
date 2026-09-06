@@ -5,6 +5,7 @@ enum AppRoute: Hashable {
     case circleDetail(UUID)
     case newSession(UUID)
     case liveTable(UUID)
+    case playTable(amount: String, buyInCurrencyCode: String, sessionCurrencyCode: String)
     case finalStacks(UUID)
     case confirmation(UUID)
     case settlement(UUID)

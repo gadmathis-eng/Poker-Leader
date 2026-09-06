@@ -104,8 +104,57 @@ final class TableRepository {
             return existing
         }
 
+        return try makeHostedTable(
+            name: nil,
+            sessionCurrencyCode: sessionCurrencyCode,
+            hostDisplayName: hostDisplayName
+        )
+    }
+
+    /// Starts a fresh hosted table for a circle session and sits only the people
+    /// from that session. An older active table is left as-is.
+    func startHostedTable(
+        name: String?,
+        sessionCurrencyCode: String,
+        hostDisplayName: String,
+        sessionSeats: [SessionTableSeat] = []
+    ) throws -> OpenTableModel {
+        let table = try makeHostedTable(
+            name: name,
+            sessionCurrencyCode: sessionCurrencyCode,
+            hostDisplayName: hostDisplayName
+        )
+        if !sessionSeats.isEmpty {
+            table.seats = try occupySessionSeats(sessionSeats)
+            try context.save()
+        }
+        return table
+    }
+
+    private func occupySessionSeats(_ sessionSeats: [SessionTableSeat]) throws -> [SharedTableSeat] {
+        var seats: [SharedTableSeat] = []
+        for (index, player) in sessionSeats.prefix(SharedTableSeating.seatCount).enumerated() {
+            seats = try SharedTableSeating.occupy(
+                seats: seats,
+                seatNumber: index + 1,
+                playerKey: player.playerKey,
+                playerName: player.playerName,
+                handle: player.handle,
+                amount: player.amount,
+                isHost: player.isHost
+            )
+        }
+        return seats
+    }
+
+    private func makeHostedTable(
+        name: String?,
+        sessionCurrencyCode: String,
+        hostDisplayName: String
+    ) throws -> OpenTableModel {
         let table = OpenTableModel(
             inviteCode: try uniqueInviteCode(),
+            name: name,
             hostDisplayName: hostDisplayName,
             hostPlayerKey: localPlayerKey,
             sessionCurrencyCode: sessionCurrencyCode,
