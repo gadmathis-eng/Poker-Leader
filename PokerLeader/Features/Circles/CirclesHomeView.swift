@@ -241,6 +241,12 @@ struct CirclesHomeView: View {
         case .circleDetail(let id): CircleDetailView(circleId: id)
         case .newSession(let id): NewSessionView(circleId: id)
         case .liveTable(let id): LiveTableView(sessionId: id)
+        case .playTable(let amount, let buyInCurrencyCode, let sessionCurrencyCode):
+            TableSeatSelectionView(
+                buyInAmount: Decimal(string: amount) ?? 0,
+                buyInCurrencyCode: buyInCurrencyCode,
+                sessionCurrencyCode: sessionCurrencyCode
+            )
         case .finalStacks(let id): FinalStacksView(sessionId: id)
         case .confirmation(let id): ConfirmationView(sessionId: id)
         case .settlement(let id): SettlementResultsView(sessionId: id)

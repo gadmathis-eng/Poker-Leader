@@ -104,8 +104,45 @@ final class TableRepository {
             return existing
         }
 
+        return try makeHostedTable(
+            name: nil,
+            sessionCurrencyCode: sessionCurrencyCode,
+            hostDisplayName: hostDisplayName
+        )
+    }
+
+    /// Starts a table you host from a circle session. Reuses the active hosted
+    /// table when there is one, and never takes over a table you only joined.
+    func startHostedTable(
+        name: String?,
+        sessionCurrencyCode: String,
+        hostDisplayName: String
+    ) throws -> OpenTableModel {
+        if let existing = try activeTable(), existing.isHostLocally {
+            existing.sessionCurrencyCode = sessionCurrencyCode
+            existing.hostDisplayName = hostDisplayName
+            existing.hostPlayerKey = localPlayerKey
+            existing.name = TableNaming.normalized(name)
+            existing.updatedAt = .now
+            try context.save()
+            return existing
+        }
+
+        return try makeHostedTable(
+            name: name,
+            sessionCurrencyCode: sessionCurrencyCode,
+            hostDisplayName: hostDisplayName
+        )
+    }
+
+    private func makeHostedTable(
+        name: String?,
+        sessionCurrencyCode: String,
+        hostDisplayName: String
+    ) throws -> OpenTableModel {
         let table = OpenTableModel(
             inviteCode: try uniqueInviteCode(),
+            name: name,
             hostDisplayName: hostDisplayName,
             hostPlayerKey: localPlayerKey,
             sessionCurrencyCode: sessionCurrencyCode,

@@ -5,6 +5,10 @@ struct NewSessionView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppRouter.self) private var router
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
+    @AppStorage("displayName") private var displayName = "Your name"
+    @AppStorage("personalSessionCurrencyCode") private var personalSessionCurrencyCode = CurrencyPreferences.defaultCurrencyCode
+    @AppStorage("personalBuyInCurrencyCode") private var personalBuyInCurrencyCode = CurrencyPreferences.defaultCurrencyCode
+    @AppStorage("personalBuyInAmount") private var personalBuyInAmountString = ""
     let circleId: UUID
 
     @Query private var circles: [CircleModel]
@@ -22,6 +26,7 @@ struct NewSessionView: View {
     @State private var didLoadSetup = false
     @State private var editingBuyIn: MoneyAmountEditorState?
     @State private var showingCurrencyPicker = false
+    @State private var tableStartError: String?
 
     private var circle: CircleModel? { circles.first { $0.id == circleId } }
     private var hasUnsavedChanges: Bool {
@@ -39,6 +44,16 @@ struct NewSessionView: View {
         buyInAmount != nil &&
         selectedMemberIds.count >= 2 &&
         selectedPlayerTotals != nil
+    }
+    private var canStartTable: Bool {
+        (buyInAmount ?? 0) > 0
+    }
+    private var tableDisplayName: String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty {
+            return trimmedTitle
+        }
+        return circle?.name ?? "Table"
     }
     private var buyInAmount: Decimal? {
         nonNegativeDecimal(from: buyInText)
@@ -204,15 +219,34 @@ struct NewSessionView: View {
                             )
                         }
 
-                        Button(action: startSession) {
-                            Text("Start session →")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(AppTheme.positive)
-                                .foregroundStyle(AppTheme.contrastText)
-                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        VStack(spacing: 12) {
+                            Button(action: startSession) {
+                                Text("Start session →")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(AppTheme.positive)
+                                    .foregroundStyle(AppTheme.contrastText)
+                                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                            }
+                            .disabled(!isValidSetup)
+
+                            Button(action: startTable) {
+                                Text("Start table →")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(AppTheme.positive)
+                                    .foregroundStyle(AppTheme.contrastText)
+                                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                            }
+                            .disabled(!canStartTable)
+                            .accessibilityHint("Opens a playable poker table for this circle")
+
+                            if let tableStartError {
+                                Text(tableStartError)
+                                    .font(.caption)
+                                    .foregroundStyle(AppTheme.negative)
+                            }
                         }
-                        .disabled(!isValidSetup)
                     }
                     .padding()
                 }
@@ -354,6 +388,36 @@ struct NewSessionView: View {
         savedMemberIds = selectedMemberIds
         savedPlayerMoneyTexts = selectedPlayerMoneyTexts
         router.push(.liveTable(session.id))
+    }
+
+    private func startTable() {
+        guard circle != nil, let buyInAmount, buyInAmount > 0 else { return }
+
+        tableStartError = nil
+        if isValidSetup {
+            saveSetup()
+        }
+
+        personalSessionCurrencyCode = currencyCode
+        personalBuyInCurrencyCode = currencyCode
+        personalBuyInAmountString = decimalText(buyInAmount)
+
+        do {
+            _ = try TableRepository(context: context).startHostedTable(
+                name: tableDisplayName,
+                sessionCurrencyCode: currencyCode,
+                hostDisplayName: displayName
+            )
+            router.push(
+                .playTable(
+                    amount: decimalText(buyInAmount),
+                    buyInCurrencyCode: currencyCode,
+                    sessionCurrencyCode: currencyCode
+                )
+            )
+        } catch {
+            tableStartError = error.localizedDescription
+        }
     }
 
     private func selectedMembers(in circle: CircleModel) -> [MemberModel] {
