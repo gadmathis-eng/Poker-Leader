@@ -192,7 +192,9 @@ struct TableSeatSelectionView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let table {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    InviteCodeCopyLabel(code: table.inviteCode, style: .compact)
+
                     ShareLink(
                         item: TableInviteSharing.url(forInviteCode: table.inviteCode),
                         subject: Text("Join my Pot Master table"),

@@ -4,6 +4,7 @@ import UIKit
 struct InviteCodeCopyLabel: View {
     enum Style {
         case badge
+        case compact
         case headline
     }
 
@@ -35,6 +36,13 @@ struct InviteCodeCopyLabel: View {
             .background(AppTheme.card)
             .foregroundStyle(AppTheme.text)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+        case .compact:
+            HStack(spacing: 4) {
+                Text(code)
+                    .font(.subheadline.weight(.bold).monospaced())
+                copyIndicator
+            }
+            .foregroundStyle(AppTheme.text)
         case .headline:
             HStack(spacing: 8) {
                 Text(code)
@@ -47,8 +55,19 @@ struct InviteCodeCopyLabel: View {
 
     private var copyIndicator: some View {
         Image(systemName: didCopy ? "checkmark" : "doc.on.doc")
-            .font(style == .headline ? .subheadline.weight(.semibold) : .caption2.weight(.bold))
+            .font(indicatorFont)
             .foregroundStyle(didCopy ? AppTheme.positive : AppTheme.muted)
+    }
+
+    private var indicatorFont: Font {
+        switch style {
+        case .badge:
+            return .caption2.weight(.bold)
+        case .compact:
+            return .caption.weight(.bold)
+        case .headline:
+            return .subheadline.weight(.semibold)
+        }
     }
 
     private func copyCode() {

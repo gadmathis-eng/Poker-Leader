@@ -55,7 +55,7 @@ PokerLeader/
 - **Join a table** on the Circles tab (top of the list) and on a circle's detail page
 - **Table** tab: personal buy-in, join with a 6-character code, share a table link
 - **Your tables** on the Table tab — hosted and joined tables, tap any one to edit its name, currency, or seat money
-- **8-seat table** with a Play button after you save a buy-in and sit down
+- **8-seat table** with a Play button after you save a buy-in and sit down — the table code sits next to the share button at the top, so you can read it out or tap it to copy without leaving the table
 - **A real hand of hold'em** dealt by the app — two cards each, then the ante round, the flop, the turn, and the river, each asking you to bet, check, or fold
 - **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table
 - **New session → Live table** (+ buy-in only, no voice/type)
