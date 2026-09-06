@@ -291,6 +291,10 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
     var cards: [PlayingCard]
     /// What the hand paid this player once it was over.
     var awarded: String
+    /// Money put on the table while this hand was out. It cannot be bet in the
+    /// hand — a stack in a hand belongs to the hand — so it waits here and joins
+    /// the player's money on the table when the hand settles.
+    var toppedUp: String
     /// The five cards this player showed down, such as "Flush, ace high".
     var handSummary: String?
 
@@ -306,6 +310,7 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
         isFolded: Bool = false,
         cards: [PlayingCard] = [],
         awarded: String = "0",
+        toppedUp: String = "0",
         handSummary: String? = nil
     ) {
         self.id = id
@@ -319,6 +324,7 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
         self.isFolded = isFolded
         self.cards = cards
         self.awarded = awarded
+        self.toppedUp = toppedUp
         self.handSummary = handSummary
     }
 
@@ -326,6 +332,7 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
     var committedDecimal: Decimal { TableMoney.decimal(committed) }
     var streetCommittedDecimal: Decimal { TableMoney.decimal(streetCommitted) }
     var awardedDecimal: Decimal { TableMoney.decimal(awarded) }
+    var toppedUpDecimal: Decimal { TableMoney.decimal(toppedUp) }
 
     /// Chips still behind this player, which is all they can bet.
     var remaining: Decimal {
@@ -360,6 +367,7 @@ struct SharedTableHandSeat: Codable, Equatable, Hashable, Identifiable {
         isFolded = try container.decodeIfPresent(Bool.self, forKey: .isFolded) ?? false
         cards = try container.decodeIfPresent([PlayingCard].self, forKey: .cards) ?? []
         awarded = try container.decodeIfPresent(String.self, forKey: .awarded) ?? "0"
+        toppedUp = try container.decodeIfPresent(String.self, forKey: .toppedUp) ?? "0"
         handSummary = try container.decodeIfPresent(String.self, forKey: .handSummary)
     }
 }

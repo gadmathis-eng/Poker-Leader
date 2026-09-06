@@ -566,6 +566,54 @@ final class HandRoundTests: XCTestCase {
         XCTAssertEqual(moneyOnTheTable(hand), 22)
     }
 
+    // MARK: - Money put on the table mid-hand
+
+    func testMoneyAddedMidHandCannotBeBetInThatHand() throws {
+        var hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+        hand = try XCTUnwrap(HandRound.addingMoney(10, playerKey: "ben", to: hand))
+
+        let ben = try XCTUnwrap(hand.seat(forPlayerKey: "ben"))
+        XCTAssertEqual(ben.toppedUpDecimal, 10)
+        XCTAssertEqual(ben.remaining, 20, "The stack in the hand is the one it was dealt")
+        XCTAssertEqual(ben.streetCap, 20)
+        XCTAssertEqual(hand.pot, 0)
+    }
+
+    func testMoneyAddedMidHandIsThereOnceTheHandSettles() throws {
+        var hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+        hand = try XCTUnwrap(HandRound.addingMoney(10, playerKey: "ben", to: hand))
+        hand = try HandRound.apply(move: .call, playerKey: "ben", to: hand)
+        hand = try HandRound.apply(move: .fold, playerKey: "ana", to: hand)
+
+        XCTAssertTrue(hand.isComplete)
+        XCTAssertEqual(HandRound.stacksAfter(hand)["ben"], 30, "£20 sat down with, the £1 pot, and the £10 added")
+        XCTAssertEqual(HandRound.stacksAfter(hand)["ana"], 20)
+        XCTAssertEqual(moneyOnTheTable(hand), 50)
+    }
+
+    func testMoneyAddedTwiceAddsUp() throws {
+        var hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+        hand = try XCTUnwrap(HandRound.addingMoney(dec("2.50"), playerKey: "ana", to: hand))
+        hand = try XCTUnwrap(HandRound.addingMoney(dec("0.75"), playerKey: "ana", to: hand))
+
+        XCTAssertEqual(hand.seat(forPlayerKey: "ana")?.toppedUpDecimal, dec("3.25"))
+    }
+
+    func testAddingMoneyBumpsTheRevisionSoTheOtherPhonesSeeIt() throws {
+        let hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+        let after = try XCTUnwrap(HandRound.addingMoney(5, playerKey: "ana", to: hand))
+
+        XCTAssertEqual(after.revision, hand.revision + 1)
+    }
+
+    func testThereIsNothingToAddForNobodyOrForSomeoneNotInTheHand() throws {
+        let hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+
+        XCTAssertNil(HandRound.addingMoney(0, playerKey: "ana", to: hand))
+        XCTAssertNil(HandRound.addingMoney(-5, playerKey: "ana", to: hand))
+        XCTAssertNil(HandRound.addingMoney(10, playerKey: "late-arrival", to: hand))
+    }
+
     func testDefaultAnteIsAHundredthOfTheBuyIn() {
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 100), 1)
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 50), dec("0.5"))
@@ -678,6 +726,7 @@ final class SharedTableHandDecodingTests: XCTestCase {
         XCTAssertEqual(hand.street, .preflop)
         XCTAssertEqual(hand.winnerSeats, [4], "The one winner it knew about is kept")
         XCTAssertEqual(hand.seat(at: 1)?.streetCommittedDecimal, 1)
+        XCTAssertEqual(hand.seat(at: 1)?.toppedUpDecimal, 0, "A build that could not add money added none")
         XCTAssertTrue(hand.board.isEmpty)
         XCTAssertTrue(hand.needsRedeal, "It has no cards, so it cannot be played to a showdown")
     }
@@ -705,11 +754,13 @@ final class SharedTableHandDecodingTests: XCTestCase {
         ]
         var hand = try HandRound.start(seats: seats, dealerSeat: nil, ante: 1)
         hand = try HandRound.apply(move: .call, playerKey: "ben", to: hand)
+        hand = try XCTUnwrap(HandRound.addingMoney(Decimal(string: "7.50") ?? 0, playerKey: "ben", to: hand))
 
         let data = try JSONEncoder().encode(hand)
         let decoded = try JSONDecoder().decode(SharedTableHand.self, from: data)
 
         XCTAssertEqual(decoded, hand)
+        XCTAssertEqual(decoded.seat(forPlayerKey: "ben")?.toppedUpDecimal, Decimal(string: "7.50"))
         XCTAssertFalse(decoded.needsRedeal)
         XCTAssertEqual(decoded.version, SharedTableHand.currentVersion)
     }
