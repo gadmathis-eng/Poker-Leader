@@ -176,6 +176,54 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(table.seats.map(\.amountDecimal), [20, 20])
     }
 
+    func testDealNextHandStartsTheFollowingHandWithoutBeingAsked() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "GBP",
+            hostDisplayName: "Ana",
+            sessionSeats: [
+                SessionTableSeat(
+                    playerKey: "host-key",
+                    playerName: "Ana",
+                    handle: nil,
+                    amount: 20,
+                    isHost: true
+                ),
+                SessionTableSeat(
+                    playerKey: "ben",
+                    playerName: "Ben",
+                    handle: nil,
+                    amount: 20,
+                    isHost: false
+                )
+            ]
+        )
+        repo.updateAnte(1, on: table)
+
+        let first = try repo.dealHand(on: table)
+        var finished = try HandRound.apply(move: .call, playerKey: "ben", to: first)
+        finished = try HandRound.apply(move: .call, playerKey: "host-key", to: finished)
+        finished = try HandRound.apply(move: .fold, playerKey: "ben", to: finished)
+        repo.updateHand(finished, on: table)
+
+        XCTAssertTrue(finished.isComplete)
+        XCTAssertEqual(table.hand?.handNumber, 1)
+        XCTAssertEqual(table.seats.first { $0.playerKey == "host-key" }?.amountDecimal, 21)
+        XCTAssertEqual(table.seats.first { $0.playerKey == "ben" }?.amountDecimal, 19)
+
+        try repo.dealNextHand(on: table)
+
+        let next = try XCTUnwrap(table.hand)
+        XCTAssertEqual(next.handNumber, 2)
+        XCTAssertEqual(next.street, .preflop)
+        XCTAssertFalse(next.isComplete)
+        XCTAssertTrue(next.board.isEmpty)
+        XCTAssertNotEqual(next.id, first.id)
+        XCTAssertEqual(next.seat(forPlayerKey: "host-key")?.stackDecimal, 21)
+        XCTAssertEqual(next.seat(forPlayerKey: "ben")?.stackDecimal, 19)
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([OpenTableModel.self])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
