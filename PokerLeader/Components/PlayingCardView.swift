@@ -146,7 +146,7 @@ struct BoardCardsView: View {
             }
             ForEach(slotsToCome, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: size.cornerRadius)
-                    .stroke(Color.white.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .stroke(AppTheme.muted.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .frame(width: size.width, height: size.height)
             }
         }

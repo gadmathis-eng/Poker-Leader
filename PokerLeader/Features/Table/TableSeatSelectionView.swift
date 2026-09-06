@@ -169,7 +169,7 @@ struct TableSeatSelectionView: View {
                     onSelect: handleSeatTap,
                     onPlay: startGame
                 )
-                .frame(height: 430)
+                .frame(height: 360)
                 .padding(.horizontal)
 
                 if isGameStarted {
@@ -856,6 +856,9 @@ private struct PokerTableSeatLayout: View {
 
     private let seatWidth: CGFloat = 88
     private let seatHeight: CGFloat = 92
+    /// How far the felt reaches past the middle of each seat, so players sit at the table
+    /// instead of floating beside it. Keeps the table the same shape as the ring of seats.
+    private let feltOverhang: CGFloat = 6
 
     var body: some View {
         GeometryReader { proxy in
@@ -866,8 +869,8 @@ private struct PokerTableSeatLayout: View {
             ZStack {
                 TableFelt()
                     .frame(
-                        width: max(size.width - seatWidth * 1.25, 80),
-                        height: max(size.height - seatHeight * 1.55, 80)
+                        width: max((radiusX + feltOverhang) * 2, 80),
+                        height: max((radiusY + feltOverhang) * 2, 80)
                     )
 
                 TableCenterView(content: center, onPlay: onPlay)
@@ -906,38 +909,38 @@ private struct TableCenterView: View {
         case .play(let isEnabled):
             TablePlayButton(isEnabled: isEnabled, action: onPlay)
         case .waiting(let text):
-            Text(text)
-                .font(.caption.weight(.bold))
+            Text(text.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(AppTheme.sectionTracking)
                 .foregroundStyle(AppTheme.muted)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
-                .background(Capsule().fill(AppTheme.card))
         case .pot(let title, let board, let potLabel, let status):
-            VStack(spacing: 6) {
-                Text(title)
+            VStack(spacing: 8) {
+                Text(title.uppercased())
                     .font(.caption2.weight(.bold))
+                    .tracking(AppTheme.sectionTracking)
                     .foregroundStyle(AppTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
                 BoardCardsView(cards: board)
-                Text(potLabel)
-                    .font(.system(.title3, design: .rounded).weight(.bold))
-                    .foregroundStyle(AppTheme.gold)
-                    .monospacedDigit()
+
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(AppTheme.gold)
+                        .frame(width: 6, height: 6)
+                    Text(potLabel)
+                        .font(.system(.title3, design: .rounded).weight(.heavy))
+                        .monospacedDigit()
+                }
+                .foregroundStyle(AppTheme.gold)
+
                 Text(status)
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(AppTheme.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                    .fill(AppTheme.card)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                    .stroke(AppTheme.gold.opacity(0.5), lineWidth: 2)
-            )
+            .padding(.horizontal, 12)
             .accessibilityElement(children: .combine)
         }
     }
@@ -952,18 +955,16 @@ private struct TablePlayButton: View {
             Text("Play")
                 .font(.headline.weight(.bold))
                 .foregroundStyle(isEnabled ? AppTheme.contrastText : AppTheme.muted)
-                .padding(.horizontal, 22)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 26)
+                .padding(.vertical, 13)
                 .background(
                     Capsule()
                         .fill(isEnabled ? AppTheme.positive : AppTheme.card)
+                        .shadow(color: .black.opacity(isEnabled ? 0.2 : 0), radius: 8, y: 3)
                 )
                 .overlay(
                     Capsule()
-                        .stroke(
-                            isEnabled ? AppTheme.positive : AppTheme.cardBorder,
-                            lineWidth: 2
-                        )
+                        .strokeBorder(isEnabled ? .clear : AppTheme.cardBorder, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -973,14 +974,46 @@ private struct TablePlayButton: View {
     }
 }
 
+/// The table itself: a rail around a green surface, lit from above the way a room light falls on felt.
 private struct TableFelt: View {
+    private let railWidth: CGFloat = 9
+
     var body: some View {
-        Ellipse()
-            .fill(AppTheme.positive.opacity(0.18))
-            .overlay(
+        GeometryReader { proxy in
+            let spotlight = max(proxy.size.width, proxy.size.height) * 0.62
+
+            ZStack {
                 Ellipse()
-                    .stroke(AppTheme.positive.opacity(0.45), lineWidth: 3)
-            )
+                    .fill(AppTheme.card)
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
+
+                Ellipse()
+                    .strokeBorder(AppTheme.cardBorder, lineWidth: 1)
+
+                Ellipse()
+                    .inset(by: railWidth)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                AppTheme.positive.opacity(0.34),
+                                AppTheme.positive.opacity(0.12)
+                            ],
+                            center: UnitPoint(x: 0.5, y: 0.42),
+                            startRadius: 0,
+                            endRadius: spotlight
+                        )
+                    )
+
+                Ellipse()
+                    .inset(by: railWidth)
+                    .strokeBorder(AppTheme.positive.opacity(0.3), lineWidth: 1)
+
+                // The betting line players push their chips over.
+                Ellipse()
+                    .inset(by: railWidth + 20)
+                    .strokeBorder(AppTheme.positive.opacity(0.18), lineWidth: 1)
+            }
+        }
     }
 }
 
@@ -1091,7 +1124,7 @@ private struct SeatMarker: View {
             VStack(spacing: 2) {
                 if let occupant {
                     disc(for: occupant)
-                    Text(occupant.playerName)
+                    Text(occupant.isLocalUser ? "You" : occupant.playerName)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : AppTheme.text)
                         .lineLimit(1)
@@ -1137,7 +1170,9 @@ private struct SeatMarker: View {
             .foregroundStyle(AppTheme.text)
             .frame(width: discSize, height: discSize)
             .background(
-                Circle().fill(occupant.isLocalUser ? AppTheme.positive.opacity(0.22) : AppTheme.card)
+                Circle()
+                    .fill(AppTheme.card)
+                    .shadow(color: .black.opacity(0.12), radius: 2, y: 1)
             )
             .overlay(Circle().strokeBorder(ringColor(for: occupant), lineWidth: isHighlighted(occupant) ? 2 : 1))
             .overlay(
@@ -1216,7 +1251,8 @@ private struct SeatMarker: View {
 
     private var occupancyAccessibilityLabel: String {
         guard let occupant else { return "Seat \(seatNumber)" }
-        var label = occupant.isLeader ? "\(occupant.playerName), party leader" : occupant.playerName
+        let name = occupant.isLocalUser ? "You" : occupant.playerName
+        var label = occupant.isLeader ? "\(name), party leader" : name
         if occupant.isDealer {
             label += ", dealer"
         }
