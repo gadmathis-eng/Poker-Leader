@@ -39,7 +39,6 @@ enum PokerTableChrome {
     static let railInner = Color(red: 0.22, green: 0.24, blue: 0.27)
     static let sitStroke = Color.white.opacity(0.58)
     static let feltText = Color.white.opacity(0.74)
-    static let emptyFill = Color.white.opacity(0.06)
     static let occupiedFill = Color(red: 0.10, green: 0.12, blue: 0.15)
 }
 
@@ -52,7 +51,7 @@ struct PokerTableSeatLayout: View {
     let onPlay: () -> Void
 
     private let seatWidth: CGFloat = 84
-    private let seatHeight: CGFloat = 86
+    private let seatHeight: CGFloat = 92
 
     var body: some View {
         GeometryReader { proxy in
@@ -75,20 +74,23 @@ struct PokerTableSeatLayout: View {
 
                 ForEach(1...max(seatCount, 1), id: \.self) { seat in
                     let occupant = occupants.first { $0.seatNumber == seat }
-                    SeatChip(
+                    let spot = PokerTableSeatGeometry.center(
+                        forSeat: seat,
+                        of: seatCount,
+                        in: size,
+                        seatSize: seatSize
+                    )
+                    SeatMarker(
                         seatNumber: seat,
                         occupant: occupant,
+                        // Near-side seats read outwards, so every player's cards land on the felt.
+                        // The side seats sit exactly halfway down, so they need to stay clear of
+                        // the cut-off rather than flip on a rounding error.
+                        isMirrored: spot.y > size.height * 0.55,
                         action: { onSelect(seat) }
                     )
                     .frame(width: seatWidth, height: seatHeight)
-                    .position(
-                        PokerTableSeatGeometry.center(
-                            forSeat: seat,
-                            of: seatCount,
-                            in: size,
-                            seatSize: seatSize
-                        )
-                    )
+                    .position(spot)
                 }
             }
             .frame(width: size.width, height: size.height)
@@ -228,7 +230,7 @@ private struct TableCenterView: View {
                 Text(title)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                BoardCardsView(cards: board)
+                BoardCardsView(cards: board, size: .table)
                 Text(potLabel)
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(AppTheme.gold)
@@ -362,28 +364,39 @@ private struct TablePlayButton: View {
     }
 }
 
-private struct SeatChip: View {
+/// A seat on the rail: a dashed ring when it is open, a name disc when someone is in it.
+private struct SeatMarker: View {
     let seatNumber: Int
     let occupant: TableSeatOccupant?
+    /// Stacks the seat the other way up, for players sitting on the near side of the table.
+    var isMirrored = false
     let action: () -> Void
 
-    private var isOccupied: Bool { occupant != nil }
+    private let discSize: CGFloat = 30
 
     var body: some View {
         Button(action: action) {
-            ZStack(alignment: .topLeading) {
-                seatBody
-
-                if occupant?.isDealer == true {
-                    Text("D")
-                        .font(.system(size: 9, weight: .heavy))
-                        .foregroundStyle(AppTheme.contrastText)
-                        .frame(width: 16, height: 16)
-                        .background(Circle().fill(AppTheme.gold))
-                        .offset(x: -4, y: -5)
-                        .accessibilityHidden(true)
+            VStack(spacing: 2) {
+                if let occupant {
+                    if isMirrored {
+                        handRow(for: occupant)
+                        stackText(for: occupant)
+                        nameText(for: occupant)
+                        disc(for: occupant)
+                    } else {
+                        disc(for: occupant)
+                        nameText(for: occupant)
+                        stackText(for: occupant)
+                        handRow(for: occupant)
+                    }
+                } else {
+                    openSeat
                 }
             }
+            .padding(.horizontal, 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .opacity(occupant?.isFolded == true ? 0.55 : 1)
         }
         .buttonStyle(.plain)
         .disabled(occupant?.isLocalUser == false)
@@ -391,94 +404,121 @@ private struct SeatChip: View {
         .accessibilityLabel(occupancyAccessibilityLabel)
     }
 
-    @ViewBuilder
-    private var seatBody: some View {
-        if let occupant {
-            occupiedSeat(occupant)
-        } else {
-            emptySeat
-        }
-    }
-
-    private var emptySeat: some View {
-        VStack(spacing: 2) {
-            Text("SIT")
-                .font(.caption.weight(.heavy))
-                .tracking(1)
+    private var openSeat: some View {
+        VStack(spacing: 3) {
             Text("\(seatNumber)")
-                .font(.caption2.weight(.bold))
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.white.opacity(0.7))
-        }
-        .foregroundStyle(Color.white.opacity(0.9))
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(PokerTableChrome.emptyFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(
-                    PokerTableChrome.sitStroke,
-                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                .frame(width: discSize, height: discSize)
+                .overlay(
+                    Circle().strokeBorder(
+                        PokerTableChrome.sitStroke,
+                        style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+                    )
                 )
-        )
-        .padding(.horizontal, 8)
-        .padding(.vertical, 14)
+            Text("SIT")
+                .font(.system(size: 9, weight: .heavy))
+                .tracking(1)
+                .foregroundStyle(Color.white.opacity(0.9))
+        }
     }
 
-    private func occupiedSeat(_ occupant: TableSeatOccupant) -> some View {
-        VStack(spacing: 1) {
-            HStack(spacing: 3) {
+    private func disc(for occupant: TableSeatOccupant) -> some View {
+        Text(CircleRepository.initial(for: occupant.playerName))
+            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .foregroundStyle(initialColor(for: occupant))
+            .frame(width: discSize, height: discSize)
+            .background(
+                Circle()
+                    .fill(fillColor(for: occupant))
+                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+            )
+            .overlay(
+                Circle().strokeBorder(strokeColor(for: occupant), lineWidth: isHighlighted(occupant) ? 2 : 1)
+            )
+            .overlay(
+                Circle()
+                    .stroke(AppTheme.gold.opacity(0.3), lineWidth: 2)
+                    .scaleEffect(1.28)
+                    .opacity(occupant.isActing ? 1 : 0)
+            )
+            .overlay(alignment: .topLeading) {
                 if occupant.isLeader {
                     Image(systemName: "crown.fill")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(AppTheme.gold)
+                        .offset(x: -1, y: -1)
                 }
-                Text(occupant.playerName)
-                    .font(.caption.weight(.bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
             }
-            Text(occupant.stackLabel)
-                .font(.caption2.weight(.semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .foregroundStyle(stackColor(for: occupant))
-            if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
-                CardRowView(
-                    cards: occupant.cards,
-                    faceDownCount: occupant.faceDownCount,
-                    size: .seat
-                )
-                .padding(.vertical, 1)
+            .overlay(alignment: .bottomTrailing) {
+                if occupant.isDealer {
+                    dealerButton
+                }
             }
-            if occupant.isFolded {
-                Text("Folded")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.7))
-            } else if let committedLabel = occupant.committedLabel {
-                Text("in \(committedLabel)")
-                    .font(.system(size: 9, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .foregroundStyle(AppTheme.contrastText)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Capsule().fill(AppTheme.gold))
+    }
+
+    private var dealerButton: some View {
+        Text("D")
+            .font(.system(size: 8, weight: .heavy))
+            .foregroundStyle(AppTheme.contrastText)
+            .frame(width: 14, height: 14)
+            .background(Circle().fill(AppTheme.gold))
+            .offset(x: 2, y: 1)
+            .accessibilityHidden(true)
+    }
+
+    private func nameText(for occupant: TableSeatOccupant) -> some View {
+        Text(occupant.playerName)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : Color.white)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+    }
+
+    private func stackText(for occupant: TableSeatOccupant) -> some View {
+        Text(occupant.stackLabel)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(Color.white.opacity(0.78))
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+    }
+
+    /// The cards still in front of a player, or what they have put in the pot.
+    @ViewBuilder
+    private func handRow(for occupant: TableSeatOccupant) -> some View {
+        if occupant.isFolded {
+            Text("Folded")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.7))
+        } else if !occupant.cards.isEmpty || occupant.faceDownCount > 0 || occupant.committedLabel != nil {
+            HStack(spacing: 4) {
+                if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
+                    CardRowView(
+                        cards: occupant.cards,
+                        faceDownCount: occupant.faceDownCount,
+                        size: .seat
+                    )
+                }
+                if let committedLabel = occupant.committedLabel {
+                    HStack(spacing: 2) {
+                        Circle()
+                            .fill(AppTheme.gold)
+                            .frame(width: 4, height: 4)
+                        Text(committedLabel)
+                            .font(.system(size: 9, weight: .bold, design: .rounded))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .foregroundStyle(AppTheme.gold)
+                }
             }
         }
-        .foregroundStyle(nameColor(for: occupant))
-        .padding(.horizontal, 6)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(fillColor(for: occupant))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(strokeColor(for: occupant), lineWidth: strokeWidth(for: occupant))
-        )
-        .opacity(occupant.isFolded ? 0.55 : 1)
+    }
+
+    private func isHighlighted(_ occupant: TableSeatOccupant) -> Bool {
+        occupant.isActing || occupant.isWinner
     }
 
     private func fillColor(for occupant: TableSeatOccupant) -> Color {
@@ -487,23 +527,15 @@ private struct SeatChip: View {
         return PokerTableChrome.occupiedFill
     }
 
-    private func nameColor(for occupant: TableSeatOccupant) -> Color {
+    private func initialColor(for occupant: TableSeatOccupant) -> Color {
         occupant.isLocalUser ? AppTheme.contrastText : Color.white
     }
 
-    private func stackColor(for occupant: TableSeatOccupant) -> Color {
-        occupant.isLocalUser ? AppTheme.contrastText.opacity(0.8) : Color.white.opacity(0.78)
-    }
-
     private func strokeColor(for occupant: TableSeatOccupant) -> Color {
-        if occupant.isActing || occupant.isWinner {
+        if isHighlighted(occupant) {
             return AppTheme.gold
         }
-        return occupant.isLocalUser ? AppTheme.positive : Color.white.opacity(0.16)
-    }
-
-    private func strokeWidth(for occupant: TableSeatOccupant) -> CGFloat {
-        occupant.isActing || occupant.isWinner ? 3 : 1.5
+        return occupant.isLocalUser ? AppTheme.positive : Color.white.opacity(0.24)
     }
 
     private var occupancyAccessibilityLabel: String {

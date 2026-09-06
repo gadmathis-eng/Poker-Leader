@@ -3,7 +3,9 @@ import SwiftUI
 enum PlayingCardSize {
     /// Fits inside a seat on the table.
     case seat
-    /// The cards in the middle of the table.
+    /// The five community cards on the felt, with the seats crowding in around them.
+    case table
+    /// A hand laid out in a list row, like the showdown.
     case board
     /// Your own two cards.
     case hand
@@ -11,6 +13,7 @@ enum PlayingCardSize {
     var width: CGFloat {
         switch self {
         case .seat: 18
+        case .table: 28
         case .board: 34
         case .hand: 54
         }
@@ -23,6 +26,7 @@ enum PlayingCardSize {
     var cornerRadius: CGFloat {
         switch self {
         case .seat: 3
+        case .table: 4
         case .board: 5
         case .hand: 7
         }
@@ -31,6 +35,7 @@ enum PlayingCardSize {
     var rankFont: Font {
         switch self {
         case .seat: .system(size: 10, weight: .heavy, design: .rounded)
+        case .table: .system(size: 14, weight: .heavy, design: .rounded)
         case .board: .system(size: 17, weight: .heavy, design: .rounded)
         case .hand: .system(size: 26, weight: .heavy, design: .rounded)
         }
@@ -39,6 +44,7 @@ enum PlayingCardSize {
     var suitFont: Font {
         switch self {
         case .seat: .system(size: 7, weight: .bold)
+        case .table: .system(size: 10, weight: .bold)
         case .board: .system(size: 12, weight: .bold)
         case .hand: .system(size: 18, weight: .bold)
         }
@@ -47,6 +53,7 @@ enum PlayingCardSize {
     var spacing: CGFloat {
         switch self {
         case .seat: 2
+        case .table: 4
         case .board: 5
         case .hand: 7
         }
@@ -146,7 +153,7 @@ struct BoardCardsView: View {
             }
             ForEach(slotsToCome, id: \.self) { _ in
                 RoundedRectangle(cornerRadius: size.cornerRadius)
-                    .stroke(Color.white.opacity(0.28), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .stroke(AppTheme.muted.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .frame(width: size.width, height: size.height)
             }
         }
