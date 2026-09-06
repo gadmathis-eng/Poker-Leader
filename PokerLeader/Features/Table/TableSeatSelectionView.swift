@@ -218,7 +218,6 @@ struct TableSeatSelectionView: View {
                     onPlay: startGame
                 )
                 .frame(height: 500)
-                .padding(.horizontal, 4)
 
                 if isGameStarted {
                     handCard
@@ -233,7 +232,10 @@ struct TableSeatSelectionView: View {
             }
             .padding(.vertical)
         }
-        .background(AppTheme.background)
+        .background(PokerTableChrome.canvas)
+        .toolbarBackground(PokerTableChrome.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
         .navigationTitle("Table")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

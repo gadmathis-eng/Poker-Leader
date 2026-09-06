@@ -32,13 +32,14 @@ struct TableSeatOccupant: Equatable {
 }
 
 enum PokerTableChrome {
+    static let canvas = Color.black
     static let feltTop = Color(red: 0.10, green: 0.40, blue: 0.24)
     static let feltBottom = Color(red: 0.05, green: 0.24, blue: 0.14)
     static let rail = Color(red: 0.16, green: 0.18, blue: 0.21)
     static let railInner = Color(red: 0.22, green: 0.24, blue: 0.27)
-    static let sitStroke = Color.primary.opacity(0.38)
+    static let sitStroke = Color.white.opacity(0.58)
     static let feltText = Color.white.opacity(0.74)
-    static let occupiedFill = AppTheme.card
+    static let occupiedFill = Color(red: 0.10, green: 0.12, blue: 0.15)
 }
 
 struct PokerTableSeatLayout: View {
@@ -58,6 +59,8 @@ struct PokerTableSeatLayout: View {
             let seatSize = CGSize(width: seatWidth, height: seatHeight)
 
             ZStack {
+                PokerTableChrome.canvas
+
                 TableFelt()
                     .padding(.horizontal, PokerTableSeatGeometry.feltInsets(seatSize: seatSize).width)
                     .padding(.vertical, PokerTableSeatGeometry.feltInsets(seatSize: seatSize).height)
@@ -201,7 +204,7 @@ private struct TableFelt: View {
                         .stroke(AppTheme.positive.opacity(0.22), lineWidth: 2)
                         .padding(8)
                 }
-                .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+                .shadow(color: .black.opacity(0.55), radius: 18, y: 6)
         }
     }
 }
@@ -412,7 +415,7 @@ private struct SeatMarker: View {
         VStack(spacing: 3) {
             Text("\(seatNumber)")
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(AppTheme.muted)
+                .foregroundStyle(Color.white.opacity(0.7))
                 .frame(width: discSize, height: discSize)
                 .overlay(
                     Circle().strokeBorder(
@@ -423,7 +426,7 @@ private struct SeatMarker: View {
             Text("SIT")
                 .font(.system(size: 9, weight: .heavy))
                 .tracking(1)
-                .foregroundStyle(AppTheme.text)
+                .foregroundStyle(Color.white.opacity(0.9))
         }
     }
 
@@ -474,7 +477,7 @@ private struct SeatMarker: View {
     private func nameText(for occupant: TableSeatOccupant) -> some View {
         Text(occupant.playerName)
             .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : AppTheme.text)
+            .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : Color.white)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
     }
@@ -483,7 +486,7 @@ private struct SeatMarker: View {
         Text(occupant.stackLabel)
             .font(.system(size: 10, weight: .semibold, design: .rounded))
             .monospacedDigit()
-            .foregroundStyle(AppTheme.muted)
+            .foregroundStyle(Color.white.opacity(0.78))
             .lineLimit(1)
             .minimumScaleFactor(0.6)
     }
@@ -494,7 +497,7 @@ private struct SeatMarker: View {
         if occupant.isFolded {
             Text("Folded")
                 .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(AppTheme.muted)
+                .foregroundStyle(Color.white.opacity(0.7))
         } else if !occupant.cards.isEmpty || occupant.faceDownCount > 0 || occupant.committedLabel != nil {
             HStack(spacing: 4) {
                 if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
@@ -532,14 +535,14 @@ private struct SeatMarker: View {
     }
 
     private func initialColor(for occupant: TableSeatOccupant) -> Color {
-        occupant.isLocalUser ? AppTheme.contrastText : AppTheme.text
+        occupant.isLocalUser ? AppTheme.contrastText : Color.white
     }
 
     private func strokeColor(for occupant: TableSeatOccupant) -> Color {
         if isHighlighted(occupant) {
             return AppTheme.gold
         }
-        return occupant.isLocalUser ? AppTheme.positive : AppTheme.cardBorder
+        return occupant.isLocalUser ? AppTheme.positive : Color.white.opacity(0.24)
     }
 
     private var occupancyAccessibilityLabel: String {
