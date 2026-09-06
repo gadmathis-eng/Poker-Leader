@@ -6,8 +6,13 @@ import Foundation
 /// Seat 1 sits at the bottom center. The rest walk the rail counterclockwise
 /// (up the left side, across the top, down the right), like a live poker room.
 enum PokerTableSeatGeometry {
-    /// How round the table corners are, as a fraction of the shorter side.
-    static let cornerFraction: CGFloat = 0.32
+    /// Soft corners, but small enough that the long sides stay straight.
+    static let cornerFraction: CGFloat = 0.18
+
+    /// How far the felt sits inside the seat canvas.
+    static func feltInsets(seatSize: CGSize) -> CGSize {
+        CGSize(width: seatSize.width * 0.14, height: seatSize.height * 0.16)
+    }
 
     static func center(
         forSeat seat: Int,

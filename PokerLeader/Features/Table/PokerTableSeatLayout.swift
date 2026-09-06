@@ -62,8 +62,8 @@ struct PokerTableSeatLayout: View {
                 PokerTableChrome.canvas
 
                 TableFelt()
-                    .padding(.horizontal, seatWidth * 0.20)
-                    .padding(.vertical, seatHeight * 0.18)
+                    .padding(.horizontal, PokerTableSeatGeometry.feltInsets(seatSize: seatSize).width)
+                    .padding(.vertical, PokerTableSeatGeometry.feltInsets(seatSize: seatSize).height)
 
                 feltDecorations
                     .padding(.horizontal, seatWidth * 0.34)
@@ -94,7 +94,7 @@ struct PokerTableSeatLayout: View {
                 }
             }
             .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .accessibilityElement(children: .contain)
     }
@@ -153,52 +153,60 @@ struct PokerTableSeatLayout: View {
 
 private struct TableFelt: View {
     var body: some View {
-        RoundedRectangle(cornerRadius: 78, style: .continuous)
-            .fill(
-                LinearGradient(
-                    colors: [PokerTableChrome.feltTop, PokerTableChrome.feltBottom],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+        GeometryReader { proxy in
+            let radius = PokerTableSeatGeometry.cornerRadius(
+                for: CGRect(origin: .zero, size: proxy.size)
             )
-            .overlay {
-                RoundedRectangle(cornerRadius: 78, style: .continuous)
-                    .fill(
-                        RadialGradient(
-                            colors: [Color.white.opacity(0.07), Color.clear],
-                            center: .center,
-                            startRadius: 8,
-                            endRadius: 180
+            let innerRadius = max(radius - 8, 10)
+            let grooveRadius = max(radius - 6, 12)
+
+            RoundedRectangle(cornerRadius: radius, style: .circular)
+                .fill(
+                    LinearGradient(
+                        colors: [PokerTableChrome.feltTop, PokerTableChrome.feltBottom],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .circular)
+                        .fill(
+                            RadialGradient(
+                                colors: [Color.white.opacity(0.07), Color.clear],
+                                center: .center,
+                                startRadius: 8,
+                                endRadius: min(proxy.size.width, proxy.size.height) * 0.55
+                            )
                         )
-                    )
-                    .allowsHitTesting(false)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 70, style: .continuous)
-                    .stroke(Color.black.opacity(0.22), lineWidth: 10)
-                    .padding(11)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 78, style: .continuous)
-                    .stroke(
-                        LinearGradient(
-                            colors: [
-                                PokerTableChrome.railInner,
-                                PokerTableChrome.rail,
-                                Color.black.opacity(0.55)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
-                        lineWidth: 16
-                    )
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 72, style: .continuous)
-                    .stroke(AppTheme.positive.opacity(0.22), lineWidth: 2)
-                    .padding(8)
-            }
-            .shadow(color: .black.opacity(0.45), radius: 16, y: 8)
+                        .allowsHitTesting(false)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: innerRadius, style: .circular)
+                        .stroke(Color.black.opacity(0.22), lineWidth: 10)
+                        .padding(11)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .circular)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    PokerTableChrome.railInner,
+                                    PokerTableChrome.rail,
+                                    Color.black.opacity(0.55)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            ),
+                            lineWidth: 16
+                        )
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: grooveRadius, style: .circular)
+                        .stroke(AppTheme.positive.opacity(0.22), lineWidth: 2)
+                        .padding(8)
+                }
+                .shadow(color: .black.opacity(0.45), radius: 16, y: 8)
+        }
     }
 }
 
@@ -288,7 +296,7 @@ private struct TableLobbyCard: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .frame(maxWidth: 188)
+        .frame(maxWidth: 210)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AppTheme.card.opacity(0.96))
