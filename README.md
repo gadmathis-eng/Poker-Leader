@@ -53,10 +53,13 @@ PokerLeader/
 
 - **Circles** home with sample data (Uni Boys, London, Work)
 - **Join a table** on the Circles tab (top of the list) and on a circle's detail page
-- **Table** tab: personal buy-in, join with a 6-character code, share a table link
-- **Your tables** on the Table tab — hosted and joined tables, tap any one to edit its name, currency, or seat money
+- **Table** tab: the table you are at comes first — its code, Share, Edit, and **Open table** — with your buy-in, a join box, and any other tables underneath
+- **Your tables** — hosted and joined tables, tap any one to edit its name, currency, or seat money
 - **8-seat table** with a Play button after you save a buy-in and sit down — the table code sits next to the share button at the top, so you can read it out or tap it to copy without leaving the table
 - **A real hand of hold'em** dealt by the app — two cards each, then the ante round, the flop, the turn, and the river, each asking you to bet, check, or fold
+- **One card under the table** holds everything a hand asks of you: your two cards, what they add up to, whose turn it is, and the buttons
+- **Add money** while the table is being played — a stack in a hand belongs to that hand, so the money waits beside it and joins your stack as soon as the hand settles
+- **Buy in again** when you run out: the table says you have nothing left and offers the button, for however much you want, whatever you first sat down with
 - **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table
 - **New session → Live table** (+ buy-in only, no voice/type)
 - **Final stacks → Confirmation → Settlement → WhatsApp share**
