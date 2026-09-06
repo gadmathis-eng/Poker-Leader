@@ -169,7 +169,7 @@ struct TableSeatSelectionView: View {
                     onSelect: handleSeatTap,
                     onPlay: startGame
                 )
-                .frame(height: 360)
+                .frame(height: 316)
                 .padding(.horizontal)
 
                 if isGameStarted {
@@ -854,10 +854,10 @@ private struct PokerTableSeatLayout: View {
     let onSelect: (Int) -> Void
     let onPlay: () -> Void
 
-    private let seatWidth: CGFloat = 88
+    private let seatWidth: CGFloat = 80
     private let seatHeight: CGFloat = 92
     /// How far the felt reaches past the middle of each seat, so players sit at the table
-    /// instead of floating beside it. Keeps the table the same shape as the ring of seats.
+    /// instead of floating beside it.
     private let feltOverhang: CGFloat = 6
 
     var body: some View {
@@ -877,26 +877,50 @@ private struct PokerTableSeatLayout: View {
 
                 ForEach(1...seatCount, id: \.self) { seat in
                     let occupant = occupants.first { $0.seatNumber == seat }
-                    let angle = seatAngle(for: seat)
+                    let offset = seatOffset(for: seat, radiusX: radiusX, radiusY: radiusY)
                     SeatMarker(
                         seatNumber: seat,
                         occupant: occupant,
+                        // Near-side seats read outwards, so every player's cards land on the felt.
+                        isMirrored: offset.height > 0,
                         action: { onSelect(seat) }
                     )
                     .frame(width: seatWidth, height: seatHeight)
-                    .offset(
-                        x: cos(angle) * radiusX,
-                        y: sin(angle) * radiusY
-                    )
+                    .offset(offset)
                 }
             }
             .frame(width: size.width, height: size.height)
         }
     }
 
-    private func seatAngle(for seat: Int) -> CGFloat {
-        let step = 2 * CGFloat.pi / CGFloat(seatCount)
-        return CGFloat.pi / 2 + step * CGFloat(seat - 1)
+    /// Walks the edge of the table clockwise from the middle of the near side. Spacing the seats
+    /// by distance travelled rather than by angle spreads them along the long sides, so eight
+    /// seats come out as three near, three far, and one at each end.
+    private func seatOffset(for seat: Int, radiusX: CGFloat, radiusY: CGFloat) -> CGSize {
+        let perimeter = 4 * (radiusX + radiusY)
+        var walked = perimeter * CGFloat(seat - 1) / CGFloat(seatCount)
+
+        if walked <= radiusX {
+            return CGSize(width: -walked, height: radiusY)
+        }
+        walked -= radiusX
+
+        if walked <= 2 * radiusY {
+            return CGSize(width: -radiusX, height: radiusY - walked)
+        }
+        walked -= 2 * radiusY
+
+        if walked <= 2 * radiusX {
+            return CGSize(width: walked - radiusX, height: -radiusY)
+        }
+        walked -= 2 * radiusX
+
+        if walked <= 2 * radiusY {
+            return CGSize(width: radiusX, height: walked - radiusY)
+        }
+        walked -= 2 * radiusY
+
+        return CGSize(width: radiusX - walked, height: radiusY)
     }
 }
 
@@ -922,7 +946,7 @@ private struct TableCenterView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
 
-                BoardCardsView(cards: board)
+                BoardCardsView(cards: board, size: .table)
 
                 HStack(spacing: 5) {
                     Circle()
@@ -976,22 +1000,24 @@ private struct TablePlayButton: View {
 
 /// The table itself: a rail around a green surface, lit from above the way a room light falls on felt.
 private struct TableFelt: View {
-    private let railWidth: CGFloat = 9
+    private let railWidth: CGFloat = 10
+    private let bettingLineInset: CGFloat = 22
 
     var body: some View {
         GeometryReader { proxy in
-            let spotlight = max(proxy.size.width, proxy.size.height) * 0.62
+            let size = proxy.size
+            let corner = min(size.width, size.height) * 0.28
+            let spotlight = max(size.width, size.height) * 0.62
 
             ZStack {
-                Ellipse()
+                rail(corner)
                     .fill(AppTheme.card)
                     .shadow(color: .black.opacity(0.12), radius: 10, y: 5)
 
-                Ellipse()
+                rail(corner)
                     .strokeBorder(AppTheme.cardBorder, lineWidth: 1)
 
-                Ellipse()
-                    .inset(by: railWidth)
+                rail(corner - railWidth)
                     .fill(
                         RadialGradient(
                             colors: [
@@ -1003,17 +1029,23 @@ private struct TableFelt: View {
                             endRadius: spotlight
                         )
                     )
+                    .padding(railWidth)
 
-                Ellipse()
-                    .inset(by: railWidth)
+                rail(corner - railWidth)
                     .strokeBorder(AppTheme.positive.opacity(0.3), lineWidth: 1)
+                    .padding(railWidth)
 
                 // The betting line players push their chips over.
-                Ellipse()
-                    .inset(by: railWidth + 20)
+                rail(corner - railWidth - bettingLineInset)
                     .strokeBorder(AppTheme.positive.opacity(0.18), lineWidth: 1)
+                    .padding(railWidth + bettingLineInset)
             }
         }
+    }
+
+    /// Each layer keeps the corners concentric by shrinking the radius along with the inset.
+    private func rail(_ corner: CGFloat) -> RoundedRectangle {
+        RoundedRectangle(cornerRadius: max(corner, 4), style: .continuous)
     }
 }
 
@@ -1115,6 +1147,8 @@ private struct ShowdownRows: View {
 private struct SeatMarker: View {
     let seatNumber: Int
     let occupant: TableSeatOccupant?
+    /// Stacks the seat the other way up, for players sitting on the near side of the table.
+    var isMirrored = false
     let action: () -> Void
 
     private let discSize: CGFloat = 30
@@ -1123,19 +1157,17 @@ private struct SeatMarker: View {
         Button(action: action) {
             VStack(spacing: 2) {
                 if let occupant {
-                    disc(for: occupant)
-                    Text(occupant.isLocalUser ? "You" : occupant.playerName)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : AppTheme.text)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    Text(occupant.stackLabel)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(AppTheme.muted)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                    handRow(for: occupant)
+                    if isMirrored {
+                        handRow(for: occupant)
+                        stackText(for: occupant)
+                        nameText(for: occupant)
+                        disc(for: occupant)
+                    } else {
+                        disc(for: occupant)
+                        nameText(for: occupant)
+                        stackText(for: occupant)
+                        handRow(for: occupant)
+                    }
                 } else {
                     openSeatRing
                 }
@@ -1149,6 +1181,23 @@ private struct SeatMarker: View {
         .disabled(occupant?.isLocalUser == false)
         .accessibilityHint(accessibilityHint)
         .accessibilityLabel(occupancyAccessibilityLabel)
+    }
+
+    private func nameText(for occupant: TableSeatOccupant) -> some View {
+        Text(occupant.isLocalUser ? "You" : occupant.playerName)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(isHighlighted(occupant) ? AppTheme.gold : AppTheme.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+    }
+
+    private func stackText(for occupant: TableSeatOccupant) -> some View {
+        Text(occupant.stackLabel)
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(AppTheme.muted)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 
     private var openSeatRing: some View {
