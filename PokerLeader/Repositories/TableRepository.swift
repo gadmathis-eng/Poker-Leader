@@ -260,6 +260,31 @@ final class TableRepository {
         publishLocalSeat(on: table)
     }
 
+    /// More money on the table for the player using this phone. A stack that is
+    /// already in a hand belongs to the hand, so money added mid-hand waits
+    /// beside it and joins their stack when the hand settles. Anyone not in the
+    /// hand gets it on their seat straight away.
+    @discardableResult
+    func addMoney(_ amount: Decimal, on table: OpenTableModel) -> Bool {
+        let added = amount.clampedToNonNegative.roundedToHundredths
+        guard added > 0 else { return false }
+
+        if let hand = table.hand,
+           let next = HandRound.addingMoney(added, playerKey: localPlayerKey, to: hand) {
+            table.hand = next
+            if next.isComplete {
+                payOutHand(next, on: table)
+            }
+            try? context.save()
+            publish(table)
+            return true
+        }
+
+        guard let seat = mySeat(on: table) else { return false }
+        updateLocalAmount(on: table, amount: seat.amountDecimal + added)
+        return true
+    }
+
     func markStarted(_ table: OpenTableModel) {
         table.isStarted = true
         table.updatedAt = .now

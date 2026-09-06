@@ -43,8 +43,12 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    /// The most you can have on the table: what you brought, or more once you
+    /// have added to it.
     private var availableMoney: Double {
-        max(NSDecimalNumber(decimal: tableBuyInAmount).doubleValue, 0)
+        let brought = NSDecimalNumber(decimal: tableBuyInAmount).doubleValue
+        let seated = NSDecimalNumber(decimal: mySeat?.amountDecimal ?? 0).doubleValue
+        return max(brought, seated, 0)
     }
 
     private var hasMoney: Bool {
@@ -79,6 +83,25 @@ struct TableSeatSelectionView: View {
 
     private var localHandSeat: SharedTableHandSeat? {
         hand?.seat(forPlayerKey: repo.localPlayerKey)
+    }
+
+    private var mySeat: SharedTableSeat? {
+        occupants.first { $0.playerKey == repo.localPlayerKey }
+    }
+
+    /// Once cards are out, the slider is no longer the way money reaches the
+    /// table: anyone sitting down adds to what they have instead.
+    private var canAddMoney: Bool {
+        table != nil && hand != nil && mySeat != nil
+    }
+
+    /// What you have while a hand is out, or what is on the table between hands.
+    private var moneyLine: String? {
+        if let stackLine = narration.stackLine {
+            return stackLine
+        }
+        guard let seat = mySeat else { return nil }
+        return "\(MoneyFormatting.plain(stackAmount(for: seat), currencyCode: tableCurrencyCode)) on the table"
     }
 
     private var narration: HandNarration {
@@ -145,7 +168,7 @@ struct TableSeatSelectionView: View {
 
                 if isGameStarted {
                     handCard
-                    if selectedSeat != nil, localHandSeat == nil {
+                    if hand == nil, selectedSeat != nil {
                         moneyInCard
                     }
                 } else if selectedSeat == nil {
@@ -245,10 +268,21 @@ struct TableSeatSelectionView: View {
                 )
             }
 
-            if let stackLine = narration.stackLine {
-                Text(stackLine)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(AppTheme.muted)
+            if moneyLine != nil || canAddMoney {
+                HStack(alignment: .firstTextBaseline) {
+                    if let moneyLine {
+                        Text(moneyLine)
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(AppTheme.muted)
+                    }
+                    Spacer(minLength: 8)
+                    if canAddMoney {
+                        Button("Add money", action: presentTopUpEditor)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(AppTheme.gold)
+                            .buttonStyle(.plain)
+                    }
+                }
             }
 
             if let handMessage {
@@ -379,7 +413,7 @@ struct TableSeatSelectionView: View {
 
     private func stackAmount(for seat: SharedTableSeat) -> Decimal {
         if let handSeat = hand?.seat(forPlayerKey: seat.playerKey) {
-            return (handSeat.remaining + handSeat.awardedDecimal).roundedToHundredths
+            return (handSeat.remaining + handSeat.awardedDecimal + handSeat.toppedUpDecimal).roundedToHundredths
         }
         if seat.playerKey == repo.localPlayerKey, !isGameStarted {
             return seatedAmount
@@ -494,6 +528,19 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    private func presentTopUpEditor() {
+        amountEditor = .topUp(
+            MoneyAmountEditorState(
+                id: UUID(),
+                title: "Add money",
+                subtitle: localHandSeat == nil ? "Goes on the table now" : "Plays from the next hand",
+                currencyCode: tableCurrencyCode,
+                text: "0",
+                minimum: TableMoney.penny
+            )
+        )
+    }
+
     /// The keypad opens empty so the whole bet is typed in, rather than starting
     /// on a size nobody asked for.
     private func presentBetEditor() {
@@ -520,6 +567,22 @@ struct TableSeatSelectionView: View {
             applyAnteText(text)
         case .bet:
             submit(.bet, amount: Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0)
+        case .topUp:
+            addMoney(Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0)
+        }
+    }
+
+    private func addMoney(_ amount: Decimal) {
+        guard let table, repo.addMoney(amount, on: table) else { return }
+        handMessage = nil
+        withAnimation(.easeOut(duration: 0.18)) {
+            hand = table.hand
+            occupants = table.seats
+        }
+        if localHandSeat == nil {
+            amountText = hundredthsText(
+                NSDecimalNumber(decimal: mySeat?.amountDecimal ?? 0).doubleValue
+            )
         }
     }
 
@@ -666,10 +729,11 @@ private enum TableAmountEditor: Identifiable {
     case seat(MoneyAmountEditorState)
     case ante(MoneyAmountEditorState)
     case bet(MoneyAmountEditorState)
+    case topUp(MoneyAmountEditorState)
 
     var state: MoneyAmountEditorState {
         switch self {
-        case .seat(let state), .ante(let state), .bet(let state):
+        case .seat(let state), .ante(let state), .bet(let state), .topUp(let state):
             state
         }
     }

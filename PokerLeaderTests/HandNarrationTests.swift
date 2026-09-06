@@ -82,6 +82,15 @@ final class HandNarrationTests: XCTestCase {
         XCTAssertTrue(told.detail.hasSuffix("Nothing to put in yet"))
     }
 
+    func testMoneyAddedMidHandIsSaidToBeWaiting() throws {
+        var hand = try HandRound.start(seats: headsUpTable(), dealerSeat: nil, ante: 1)
+        hand = try XCTUnwrap(HandRound.addingMoney(10, playerKey: "ben", to: hand))
+
+        let told = narration(hand, for: "ben")
+
+        XCTAssertEqual(told.stackLine, "Ante £1 · £20 behind · £10 joins next hand")
+    }
+
     // MARK: - Waiting on somebody else
 
     func testWaitingNamesWhoeverTheTableIsWaitingFor() throws {

@@ -111,7 +111,11 @@ struct HandNarration {
     /// prompt itself stays to one line.
     var stackLine: String? {
         guard let hand, !hand.isComplete, let seat = localSeat else { return nil }
-        return "Ante \(money(hand.anteDecimal)) · \(money(seat.remaining)) behind"
+        var parts = ["Ante \(money(hand.anteDecimal))", "\(money(seat.remaining)) behind"]
+        if seat.toppedUpDecimal > 0 {
+            parts.append("\(money(seat.toppedUpDecimal)) joins next hand")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var waitingLine: String {
