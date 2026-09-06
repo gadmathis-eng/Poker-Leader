@@ -37,7 +37,10 @@ enum PokerTableChrome {
     static let feltBottom = Color(red: 0.05, green: 0.24, blue: 0.14)
     static let rail = Color(red: 0.16, green: 0.18, blue: 0.21)
     static let railInner = Color(red: 0.22, green: 0.24, blue: 0.27)
+    static let sitStroke = Color.white.opacity(0.58)
     static let feltText = Color.white.opacity(0.74)
+    static let emptyFill = Color.white.opacity(0.06)
+    static let occupiedFill = Color(red: 0.10, green: 0.12, blue: 0.15)
 }
 
 struct PokerTableSeatLayout: View {
@@ -48,8 +51,8 @@ struct PokerTableSeatLayout: View {
     let onSelect: (Int) -> Void
     let onPlay: () -> Void
 
-    private let seatWidth: CGFloat = 92
-    private let seatHeight: CGFloat = 84
+    private let seatWidth: CGFloat = 84
+    private let seatHeight: CGFloat = 86
 
     var body: some View {
         GeometryReader { proxy in
@@ -268,7 +271,7 @@ private struct TableLobbyCard: View {
             Text(
                 isPlayEnabled
                     ? "Share this table with your friends, then deal."
-                    : "Tap an open seat, then share the table."
+                    : "Tap SIT to take a seat, then share the table."
             )
             .font(.caption2)
             .foregroundStyle(AppTheme.muted)
@@ -368,65 +371,19 @@ private struct SeatChip: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 1) {
-                if let occupant {
-                    HStack(spacing: 3) {
-                        if occupant.isLeader {
-                            Image(systemName: "crown.fill")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(AppTheme.gold)
-                        }
-                        Text(occupant.playerName)
-                            .font(.caption.weight(.bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                    }
-                    Text(occupant.stackLabel)
-                        .font(.caption2.weight(.semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                        .foregroundStyle(AppTheme.contrastText.opacity(0.8))
-                    if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
-                        CardRowView(
-                            cards: occupant.cards,
-                            faceDownCount: occupant.faceDownCount,
-                            size: .seat
-                        )
-                        .padding(.vertical, 1)
-                    }
-                    if occupant.isFolded {
-                        Text("Folded")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(AppTheme.contrastText.opacity(0.7))
-                    } else if let committedLabel = occupant.committedLabel {
-                        Text("in \(committedLabel)")
-                            .font(.system(size: 9, weight: .bold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.6)
-                            .foregroundStyle(AppTheme.contrastText)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1)
-                            .background(Capsule().fill(AppTheme.gold))
-                    }
-                } else {
-                    Image(systemName: "chair.lounge.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text("Seat \(seatNumber)")
-                        .font(.caption2.weight(.semibold))
+            ZStack(alignment: .topLeading) {
+                seatBody
+
+                if occupant?.isDealer == true {
+                    Text("D")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(AppTheme.contrastText)
+                        .frame(width: 16, height: 16)
+                        .background(Circle().fill(AppTheme.gold))
+                        .offset(x: -4, y: -5)
+                        .accessibilityHidden(true)
                 }
             }
-            .foregroundStyle(isOccupied ? AppTheme.contrastText : AppTheme.text)
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(fillColor)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(strokeColor, lineWidth: strokeWidth)
-            )
-            .opacity(occupant?.isFolded == true ? 0.55 : 1)
         }
         .buttonStyle(.plain)
         .disabled(occupant?.isLocalUser == false)
@@ -434,27 +391,123 @@ private struct SeatChip: View {
         .accessibilityLabel(occupancyAccessibilityLabel)
     }
 
-    private var fillColor: Color {
-        guard isOccupied else { return AppTheme.card }
-        return occupant?.isFolded == true ? AppTheme.muted : AppTheme.positive
+    @ViewBuilder
+    private var seatBody: some View {
+        if let occupant {
+            occupiedSeat(occupant)
+        } else {
+            emptySeat
+        }
     }
 
-    private var strokeColor: Color {
-        if occupant?.isActing == true || occupant?.isWinner == true {
+    private var emptySeat: some View {
+        VStack(spacing: 2) {
+            Text("SIT")
+                .font(.caption.weight(.heavy))
+                .tracking(1)
+            Text("\(seatNumber)")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.white.opacity(0.7))
+        }
+        .foregroundStyle(Color.white.opacity(0.9))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(PokerTableChrome.emptyFill)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(
+                    PokerTableChrome.sitStroke,
+                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                )
+        )
+        .padding(.horizontal, 8)
+        .padding(.vertical, 14)
+    }
+
+    private func occupiedSeat(_ occupant: TableSeatOccupant) -> some View {
+        VStack(spacing: 1) {
+            HStack(spacing: 3) {
+                if occupant.isLeader {
+                    Image(systemName: "crown.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppTheme.gold)
+                }
+                Text(occupant.playerName)
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+            Text(occupant.stackLabel)
+                .font(.caption2.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .foregroundStyle(stackColor(for: occupant))
+            if !occupant.cards.isEmpty || occupant.faceDownCount > 0 {
+                CardRowView(
+                    cards: occupant.cards,
+                    faceDownCount: occupant.faceDownCount,
+                    size: .seat
+                )
+                .padding(.vertical, 1)
+            }
+            if occupant.isFolded {
+                Text("Folded")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.7))
+            } else if let committedLabel = occupant.committedLabel {
+                Text("in \(committedLabel)")
+                    .font(.system(size: 9, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .foregroundStyle(AppTheme.contrastText)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(Capsule().fill(AppTheme.gold))
+            }
+        }
+        .foregroundStyle(nameColor(for: occupant))
+        .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(fillColor(for: occupant))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(strokeColor(for: occupant), lineWidth: strokeWidth(for: occupant))
+        )
+        .opacity(occupant.isFolded ? 0.55 : 1)
+    }
+
+    private func fillColor(for occupant: TableSeatOccupant) -> Color {
+        if occupant.isFolded { return AppTheme.muted.opacity(0.7) }
+        if occupant.isLocalUser { return AppTheme.positive }
+        return PokerTableChrome.occupiedFill
+    }
+
+    private func nameColor(for occupant: TableSeatOccupant) -> Color {
+        occupant.isLocalUser ? AppTheme.contrastText : Color.white
+    }
+
+    private func stackColor(for occupant: TableSeatOccupant) -> Color {
+        occupant.isLocalUser ? AppTheme.contrastText.opacity(0.8) : Color.white.opacity(0.78)
+    }
+
+    private func strokeColor(for occupant: TableSeatOccupant) -> Color {
+        if occupant.isActing || occupant.isWinner {
             return AppTheme.gold
         }
-        return isOccupied ? AppTheme.positive : AppTheme.cardBorder
+        return occupant.isLocalUser ? AppTheme.positive : Color.white.opacity(0.16)
     }
 
-    private var strokeWidth: CGFloat {
-        if occupant?.isActing == true || occupant?.isWinner == true {
-            return 3
-        }
-        return isOccupied ? 2 : 1
+    private func strokeWidth(for occupant: TableSeatOccupant) -> CGFloat {
+        occupant.isActing || occupant.isWinner ? 3 : 1.5
     }
 
     private var occupancyAccessibilityLabel: String {
-        guard let occupant else { return "Seat \(seatNumber)" }
+        guard let occupant else { return "Seat \(seatNumber), sit" }
         var label = occupant.isLeader ? "\(occupant.playerName), party leader" : occupant.playerName
         if occupant.isDealer {
             label += ", dealer"
