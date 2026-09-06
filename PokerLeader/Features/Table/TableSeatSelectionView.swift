@@ -232,10 +232,7 @@ struct TableSeatSelectionView: View {
             }
             .padding(.vertical)
         }
-        .background(PokerTableChrome.canvas)
-        .toolbarBackground(PokerTableChrome.canvas, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .background(AppTheme.background)
         .navigationTitle("Table")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
