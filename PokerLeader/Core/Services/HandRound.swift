@@ -431,17 +431,6 @@ enum HandRound {
         return Swift.min(hand.callTarget + TableMoney.penny, seat.streetCap)
     }
 
-    /// A sensible opening size for the bet keypad: twice what is in front of the
-    /// table, or half the pot when nobody has bet yet.
-    static func suggestedBet(in hand: SharedTableHand, forPlayerKey playerKey: String) -> Decimal {
-        guard let seat = hand.seat(forPlayerKey: playerKey) else { return 0 }
-        let base = hand.callTarget > 0
-            ? (hand.callTarget * 2).roundedToHundredths
-            : (hand.pot / 2).roundedToHundredths
-        let target = Swift.max(base, minimumBet(in: hand, forPlayerKey: playerKey))
-        return Swift.min(target, seat.streetCap)
-    }
-
     private static func playableSeats(_ seats: [SharedTableSeat]) -> [SharedTableSeat] {
         OpenTableSeatsPacking.players(in: seats)
             .filter { $0.amountDecimal > 0 }
