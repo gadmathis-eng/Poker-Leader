@@ -21,6 +21,7 @@ struct TableSeatSelectionView: View {
     @State private var handMessage: String?
 
     private static let amountStep = 0.01
+    private static let nextHandPause: Duration = .seconds(2)
 
     private var repo: TableRepository { TableRepository(context: context) }
 
@@ -83,6 +84,13 @@ struct TableSeatSelectionView: View {
 
     private var localHandSeat: SharedTableHandSeat? {
         hand?.seat(forPlayerKey: repo.localPlayerKey)
+    }
+
+    /// A finished hand deals the next one itself. The id is the trigger so a
+    /// new result starts the pause again, and leaving the screen cancels it.
+    private var completedHandID: UUID? {
+        guard let hand, hand.isComplete else { return nil }
+        return hand.id
     }
 
     private var mySeat: SharedTableSeat? {
@@ -231,6 +239,9 @@ struct TableSeatSelectionView: View {
                 await syncSharedTable()
             }
         }
+        .task(id: completedHandID) {
+            await dealNextHandWhenReady()
+        }
         .sheet(item: $amountEditor) { editor in
             MoneyAmountEditorSheet(editor: editor.state) { text in
                 apply(editedAmount: text, for: editor)
@@ -318,11 +329,8 @@ struct TableSeatSelectionView: View {
     private var handActions: some View {
         switch narration.turn {
         case .handOver:
-            HStack(spacing: 10) {
-                if isOutOfMoney {
-                    buyInAgainButton
-                }
-                HandActionButton(title: "Next hand", tint: AppTheme.positive, action: dealNextHand)
+            if isOutOfMoney {
+                buyInAgainButton
             }
         case .toAct(let toCall):
             HStack(spacing: 10) {
@@ -497,17 +505,27 @@ struct TableSeatSelectionView: View {
         }
     }
 
-    private func dealNextHand() {
-        guard let table else { return }
-        do {
-            try repo.dealNextHand(on: table)
-            handMessage = nil
-            withAnimation(.easeOut(duration: 0.18)) {
-                hand = table.hand
-                occupants = table.seats
+    /// Lets the table read the winner, then the host deals without anyone
+    /// tapping through. Guests wait for that hand to land. If two people do
+    /// not have money yet, keep trying as they sit back down.
+    private func dealNextHandWhenReady() async {
+        guard let table, let hand, hand.isComplete else { return }
+        try? await Task.sleep(for: Self.nextHandPause)
+        while !Task.isCancelled {
+            guard table.hand?.id == hand.id, table.hand?.isComplete == true else { return }
+            guard table.isHostLocally else { return }
+            do {
+                try repo.dealNextHand(on: table)
+                handMessage = nil
+                withAnimation(.easeOut(duration: 0.18)) {
+                    self.hand = table.hand
+                    occupants = table.seats
+                }
+                return
+            } catch {
+                handMessage = error.localizedDescription
+                try? await Task.sleep(for: .seconds(3))
             }
-        } catch {
-            handMessage = error.localizedDescription
         }
     }
 

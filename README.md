@@ -60,7 +60,7 @@ PokerLeader/
 - **One card under the table** holds everything a hand asks of you: your two cards, what they add up to, whose turn it is, and the buttons
 - **Add money** while the table is being played — a stack in a hand belongs to that hand, so the money waits beside it and joins your stack as soon as the hand settles
 - **Buy in again** when you run out: the table says you have nothing left and offers the button, for however much you want, whatever you first sat down with
-- **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table
+- **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table. The next hand deals itself — nobody has to tap through.
 - **New session → Live table** (+ buy-in only, no voice/type)
 - **Final stacks → Confirmation → Settlement → WhatsApp share**
 - **History**, **Leaderboard**, **You** settings tab
