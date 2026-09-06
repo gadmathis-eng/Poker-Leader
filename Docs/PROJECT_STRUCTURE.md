@@ -11,6 +11,7 @@ PokerLeader/
 │   ├── Persistence/              ModelContainer + sample data
 │   ├── Services/                 Settlement, leaderboard, badges, WhatsApp text
 │   │                             HandRound + PokerHandEvaluator deal and read a hand
+│   │                             HandNarration puts the hand in front of you into words
 │   ├── Theme/                    Colors, spacing
 │   ├── Extensions/               Money + date formatting
 │   └── Firebase/                 Placeholder until GoogleService-Info.plist

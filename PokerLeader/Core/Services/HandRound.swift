@@ -417,9 +417,30 @@ enum HandRound {
     static func stacksAfter(_ hand: SharedTableHand) -> [String: Decimal] {
         var stacks: [String: Decimal] = [:]
         for seat in hand.seats {
-            stacks[seat.playerKey] = (seat.remaining + seat.awardedDecimal).roundedToHundredths
+            stacks[seat.playerKey] = (seat.remaining + seat.awardedDecimal + seat.toppedUpDecimal).roundedToHundredths
         }
         return stacks
+    }
+
+    // MARK: - Money put on the table mid-hand
+
+    /// More money in front of a player who is already in a hand. It cannot be
+    /// bet in this hand, so it waits beside their stack and is theirs once the
+    /// hand settles. Nil when there is nothing to add or the player is not in
+    /// the hand, so the caller can put the money on their seat instead.
+    static func addingMoney(
+        _ amount: Decimal,
+        playerKey: String,
+        to hand: SharedTableHand
+    ) -> SharedTableHand? {
+        let added = amount.clampedToNonNegative.roundedToHundredths
+        guard added > 0 else { return nil }
+        guard let index = hand.seats.firstIndex(where: { $0.playerKey == playerKey }) else { return nil }
+
+        var next = hand
+        next.seats[index].toppedUp = TableMoney.string(next.seats[index].toppedUpDecimal + added)
+        next.revision += 1
+        return next
     }
 
 

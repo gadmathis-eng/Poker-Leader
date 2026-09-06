@@ -22,6 +22,8 @@ struct TableSeatOccupant: Equatable {
     var faceDownCount: Int = 0
     var handSummary: String?
     var isLocalUser: Bool
+    /// What tapping your own seat does right now.
+    var tapHint: String?
     var isLeader: Bool
     var isDealer: Bool
     var isActing: Bool
@@ -525,8 +527,8 @@ private struct SeatChip: View {
         if occupant?.isLocalUser == false {
             return "Seat taken"
         }
-        if isOccupied {
-            return "Your buy-in. Tap to edit the amount."
+        if let occupant {
+            return occupant.tapHint ?? "Your buy-in. Tap to edit the amount."
         }
         return "Sits at this seat"
     }
