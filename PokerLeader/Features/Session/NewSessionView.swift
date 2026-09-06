@@ -80,8 +80,9 @@ struct NewSessionView: View {
     var body: some View {
         Group {
             if let circle {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 20) {
                         SectionHeader(title: "Session setup")
                         Text("New session")
                             .font(.title2.bold())
@@ -219,36 +220,15 @@ struct NewSessionView: View {
                             )
                         }
 
-                        VStack(spacing: 12) {
-                            Button(action: startSession) {
-                                Text("Start session →")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(AppTheme.positive)
-                                    .foregroundStyle(AppTheme.contrastText)
-                                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                            }
-                            .disabled(!isValidSetup)
-
-                            Button(action: startTable) {
-                                Text("Start table →")
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(AppTheme.positive)
-                                    .foregroundStyle(AppTheme.contrastText)
-                                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                            }
-                            .disabled(!canStartTable)
-                            .accessibilityHint("Opens a playable poker table for this circle")
-
-                            if let tableStartError {
-                                Text(tableStartError)
-                                    .font(.caption)
-                                    .foregroundStyle(AppTheme.negative)
-                            }
-                        }
                     }
                     .padding()
+                    }
+
+                    startActions
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+                        .background(AppTheme.background)
                 }
                 .background(AppTheme.background)
                 .navigationTitle("")
@@ -283,6 +263,37 @@ struct NewSessionView: View {
                 }
             } else {
                 ContentUnavailableView("Circle not found", systemImage: "exclamationmark.circle")
+            }
+        }
+    }
+
+    private var startActions: some View {
+        VStack(spacing: 12) {
+            Button(action: startSession) {
+                Text("Start session →")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppTheme.positive)
+                    .foregroundStyle(AppTheme.contrastText)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            }
+            .disabled(!isValidSetup)
+
+            Button(action: startTable) {
+                Text("Start table →")
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppTheme.positive)
+                    .foregroundStyle(AppTheme.contrastText)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            }
+            .disabled(!canStartTable)
+            .accessibilityHint("Opens a playable poker table for this circle")
+
+            if let tableStartError {
+                Text(tableStartError)
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.negative)
             }
         }
     }
