@@ -89,12 +89,13 @@ struct CreateTableSheet: View {
                     StandardBuyInCard(
                         title: "Ante",
                         showsCurrencyButton: false,
+                        showsEditHint: true,
                         amount: anteAmount ?? 0,
                         currencyCode: tableCurrencyCode,
                         onAmountTap: presentAnteEditor,
                         onCurrencyTap: {}
                     )
-                    Text("What everyone puts in to stay in the hand. Tap the amount to change it.")
+                    Text("What everyone puts in to stay in the hand. Tap Edit to change it.")
                         .font(.caption)
                         .foregroundStyle(AppTheme.muted)
 

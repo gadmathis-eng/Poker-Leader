@@ -404,19 +404,29 @@ struct TableSeatSelectionView: View {
     private var sitDownCard: some View {
         VStack(spacing: 14) {
             moneyInRows
+                .cardSurface()
 
-            Divider()
-                .overlay(AppTheme.cardBorder)
-
-            Button(action: presentAnteEditor) {
+            if canEditAnte {
+                StandardBuyInCard(
+                    title: "Ante",
+                    showsCurrencyButton: false,
+                    showsEditHint: true,
+                    amount: anteAmount,
+                    currencyCode: tableCurrencyCode,
+                    onAmountTap: presentAnteEditor,
+                    onCurrencyTap: {}
+                )
+                Text("What everyone puts in to stay in the hand. Tap Edit to change it.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.muted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Ante")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(AppTheme.text)
-                        Text(canEditAnte
-                             ? "Tap to set what everyone puts in to stay in the hand"
-                             : "What everyone puts in to stay in the hand")
+                        Text("What everyone puts in to stay in the hand")
                             .font(.caption2)
                             .foregroundStyle(AppTheme.muted)
                     }
@@ -424,18 +434,10 @@ struct TableSeatSelectionView: View {
                     Text(MoneyFormatting.plain(anteAmount, currencyCode: tableCurrencyCode))
                         .font(.subheadline.weight(.bold))
                         .foregroundStyle(AppTheme.gold)
-                    if canEditAnte {
-                        Image(systemName: "pencil")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(AppTheme.muted)
-                    }
                 }
+                .cardSurface()
             }
-            .buttonStyle(.plain)
-            .disabled(!canEditAnte)
-            .accessibilityLabel(canEditAnte ? "Edit ante" : "Ante")
         }
-        .cardSurface()
         .padding(.horizontal)
     }
 
