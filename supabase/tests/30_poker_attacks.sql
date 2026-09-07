@@ -71,6 +71,17 @@ join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname = 'poker_start_hand'
   and pg_get_function_identity_arguments(p.oid) like '%jsonb%';
+select public.test_assert(
+    (
+        select count(*)
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname = 'poker_start_hand'
+          and pg_get_function_identity_arguments(p.oid) like '%jsonb%'
+    ) = 0,
+    'clients must not be able to start a hand with a deck'
+);
 
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select public.poker_start_hand_internal('POKER1', '["2c","Ah","7d","Kh","3h","9h","Jh","4s","5d"]'::jsonb)
@@ -159,6 +170,13 @@ select has_table_privilege('authenticated', 'public.poker_hands', 'UPDATE') as c
        has_table_privilege('authenticated', 'public.poker_hands', 'SELECT') as can_select_hands,
        has_table_privilege('authenticated', 'public.poker_hand_seats', 'SELECT') as can_select_seats,
        has_table_privilege('authenticated', 'public.poker_hand_seats', 'UPDATE') as can_update_seats;
+select public.test_assert(
+    not has_table_privilege('authenticated', 'public.poker_hands', 'UPDATE')
+    and not has_table_privilege('authenticated', 'public.poker_hands', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.poker_hand_seats', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.poker_hand_seats', 'UPDATE'),
+    'authenticated must not read or write poker engine tables'
+);
 
 \echo '=== P6. act out of turn ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
@@ -223,6 +241,10 @@ select (
     select count(*) from public.poker_hand_actions
     where action_id = 'guest-call-1'
 ) as action_rows;
+select public.test_assert(
+    (select count(*) from public.poker_hand_actions where action_id = 'guest-call-1') = 1,
+    'replayed action must not insert a second row'
+);
 
 \echo '--- a second different action from the same player is out of turn ---'
 do $$
@@ -256,6 +278,12 @@ select :'showdown'::jsonb->>'isComplete' as complete,
        :'showdown'::jsonb->>'resultSummary' as result,
        :'showdown'::jsonb->>'winnerSeats' as winners,
        :'showdown'::jsonb->'board' as board;
+select public.test_assert(
+    (:'showdown'::jsonb->>'isComplete')::boolean
+    and (:'showdown'::jsonb->>'isRevealed')::boolean
+    and (:'showdown'::jsonb->>'winnerSeats') is not null,
+    'server showdown must complete, reveal, and name a winner'
+);
 
 select * from public.vault_table_chips('POKER1') order by player_key;
 
@@ -273,6 +301,13 @@ $$;
 select count(*) as hand_ledger_rows
 from public.vault_ledger_transactions
 where kind = 'table_hand' and table_invite_code = 'POKER1';
+select public.test_assert(
+    (
+        select count(*) from public.vault_ledger_transactions
+        where kind = 'table_hand' and table_invite_code = 'POKER1'
+    ) = 1,
+    'the same hand must settle once'
+);
 
 \echo '=== P13. recover committed chips by leaving ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
@@ -294,6 +329,11 @@ select (
     (:'host_leave'::jsonb->>'returned_cents')::bigint
     = :'host_poker1_before_leave'::bigint - 100
 ) as host_left_without_committed_ante;
+select public.test_assert(
+    (:'host_leave'::jsonb->>'returned_cents')::bigint
+    = :'host_poker1_before_leave'::bigint - 100,
+    'leaving mid-hand must withhold the committed ante'
+);
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select * from public.vault_table_chips('POKER1');
@@ -305,10 +345,24 @@ select public.vault_summary()->>'in_play_cents' as guest_in_play_after_foldout;
 select has_table_privilege('authenticated', 'public.poker_hands', 'SELECT') as can_select_hands,
        has_table_privilege('authenticated', 'public.poker_hand_seats', 'SELECT') as can_select_seats,
        has_table_privilege('authenticated', 'public.poker_hand_actions', 'SELECT') as can_select_actions;
+select public.test_assert(
+    not has_table_privilege('authenticated', 'public.poker_hands', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.poker_hand_seats', 'SELECT')
+    and not has_table_privilege('authenticated', 'public.poker_hand_actions', 'SELECT'),
+    'authenticated must not select hole cards or actions'
+);
 
 \echo '=== P15. books still reconcile ==='
 select * from public.vault_reconcile_accounts();
 select * from public.vault_reconcile_transactions();
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_accounts()),
+    'account ledger must reconcile after POKER1'
+);
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_transactions()),
+    'transaction ledger must reconcile after POKER1'
+);
 
 -- ---------------------------------------------------------------------------
 -- Fresh table for the remaining attacks, so they do not depend on POKER1.
@@ -336,6 +390,10 @@ insert into public.open_tables (
 -- Client asks to register the table as USD. The server must keep GBP.
 select currency_code as registered_as
 from public.vault_register_table('POKER2', 2000, 8000, 'USD');
+select public.test_assert(
+    (select currency_code from public.vault_tables where invite_code = 'POKER2') = 'GBP',
+    'registering as USD must not change a GBP table'
+);
 
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select public.vault_open('GBP');
@@ -365,6 +423,11 @@ select session_currency_code as currency_after_host_flip
 from public.open_tables where invite_code = 'POKER2';
 select currency_code as vault_currency_after_flip
 from public.vault_tables where invite_code = 'POKER2';
+select public.test_assert(
+    (select session_currency_code from public.open_tables where invite_code = 'POKER2') = 'GBP'
+    and (select currency_code from public.vault_tables where invite_code = 'POKER2') = 'GBP',
+    'host must not flip the table settlement currency'
+);
 
 \echo '=== P17. fake completion / clearing the shared hand cannot enable a cash-out ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
@@ -416,6 +479,10 @@ where invite_code = 'POKER2';
 
 select (hand ? 'isComplete') as server_hand_survived_mixed_clear
 from public.open_tables where invite_code = 'POKER2';
+select public.test_assert(
+    (select hand ? 'isComplete' from public.open_tables where invite_code = 'POKER2'),
+    'a mixed host write must not clear the server hand'
+);
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select public.vault_leave_table('POKER2', 'guest-forge-leave') as guest_forge_leave \gset
@@ -424,6 +491,11 @@ select (
     (:'guest_forge_leave'::jsonb->>'returned_cents')::bigint
     = :'guest_in_play_before_forge'::bigint - 100
 ) as forged_leave_withheld_the_ante;
+select public.test_assert(
+    (:'guest_forge_leave'::jsonb->>'returned_cents')::bigint
+    = :'guest_in_play_before_forge'::bigint - 100,
+    'forged completion must not return committed chips'
+);
 
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select in_play_cents as host_in_play_after_guest_foldout
@@ -495,6 +567,15 @@ select (
        and user_id = '11111111-1111-1111-1111-111111111111')
     = 4100
 ) as host_was_paid_the_pot;
+select public.test_assert(
+    (select in_play_cents from public.vault_table_stakes
+     where invite_code = 'POKER3'
+       and user_id = '22222222-2222-2222-2222-222222222222') = 4900
+    and (select in_play_cents from public.vault_table_stakes
+         where invite_code = 'POKER3'
+           and user_id = '11111111-1111-1111-1111-111111111111') = 4100,
+    'timeout fold must keep committed chips in the pot'
+);
 
 \echo '=== P19. unauthorized users cannot read live table state ==='
 set role authenticated;
@@ -502,6 +583,13 @@ select set_config('test.uid', '33333333-3333-3333-3333-333333333333', false);
 select count(*) as outsider_live_rows
 from public.open_tables
 where invite_code in ('POKER1', 'POKER2', 'POKER3');
+select public.test_assert(
+    (
+        select count(*) from public.open_tables
+        where invite_code in ('POKER1', 'POKER2', 'POKER3')
+    ) = 0,
+    'an outsider must not read live table rows'
+);
 select public.open_table_preview('POKER3') as preview \gset
 reset role;
 
@@ -548,6 +636,23 @@ select bool_or(seat->>'playerKey' = '11111111-1111-1111-1111-111111111111'
 from public.open_tables t,
      jsonb_array_elements(t.seats) seat
 where t.invite_code = 'POKER3';
+select public.test_assert(
+    (
+        select bool_or(seat->>'playerKey' = '11111111-1111-1111-1111-111111111111'
+                       and seat->>'amount' = '41')
+        from public.open_tables t,
+             jsonb_array_elements(t.seats) seat
+        where t.invite_code = 'POKER3'
+    )
+    and (
+        select bool_or(seat->>'playerKey' = '22222222-2222-2222-2222-222222222222'
+                       and seat->>'amount' = '49')
+        from public.open_tables t,
+             jsonb_array_elements(t.seats) seat
+        where t.invite_code = 'POKER3'
+    ),
+    'rewritten stacks must be overwritten from the Vault'
+);
 
 do $$
 begin
@@ -572,6 +677,17 @@ join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname in ('update_open_table_hand', 'publish_open_table_hand')
   and pg_get_function_identity_arguments(p.oid) like '%jsonb%';
+select public.test_assert(
+    (
+        select count(*)
+        from pg_proc p
+        join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and p.proname in ('update_open_table_hand', 'publish_open_table_hand')
+          and pg_get_function_identity_arguments(p.oid) like '%jsonb%'
+    ) = 0,
+    'there must be no client RPC that writes the hand'
+);
 
 \echo '=== P21. GBP settlement is integer pence, not a converted USD figure ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
@@ -589,7 +705,22 @@ select (
     (select currency_code from public.vault_tables where invite_code = 'POKER2')
     = 'GBP'
 ) as settlement_currency_is_gbp;
+select public.test_assert(
+    (select in_play_cents from public.vault_table_stakes
+     where invite_code = 'POKER2'
+       and user_id = '11111111-1111-1111-1111-111111111111') = 4100
+    and (select currency_code from public.vault_tables where invite_code = 'POKER2') = 'GBP',
+    'GBP settlement must stay integer pence of GBP'
+);
 
 \echo '=== P22. books still reconcile after the extra attacks ==='
 select * from public.vault_reconcile_accounts();
 select * from public.vault_reconcile_transactions();
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_accounts()),
+    'account ledger must reconcile after extra attacks'
+);
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_transactions()),
+    'transaction ledger must reconcile after extra attacks'
+);

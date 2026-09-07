@@ -21,6 +21,11 @@ select status from public.vault_sandbox_confirm_deposit(:'intent_id');
 select public.vault_summary()->>'available_cents' as available,
        public.vault_summary()->>'pending_deposit_cents' as pending_deposit,
        public.vault_summary()->>'total_cents' as total;
+select public.test_assert(
+    (public.vault_summary()->>'available_cents')::bigint = 10000
+    and (public.vault_summary()->>'pending_deposit_cents')::bigint = 0,
+    'host deposit must credit $100 once'
+);
 
 \echo '=== 2. guest deposits $50 ==='
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
@@ -46,6 +51,11 @@ select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'Host'
 select public.vault_summary()->>'available_cents' as available,
        public.vault_summary()->>'in_play_cents' as in_play,
        public.vault_summary()->>'total_cents' as total;
+select public.test_assert(
+    (public.vault_summary()->>'available_cents')::bigint = 6000
+    and (public.vault_summary()->>'in_play_cents')::bigint = 4000,
+    'host buy-in must move $40 from available to in play'
+);
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'Guest');
@@ -59,6 +69,7 @@ begin
                                       nullif(current_setting('test.intent', true), '')::uuid);
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -72,6 +83,7 @@ begin
                                       nullif(current_setting('test.intent', true), '')::uuid);
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -106,6 +118,7 @@ begin
     ]'::jsonb);
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -119,6 +132,7 @@ begin
     ]'::jsonb);
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -143,6 +157,7 @@ begin
     perform public.vault_request_withdrawal(999999, 'cashout-huge');
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -158,6 +173,14 @@ from public.vault_statement(50) order by created_at;
 \echo '=== 10. reconciliation: both must be empty ==='
 select * from public.vault_reconcile_accounts();
 select * from public.vault_reconcile_transactions();
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_accounts()),
+    'account ledger must reconcile'
+);
+select public.test_assert(
+    not exists (select 1 from public.vault_reconcile_transactions()),
+    'transaction ledger must reconcile'
+);
 
 \echo '=== 11. the ledger is immutable ==='
 do $$
@@ -165,6 +188,7 @@ begin
     update public.vault_ledger_entries set amount_cents = 1;
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
@@ -178,6 +202,7 @@ begin
     perform public.vault_create_deposit_intent(1000, 'dep-excluded');
     raise exception 'expected failure';
 exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;

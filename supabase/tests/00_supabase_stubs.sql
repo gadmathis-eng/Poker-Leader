@@ -30,3 +30,16 @@ begin
     end if;
 end;
 $$;
+
+-- Hard-fail a check so a green script means the assertion held, not that
+-- someone printed a boolean and kept going.
+create or replace function public.test_assert(p_ok boolean, p_msg text)
+returns void
+language plpgsql
+as $$
+begin
+    if not coalesce(p_ok, false) then
+        raise exception 'ASSERT FAILED: %', p_msg;
+    end if;
+end;
+$$;

@@ -22,13 +22,15 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -d vaultdemo \
   -f supabase/migrations/20260907190000_open_tables_lockdown.sql \
   -f supabase/migrations/20260907200000_poker_server_engine.sql \
   -f supabase/migrations/20260907210000_poker_engine_hardening.sql \
+  -f supabase/migrations/20260907220000_vault_summary_currency.sql \
   -f supabase/tests/10_vault_flow.sql \
   -f supabase/tests/20_vault_attacks.sql \
   -f supabase/tests/30_poker_attacks.sql
 ```
 
-Every `NOTICE: rejected as expected: …` line is a guard doing its job. The two
-reconciliation queries at the end of each script must both return no rows.
+Every `NOTICE: rejected as expected: …` line is a guard doing its job. The
+scripts call `test_assert` so a failed check or a leftover reconciliation
+row aborts the run instead of printing `f` and continuing.
 `20_vault_attacks.sql` is the post-hardening suite: table takeover, forged
 seats, leftover client-chosen deposit confirm, over-withdrawal, and privacy.
 `30_poker_attacks.sql` is the poker-engine suite: a modified client cannot

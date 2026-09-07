@@ -236,6 +236,17 @@ Worth being plain about, because the architecture points at them:
   through a display-rate conversion. A keypad may convert *into* the table
   unit so someone can type a familiar figure; after that the number does
   not move again.
+- **The Vault wallet is one currency.** `vault_summary` reports the available
+  wallet's currency and only sums that currency. Chips on a table in another
+  unit stay on that table until they are cashed off; they are not added into
+  the Vault total as extra dollars.
+- **Cloud mid-hand add-ons are not built.** Extra chips on a signed-in table
+  would be a Vault buy-in, not a local rewrite of the pot. The table hides
+  Add money on that path until a server top-up exists.
+- **Disconnect timeout needs someone to poke the server.** A player who sits
+  idle is folded after 45 seconds the next time an authorized phone calls
+  view, act, start, or leave. There is no cron; if every phone is gone the
+  hand waits until someone comes back.
 - **A table's buy-in range is set by the published host.** `vault_register_table`
   reads the host from `open_tables` and refuses anyone else. The range is
   frozen once anyone has money on the table.
@@ -249,12 +260,14 @@ Worth being plain about, because the architecture points at them:
 
 The SQL side has an end-to-end harness that runs against a plain PostgreSQL
 server — see `supabase/tests/README.md`. It walks a deposit, both kinds of
-buy-in, a server-dealt hand, a departure and a cash-out, and asserts the
-guards: replays move nothing twice, a client-supplied hand result is refused,
-balances stay non-negative, the ledger cannot be edited, and the books
-reconcile. `30_poker_attacks.sql` covers a modified client trying to name a
-winner, submit cards, change the board, act out of turn, over-bet, rewrite
-the pot, replay an action, settle twice, or recover committed chips by leaving.
+buy-in, a server-dealt hand, a departure and a cash-out, and hard-fails if a
+guard does not hold: replays move nothing twice, a client-supplied hand
+result is refused, balances stay non-negative, the ledger cannot be edited,
+and the books reconcile. `30_poker_attacks.sql` covers a modified client
+trying to name a winner, submit cards, change the board, act out of turn,
+over-bet, rewrite the pot, replay an action, settle twice, recover committed
+chips by leaving or by forging a finished hand, or change settlement by
+picking a different currency.
 
 The Swift side is covered by `PokerLeaderTests/SandboxVaultBackendTests.swift`
 and `PokerLeaderTests/MoneyTests.swift`, which put the demo backend through the

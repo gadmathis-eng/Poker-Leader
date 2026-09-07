@@ -93,10 +93,10 @@ struct TableSeatSelectionView: View {
         occupants.first { $0.playerKey == repo.localPlayerKey }
     }
 
-    /// Once cards are out, extra money is added on top of the stack rather than
-    /// replacing the buy-in you sat down with.
+    /// Extra chips mid-hand are a local-table path. A signed-in cloud table
+    /// keeps the stack in the Vault, so this phone cannot top it up here.
     private var canAddMoney: Bool {
-        table != nil && hand != nil && mySeat != nil
+        table != nil && hand != nil && mySeat != nil && !repo.usesServerPoker
     }
 
     /// Nothing in front of you and no pot left to win, so the game carries on

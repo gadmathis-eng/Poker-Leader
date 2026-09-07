@@ -248,6 +248,13 @@ final class TableRepository {
     }
 
     func remove(_ table: OpenTableModel) async {
+        if usesServerPoker {
+            // Cash the local player's chips back before the table row goes.
+            // A second leave is a no-op, so Cash off and leave can call this
+            // afterwards. If the call fails, the table still has to go; the
+            // chips stay in play until a later leave succeeds.
+            _ = try? await VaultStore.shared.leaveTable(inviteCode: table.inviteCode)
+        }
         if table.isHostLocally {
             await deleteHosted(table)
         } else {
