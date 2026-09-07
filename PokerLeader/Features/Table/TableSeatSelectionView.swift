@@ -121,8 +121,31 @@ struct TableSeatSelectionView: View {
         )
     }
 
+    /// Every seat's place in the deal, so the cards go round the table in turn
+    /// rather than landing everywhere at once.
+    private var dealTurns: [Int: CardDealTurn] {
+        guard let hand else { return [:] }
+        let order = HandRound.actionOrder(
+            seatNumbers: hand.seats.map(\.seatNumber),
+            dealerSeat: hand.dealerSeat
+        )
+        return CardDealSequence.seatPositions(inDealerOrder: order).mapValues { position in
+            CardDealTurn(
+                dealID: hand.id.uuidString,
+                position: position,
+                seatCount: order.count
+            )
+        }
+    }
+
+    /// Changes with every hand, so a new board is laid out rather than swapped.
+    private var handDealID: String {
+        hand?.id.uuidString ?? ""
+    }
+
     private var layoutOccupants: [TableSeatOccupant] {
-        occupants.map { seat in
+        let turns = dealTurns
+        return occupants.map { seat in
             let isLocal = seat.playerKey == repo.localPlayerKey
             let handSeat = hand?.seat(forPlayerKey: seat.playerKey)
             let isShowingDown = hand?.showsCards(forSeat: seat.seatNumber) ?? false
@@ -136,6 +159,7 @@ struct TableSeatSelectionView: View {
                     : nil,
                 cards: isLocal || isShowingDown ? (handSeat?.cards ?? []) : [],
                 faceDownCount: isLocal || isShowingDown ? 0 : dealtCards,
+                dealTurn: turns[seat.seatNumber] ?? .firstInLine,
                 handSummary: isShowingDown ? handSeat?.handSummary : nil,
                 isLocalUser: isLocal,
                 tapHint: isLocal ? localSeatTapHint : nil,
@@ -169,7 +193,8 @@ struct TableSeatSelectionView: View {
             title: narration.boardTitle,
             board: hand.board,
             potLabel: MoneyFormatting.plain(hand.pot, currencyCode: tableCurrencyCode),
-            status: narration.boardStatus
+            status: narration.boardStatus,
+            dealID: handDealID
         )
     }
 
@@ -311,8 +336,12 @@ struct TableSeatSelectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
                 if let seat = localHandSeat, seat.isDealtCards {
-                    CardRowView(cards: seat.cards, size: .hand)
-                        .opacity(seat.isFolded ? 0.4 : 1)
+                    CardRowView(
+                        cards: seat.cards,
+                        size: .hand,
+                        turn: dealTurns[seat.seatNumber] ?? .firstInLine
+                    )
+                    .opacity(seat.isFolded ? 0.4 : 1)
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -789,7 +818,11 @@ private struct ShowdownRows: View {
             ForEach(contenders) { seat in
                 let isWinner = winnerSeats.contains(seat.seatNumber)
                 HStack(spacing: 10) {
-                    CardRowView(cards: seat.cards, size: .board)
+                    CardRowView(
+                        cards: seat.cards,
+                        size: .board,
+                        turn: CardDealTurn(dealID: seat.id.uuidString)
+                    )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(seat.playerKey == localPlayerKey ? "You" : seat.playerName)
