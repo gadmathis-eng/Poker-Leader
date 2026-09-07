@@ -121,19 +121,17 @@ struct CardRowView: View {
     /// How many cards to show on their backs after the face-up ones.
     var faceDownCount: Int = 0
     var size: PlayingCardSize = .board
-    /// Changes when a fresh set of cards is dealt, so they go out again.
-    var dealID: String = ""
-    /// Where this player sits in the dealer's order, so the seats are dealt to
-    /// one after another rather than all at once.
-    var dealPosition: Int = 0
+    /// This player's place in the deal, so the seats are dealt to one after
+    /// another rather than all at once.
+    var turn: CardDealTurn = .firstInLine
 
     private var slots: [DealtCardSlot] {
         let total = cards.count + max(faceDownCount, 0)
         return (0..<total).map { index in
             DealtCardSlot(
-                id: "\(dealID)/\(index)",
+                id: "\(turn.dealID)/\(index)",
                 card: index < cards.count ? cards[index] : nil,
-                pitchDelay: CardDealSequence.pitch(cardIndex: index, seatPosition: dealPosition)
+                pitchDelay: turn.pitchDelay(forCardAt: index)
             )
         }
     }

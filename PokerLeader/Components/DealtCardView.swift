@@ -97,6 +97,7 @@ struct DealtCardView: View {
         }
 
         try? await Task.sleep(for: .seconds(pitchDelay))
+        await waitForTravel()
         guard !Task.isCancelled else { return }
         withAnimation(.easeOut(duration: 0.12)) { isOnTheTable = true }
         withAnimation(.spring(duration: CardDealSequence.flight + 0.1, bounce: 0.3)) {
@@ -115,6 +116,17 @@ struct DealtCardView: View {
         guard !Task.isCancelled else { return }
         withAnimation(turnMotion) { isTurned = true }
         await revealFace()
+    }
+
+    /// A card only knows how far it has to fly once it has been laid out and
+    /// measured. Give the first one of a deal a couple of frames to find out,
+    /// rather than have it drift in when the rest of the table is pitched.
+    private func waitForTravel() async {
+        guard dealOrigin != nil else { return }
+        for _ in 0..<3 {
+            guard travel == .zero else { return }
+            try? await Task.sleep(for: .milliseconds(16))
+        }
     }
 
     private func revealFace() async {

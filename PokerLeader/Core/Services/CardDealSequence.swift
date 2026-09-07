@@ -18,8 +18,10 @@ enum CardDealSequence {
     /// The gap between two seats being pitched a card.
     static let seatGap: Double = 0.05
 
-    /// The gap between the first card round the table and the second.
-    static let roundGap: Double = 0.16
+    /// The shortest gap between the first card round the table and the second.
+    /// A busy table takes longer than this to go round, and the second card
+    /// waits for it.
+    static let minimumRoundGap: Double = 0.16
 
     /// How long a card is in the air, which is also how long it takes to turn
     /// over.
@@ -38,10 +40,18 @@ enum CardDealSequence {
     /// - Parameters:
     ///   - cardIndex: Which time round the table this card is, counting from 0.
     ///   - seatPosition: Where the seat sits in the dealer's order, from 0.
-    static func pitch(cardIndex: Int, seatPosition: Int = 0) -> Double {
+    ///   - seatsInDeal: How many seats the dealer is going round, so nobody is
+    ///     pitched a second card before the table has had its first.
+    static func pitch(cardIndex: Int, seatPosition: Int = 0, seatsInDeal: Int = 1) -> Double {
         lead
             + Double(max(seatPosition, 0)) * seatGap
-            + Double(max(cardIndex, 0)) * roundGap
+            + Double(max(cardIndex, 0)) * roundGap(seatsInDeal: seatsInDeal)
+    }
+
+    /// How long one time round the table takes, or the shortest gap worth
+    /// leaving between two cards, whichever is longer.
+    static func roundGap(seatsInDeal: Int) -> Double {
+        max(Double(max(seatsInDeal, 1)) * seatGap, minimumRoundGap)
     }
 
     /// The first board card of the street being dealt, so the cards already
@@ -57,5 +67,26 @@ enum CardDealSequence {
             positions[seatNumber] = position
         }
         return positions
+    }
+}
+
+/// One seat's place in a deal: which hand it belongs to, where the seat sits in
+/// the dealer's order, and how many seats the dealer is going round.
+struct CardDealTurn: Equatable {
+    /// Changes with every hand, so a fresh deal is dealt in rather than swapped
+    /// for the last one.
+    var dealID: String = ""
+    var position: Int = 0
+    var seatCount: Int = 1
+
+    /// Nobody ahead in the queue, so these cards go out straight away.
+    static let firstInLine = CardDealTurn()
+
+    func pitchDelay(forCardAt index: Int) -> Double {
+        CardDealSequence.pitch(
+            cardIndex: index,
+            seatPosition: position,
+            seatsInDeal: seatCount
+        )
     }
 }

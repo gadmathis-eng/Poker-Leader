@@ -20,29 +20,76 @@ final class CardDealSequenceTests: XCTestCase {
     }
 
     func testTheSecondCardGoesRoundTheTableAfterTheFirst() {
-        let firstRound = CardDealSequence.pitch(cardIndex: 0, seatPosition: 0)
-        let secondRound = CardDealSequence.pitch(cardIndex: 1, seatPosition: 0)
+        let firstRound = CardDealSequence.pitch(cardIndex: 0, seatPosition: 0, seatsInDeal: 4)
+        let secondRound = CardDealSequence.pitch(cardIndex: 1, seatPosition: 0, seatsInDeal: 4)
 
-        XCTAssertEqual(secondRound - firstRound, CardDealSequence.roundGap, accuracy: 0.0001)
-        XCTAssertGreaterThan(CardDealSequence.roundGap, CardDealSequence.seatGap)
+        XCTAssertEqual(
+            secondRound - firstRound,
+            CardDealSequence.roundGap(seatsInDeal: 4),
+            accuracy: 0.0001
+        )
+        XCTAssertGreaterThan(CardDealSequence.roundGap(seatsInDeal: 4), CardDealSequence.seatGap)
+    }
+
+    /// The whole table gets its first card before anyone gets a second, which
+    /// is the one thing that would give the deal away as an animation.
+    func testNobodyGetsASecondCardBeforeTheTableHasHadItsFirst() {
+        for seats in 2...8 {
+            let lastOfTheFirstRound = CardDealSequence.pitch(
+                cardIndex: 0,
+                seatPosition: seats - 1,
+                seatsInDeal: seats
+            )
+            let firstOfTheSecondRound = CardDealSequence.pitch(
+                cardIndex: 1,
+                seatPosition: 0,
+                seatsInDeal: seats
+            )
+
+            XCTAssertLessThan(
+                lastOfTheFirstRound,
+                firstOfTheSecondRound,
+                "A table of \(seats) deals its second card too early"
+            )
+        }
+    }
+
+    func testABusyTableTakesLongerToGoRound() {
+        XCTAssertGreaterThan(
+            CardDealSequence.roundGap(seatsInDeal: 8),
+            CardDealSequence.roundGap(seatsInDeal: 2)
+        )
+    }
+
+    func testAQuietTableStillLeavesTheShortestGapWorthSeeing() {
+        XCTAssertEqual(
+            CardDealSequence.roundGap(seatsInDeal: 1),
+            CardDealSequence.minimumRoundGap,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            CardDealSequence.roundGap(seatsInDeal: 0),
+            CardDealSequence.minimumRoundGap,
+            accuracy: 0.0001
+        )
     }
 
     func testNegativePositionsDoNotPullCardsForward() {
         XCTAssertEqual(
-            CardDealSequence.pitch(cardIndex: -3, seatPosition: -2),
+            CardDealSequence.pitch(cardIndex: -3, seatPosition: -2, seatsInDeal: -1),
             CardDealSequence.lead,
             accuracy: 0.0001
         )
     }
 
     func testAHeadsUpDealIsOverQuickly() {
-        let last = CardDealSequence.pitch(cardIndex: 1, seatPosition: 1)
+        let last = CardDealSequence.pitch(cardIndex: 1, seatPosition: 1, seatsInDeal: 2)
 
         XCTAssertLessThan(last + CardDealSequence.flight, 1)
     }
 
     func testAFullTableIsStillDealtInUnderTwoSeconds() {
-        let last = CardDealSequence.pitch(cardIndex: 1, seatPosition: 7)
+        let last = CardDealSequence.pitch(cardIndex: 1, seatPosition: 7, seatsInDeal: 8)
 
         XCTAssertLessThan(last + CardDealSequence.flight, 2)
     }
@@ -104,6 +151,24 @@ final class CardDealSequenceTests: XCTestCase {
         let positions = CardDealSequence.seatPositions(inDealerOrder: [])
 
         XCTAssertNil(positions[1])
-        XCTAssertEqual(CardDealSequence.pitch(cardIndex: 0, seatPosition: positions[1] ?? 0), CardDealSequence.lead)
+    }
+
+    func testACardWithNobodyAheadOfItGoesOutStraightAway() {
+        XCTAssertEqual(
+            CardDealTurn.firstInLine.pitchDelay(forCardAt: 0),
+            CardDealSequence.lead,
+            accuracy: 0.0001
+        )
+    }
+
+    func testATurnDealsItsOwnSeatInOrder() {
+        let turn = CardDealTurn(dealID: "hand", position: 2, seatCount: 5)
+
+        XCTAssertEqual(
+            turn.pitchDelay(forCardAt: 0),
+            CardDealSequence.pitch(cardIndex: 0, seatPosition: 2, seatsInDeal: 5),
+            accuracy: 0.0001
+        )
+        XCTAssertGreaterThan(turn.pitchDelay(forCardAt: 1), turn.pitchDelay(forCardAt: 0))
     }
 }

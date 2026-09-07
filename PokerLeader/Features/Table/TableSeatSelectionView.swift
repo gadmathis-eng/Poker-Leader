@@ -121,26 +121,30 @@ struct TableSeatSelectionView: View {
         )
     }
 
-    /// Where each seat sits in the dealer's order, so the cards go round the
-    /// table in turn rather than landing everywhere at once.
-    private var dealPositions: [Int: Int] {
+    /// Every seat's place in the deal, so the cards go round the table in turn
+    /// rather than landing everywhere at once.
+    private var dealTurns: [Int: CardDealTurn] {
         guard let hand else { return [:] }
-        return CardDealSequence.seatPositions(
-            inDealerOrder: HandRound.actionOrder(
-                seatNumbers: hand.seats.map(\.seatNumber),
-                dealerSeat: hand.dealerSeat
-            )
+        let order = HandRound.actionOrder(
+            seatNumbers: hand.seats.map(\.seatNumber),
+            dealerSeat: hand.dealerSeat
         )
+        return CardDealSequence.seatPositions(inDealerOrder: order).mapValues { position in
+            CardDealTurn(
+                dealID: hand.id.uuidString,
+                position: position,
+                seatCount: order.count
+            )
+        }
     }
 
-    /// Changes with every hand, so a new deal is dealt in rather than swapped.
+    /// Changes with every hand, so a new board is laid out rather than swapped.
     private var handDealID: String {
         hand?.id.uuidString ?? ""
     }
 
     private var layoutOccupants: [TableSeatOccupant] {
-        let positions = dealPositions
-        let dealID = handDealID
+        let turns = dealTurns
         return occupants.map { seat in
             let isLocal = seat.playerKey == repo.localPlayerKey
             let handSeat = hand?.seat(forPlayerKey: seat.playerKey)
@@ -155,8 +159,7 @@ struct TableSeatSelectionView: View {
                     : nil,
                 cards: isLocal || isShowingDown ? (handSeat?.cards ?? []) : [],
                 faceDownCount: isLocal || isShowingDown ? 0 : dealtCards,
-                dealID: dealID,
-                dealPosition: positions[seat.seatNumber] ?? 0,
+                dealTurn: turns[seat.seatNumber] ?? .firstInLine,
                 handSummary: isShowingDown ? handSeat?.handSummary : nil,
                 isLocalUser: isLocal,
                 tapHint: isLocal ? localSeatTapHint : nil,
@@ -336,8 +339,7 @@ struct TableSeatSelectionView: View {
                     CardRowView(
                         cards: seat.cards,
                         size: .hand,
-                        dealID: handDealID,
-                        dealPosition: dealPositions[seat.seatNumber] ?? 0
+                        turn: dealTurns[seat.seatNumber] ?? .firstInLine
                     )
                     .opacity(seat.isFolded ? 0.4 : 1)
                 }
@@ -816,7 +818,11 @@ private struct ShowdownRows: View {
             ForEach(contenders) { seat in
                 let isWinner = winnerSeats.contains(seat.seatNumber)
                 HStack(spacing: 10) {
-                    CardRowView(cards: seat.cards, size: .board, dealID: seat.id.uuidString)
+                    CardRowView(
+                        cards: seat.cards,
+                        size: .board,
+                        turn: CardDealTurn(dealID: seat.id.uuidString)
+                    )
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(seat.playerKey == localPlayerKey ? "You" : seat.playerName)

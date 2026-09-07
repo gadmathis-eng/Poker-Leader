@@ -20,10 +20,8 @@ struct TableSeatOccupant: Equatable {
     var committedLabel: String?
     var cards: [PlayingCard] = []
     var faceDownCount: Int = 0
-    /// Changes when a new hand is dealt, so this seat's cards go out again.
-    var dealID: String = ""
-    /// Where this seat sits in the dealer's order.
-    var dealPosition: Int = 0
+    /// This seat's place in the deal, so its cards go out when its turn comes.
+    var dealTurn: CardDealTurn = .firstInLine
     var handSummary: String?
     var isLocalUser: Bool
     /// What tapping your own seat does right now.
@@ -107,7 +105,7 @@ struct PokerTableSeatLayout: View {
 
     /// The dealer works from just above the board, so the community cards are
     /// spread out in front of them rather than appearing where they already sit.
-    private func dealOrigin(in size: CGSize) -> CardDealOrigin {
+    private func dealOrigin(in size: CGSize) -> CardDealOrigin? {
         CardDealOrigin(
             point: CGPoint(x: size.width / 2, y: size.height / 2 - 22)
         )
@@ -522,8 +520,7 @@ private struct SeatMarker: View {
                         cards: occupant.cards,
                         faceDownCount: occupant.faceDownCount,
                         size: .seat,
-                        dealID: occupant.dealID,
-                        dealPosition: occupant.dealPosition
+                        turn: occupant.dealTurn
                     )
                 }
                 if let committedLabel = occupant.committedLabel {
