@@ -20,20 +20,6 @@ struct EditTablesSheet: View {
                 subtitle: summary(for: table),
                 isSelected: isSelected
             )
-        } aboveSave: { table in
-            if let table {
-                EditOrderedItemInviteActions(
-                    shareURL: TableInviteSharing.url(forInviteCode: table.inviteCode),
-                    subject: "Join my Pot Master table",
-                    message: TableInviteSharing.message(
-                        forInviteCode: table.inviteCode,
-                        hostName: table.hostDisplayName
-                    ),
-                    shareTitle: "Share table"
-                )
-            }
-        } belowSave: { _ in
-            EmptyView()
         }
     }
 

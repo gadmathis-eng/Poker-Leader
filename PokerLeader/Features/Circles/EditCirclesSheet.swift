@@ -21,35 +21,37 @@ struct EditCirclesSheet: View {
                 subtitle: "\(circle.memberCount) members · \(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)",
                 isSelected: isSelected
             )
-        } aboveSave: { circle in
-            if let circle, CircleCreatorStore.isCreator(of: circle.id) {
-                EditOrderedItemInviteActions(
-                    shareURL: CircleInviteSharing.url(for: circle),
-                    subject: "Join \(circle.name) on Pot Master",
-                    message: CircleInviteSharing.message(for: circle)
-                )
-            }
-        } belowSave: { circle in
-            Button {
-                selectedCurrencyCircle = circle
-            } label: {
-                HStack {
-                    Label("Change currency", systemImage: "banknote")
-                    Spacer()
-                    if let circle {
-                        Text("\(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)")
-                    }
+        } footer: { circle in
+            VStack(spacing: 12) {
+                if let circle, CircleCreatorStore.isCreator(of: circle.id) {
+                    EditOrderedItemInviteActions(
+                        shareURL: CircleInviteSharing.url(for: circle),
+                        subject: "Join \(circle.name) on Pot Master",
+                        message: CircleInviteSharing.message(for: circle)
+                    )
                 }
-                .font(.headline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(AppTheme.card)
-                .foregroundStyle(circle == nil ? AppTheme.muted : AppTheme.text)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
+
+                Button {
+                    selectedCurrencyCircle = circle
+                } label: {
+                    HStack {
+                        Label("Change currency", systemImage: "banknote")
+                        Spacer()
+                        if let circle {
+                            Text("\(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)")
+                        }
+                    }
+                    .font(.headline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(AppTheme.card)
+                    .foregroundStyle(circle == nil ? AppTheme.muted : AppTheme.text)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
+                }
+                .buttonStyle(.plain)
+                .disabled(circle == nil)
             }
-            .buttonStyle(.plain)
-            .disabled(circle == nil)
         }
         .sheet(item: $selectedCurrencyCircle) { circle in
             CircleCurrencySettingsView(circle: circle)

@@ -53,15 +53,15 @@ struct EditOrderedItemInviteActions: View {
     }
 }
 
-struct EditOrderedItemsSheet<Item, Row: View, AboveSave: View, BelowSave: View>: View {
+struct EditOrderedItemsSheet<Item, Row: View, Footer: View>: View {
     @Environment(\.dismiss) private var dismiss
 
     private let title: String
     private let items: [Item]
     private let id: KeyPath<Item, UUID>
+    private let allowsSelection: Bool
     private let row: (Item, Bool) -> Row
-    private let aboveSave: (Item?) -> AboveSave
-    private let belowSave: (Item?) -> BelowSave
+    private let footer: (Item?) -> Footer
     private let onSave: ([UUID], Set<UUID>) -> Void
 
     @State private var orderedIds: [UUID]
@@ -72,17 +72,17 @@ struct EditOrderedItemsSheet<Item, Row: View, AboveSave: View, BelowSave: View>:
         title: String,
         items: [Item],
         id: KeyPath<Item, UUID>,
+        allowsSelection: Bool = true,
         onSave: @escaping (_ orderedIds: [UUID], _ deletedIds: Set<UUID>) -> Void,
         @ViewBuilder row: @escaping (Item, Bool) -> Row,
-        @ViewBuilder aboveSave: @escaping (Item?) -> AboveSave,
-        @ViewBuilder belowSave: @escaping (Item?) -> BelowSave
+        @ViewBuilder footer: @escaping (Item?) -> Footer
     ) {
         self.title = title
         self.items = items
         self.id = id
+        self.allowsSelection = allowsSelection
         self.row = row
-        self.aboveSave = aboveSave
-        self.belowSave = belowSave
+        self.footer = footer
         self.onSave = onSave
         _orderedIds = State(initialValue: items.map { $0[keyPath: id] })
     }
@@ -95,17 +95,25 @@ struct EditOrderedItemsSheet<Item, Row: View, AboveSave: View, BelowSave: View>:
         selectedId.flatMap { itemById[$0] }
     }
 
+    private var showsFooter: Bool {
+        Footer.self != EmptyView.self
+    }
+
     var body: some View {
         NavigationStack {
             List {
                 ForEach(orderedIds, id: \.self) { itemId in
                     if let item = itemById[itemId] {
-                        Button {
-                            selectedId = itemId
-                        } label: {
-                            row(item, selectedId == itemId)
+                        if allowsSelection {
+                            Button {
+                                selectedId = itemId
+                            } label: {
+                                row(item, selectedId == itemId)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            row(item, false)
                         }
-                        .buttonStyle(.plain)
                     }
                 }
                 .onMove(perform: move)
@@ -120,29 +128,19 @@ struct EditOrderedItemsSheet<Item, Row: View, AboveSave: View, BelowSave: View>:
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", action: save)
+                }
             }
             .safeAreaInset(edge: .bottom) {
-                VStack(spacing: 12) {
-                    aboveSave(selectedItem)
-
-                    Button(action: save) {
-                        Text("Save")
-                            .font(.headline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(AppTheme.positive)
-                            .foregroundStyle(AppTheme.contrastText)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                    }
-                    .buttonStyle(.plain)
-
-                    belowSave(selectedItem)
+                if showsFooter {
+                    footer(selectedItem)
+                        .padding()
+                        .background(AppTheme.background)
                 }
-                .padding()
-                .background(AppTheme.background)
             }
             .onAppear {
-                if selectedId == nil {
+                if allowsSelection, selectedId == nil {
                     selectedId = orderedIds.first
                 }
             }
@@ -167,5 +165,25 @@ struct EditOrderedItemsSheet<Item, Row: View, AboveSave: View, BelowSave: View>:
     private func save() {
         onSave(orderedIds, deletedIds)
         dismiss()
+    }
+}
+
+extension EditOrderedItemsSheet where Footer == EmptyView {
+    init(
+        title: String,
+        items: [Item],
+        id: KeyPath<Item, UUID>,
+        onSave: @escaping (_ orderedIds: [UUID], _ deletedIds: Set<UUID>) -> Void,
+        @ViewBuilder row: @escaping (Item, Bool) -> Row
+    ) {
+        self.init(
+            title: title,
+            items: items,
+            id: id,
+            allowsSelection: false,
+            onSave: onSave,
+            row: row,
+            footer: { _ in EmptyView() }
+        )
     }
 }
