@@ -13,28 +13,12 @@ struct EditTablesSheet: View {
             items: tables,
             id: \.id,
             onSave: save
-        ) { table, isSelected in
+        ) { table in
             EditOrderedItemRow(
                 leadingText: table.inviteCode,
                 title: table.displayTitle,
-                subtitle: summary(for: table),
-                isSelected: isSelected
+                subtitle: summary(for: table)
             )
-        } aboveSave: { table in
-            if let table {
-                EditOrderedItemInviteActions(
-                    code: table.inviteCode,
-                    shareURL: TableInviteSharing.url(forInviteCode: table.inviteCode),
-                    subject: "Join my Pot Master table",
-                    message: TableInviteSharing.message(
-                        forInviteCode: table.inviteCode,
-                        hostName: table.hostDisplayName
-                    ),
-                    shareTitle: "Share table"
-                )
-            }
-        } belowSave: { _ in
-            EmptyView()
         }
     }
 

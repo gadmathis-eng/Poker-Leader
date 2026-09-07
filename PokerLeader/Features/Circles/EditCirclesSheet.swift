@@ -6,7 +6,6 @@ struct EditCirclesSheet: View {
     @Environment(AppRouter.self) private var router
 
     let circles: [CircleModel]
-    @State private var selectedCurrencyCircle: CircleModel?
 
     var body: some View {
         EditOrderedItemsSheet(
@@ -14,48 +13,12 @@ struct EditCirclesSheet: View {
             items: circles,
             id: \.id,
             onSave: save
-        ) { circle, isSelected in
+        ) { circle in
             EditOrderedItemRow(
                 leadingText: circle.shortCode,
                 title: circle.name,
-                subtitle: "\(circle.memberCount) members · \(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)",
-                isSelected: isSelected
+                subtitle: "\(circle.memberCount) members · \(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)"
             )
-        } aboveSave: { circle in
-            if let circle, CircleCreatorStore.isCreator(of: circle.id) {
-                EditOrderedItemInviteActions(
-                    code: circle.shortCode,
-                    shareURL: CircleInviteSharing.url(for: circle),
-                    subject: "Join \(circle.name) on Pot Master",
-                    message: CircleInviteSharing.message(for: circle)
-                )
-            }
-        } belowSave: { circle in
-            Button {
-                selectedCurrencyCircle = circle
-            } label: {
-                HStack {
-                    Label("Change currency", systemImage: "banknote")
-                    Spacer()
-                    if let circle {
-                        Text("\(MoneyFormatting.currencySymbol(for: circle.currencyCode)) \(circle.currencyCode)")
-                    }
-                }
-                .font(.headline.weight(.semibold))
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(AppTheme.card)
-                .foregroundStyle(circle == nil ? AppTheme.muted : AppTheme.text)
-                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
-            }
-            .buttonStyle(.plain)
-            .disabled(circle == nil)
-        }
-        .sheet(item: $selectedCurrencyCircle) { circle in
-            CircleCurrencySettingsView(circle: circle)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
         }
     }
 
