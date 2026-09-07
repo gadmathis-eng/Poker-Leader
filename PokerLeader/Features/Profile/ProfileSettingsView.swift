@@ -5,6 +5,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case profile = "Profile"
     case currency = "Currency"
     case appearance = "Appearance"
+    case vault = "Vault"
 
     var id: String { rawValue }
 }
@@ -515,6 +516,8 @@ private struct ProfileControlsView: View {
                             currencyTab
                         case .appearance:
                             appearanceTab
+                        case .vault:
+                            vaultTab
                         }
 
                         accountSection
@@ -841,6 +844,10 @@ private struct ProfileControlsView: View {
             .background(AppTheme.card)
             .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
         }
+    }
+
+    private var vaultTab: some View {
+        EmptyView()
     }
 
     private var cloudSyncStatusLabel: String {
