@@ -20,6 +20,8 @@ struct TableView: View {
     @State private var joinCodeText = ""
     @State private var isJoiningTable = false
     @State private var showCreateTable = false
+    @State private var showJoinBuyIn = false
+    @State private var didConfirmJoinBuyIn = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
 
@@ -121,6 +123,19 @@ struct TableView: View {
             .sheet(isPresented: $showCreateTable, onDismiss: handleTablesChanged) {
                 CreateTableSheet()
             }
+            .sheet(isPresented: $showJoinBuyIn) {
+                JoinBuyInSheet(
+                    hostName: activeTable?.hostDisplayName ?? "",
+                    currencyCode: tableSessionCurrencyCode,
+                    initialAmount: 0,
+                    onConfirm: confirmJoinBuyIn
+                )
+                .presentationDetents([.height(520)])
+                .presentationDragIndicator(.visible)
+            }
+            .onChange(of: activeTable?.inviteCode) { _, _ in
+                didConfirmJoinBuyIn = false
+            }
             .sheet(isPresented: $showSignIn) {
                 SignInSheet()
                     .modelContext(context)
@@ -170,7 +185,7 @@ struct TableView: View {
         } else if let activeTable, !activeTable.isHostLocally {
             noticeCard(
                 title: "You're joining \(activeTable.hostDisplayName)'s table",
-                message: "Choose how much you want to buy in, then pick an open seat.",
+                message: "Choose how much you want to put in, then pick an open seat.",
                 tint: AppTheme.text
             )
         }
@@ -234,20 +249,18 @@ struct TableView: View {
                 InviteCodeCopyLabel(code: table.inviteCode, fill: AppTheme.background)
             }
 
-            if hasJoinableBuyIn {
-                Button {
-                    showingSeatSelection = true
-                } label: {
-                    Text("Open table")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(AppTheme.positive)
-                        .foregroundStyle(AppTheme.contrastText)
-                        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                }
-                .buttonStyle(.plain)
+            Button {
+                presentJoinOrOpen()
+            } label: {
+                Text(joinOrOpenTitle(for: table))
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(AppTheme.positive)
+                    .foregroundStyle(AppTheme.contrastText)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
             }
+            .buttonStyle(.plain)
 
             HStack(spacing: 10) {
                 if authManager.isSignedIn {
@@ -274,7 +287,7 @@ struct TableView: View {
                 .buttonStyle(.plain)
             }
 
-            if !hasJoinableBuyIn {
+            if table.isHostLocally, !hasJoinableBuyIn {
                 Text("Set a buy-in below to sit down.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.muted)
@@ -303,6 +316,42 @@ struct TableView: View {
         let seatedText = seated == 1 ? "1 seated" : "\(seated) seated"
         let role = table.isHostLocally ? "You host" : "You joined"
         return "\(role) · \(seatedText) · \(table.sessionCurrencyCode)"
+    }
+
+    private func joinOrOpenTitle(for table: OpenTableModel) -> String {
+        shouldAskJoinBuyIn(for: table) ? "Join table" : "Open table"
+    }
+
+    /// Guests who have not sat yet must say how much they are putting in
+    /// before they get onto the felt.
+    private func shouldAskJoinBuyIn(for table: OpenTableModel) -> Bool {
+        guard !table.isHostLocally else { return false }
+        if didConfirmJoinBuyIn { return false }
+        return repo.mySeat(on: table) == nil
+    }
+
+    private func presentJoinOrOpen() {
+        guard let table = activeTable else { return }
+        if shouldAskJoinBuyIn(for: table) {
+            showJoinBuyIn = true
+            return
+        }
+        showingSeatSelection = true
+    }
+
+    /// Wait for a join sheet or tab switch to finish so this ask is not buried.
+    private func presentJoinBuyInAfterJoin() async {
+        try? await Task.sleep(for: .milliseconds(400))
+        showJoinBuyIn = true
+    }
+
+    private func confirmJoinBuyIn(_ amount: Decimal) {
+        personalBuyInCurrencyCode = tableSessionCurrencyCode
+        personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
+        draftBuyInCurrencyCode = tableSessionCurrencyCode
+        draftBuyInText = personalBuyInAmountString
+        didConfirmJoinBuyIn = true
+        showingSeatSelection = true
     }
 
     private var buyInSection: some View {
@@ -461,6 +510,9 @@ struct TableView: View {
             }
         }
 
+        if activeTable?.isHostLocally == false {
+            didConfirmJoinBuyIn = true
+        }
         showingSeatSelection = true
     }
 
@@ -503,12 +555,17 @@ struct TableView: View {
 
         do {
             let table = try await repo.join(inviteCode: code, displayName: displayName)
+            if activeTable?.inviteCode != table.inviteCode {
+                didConfirmJoinBuyIn = false
+            }
             activeTable = table
             draftSessionCurrencyCode = table.sessionCurrencyCode
             router.pendingTableInviteCode = nil
             joinCodeText = table.inviteCode
             if table.isHostLocally, hasJoinableBuyIn {
                 showingSeatSelection = true
+            } else if !table.isHostLocally, shouldAskJoinBuyIn(for: table) {
+                await presentJoinBuyInAfterJoin()
             }
         } catch let error as TableRepositoryError where error == .notSignedIn {
             joinError = error.localizedDescription
