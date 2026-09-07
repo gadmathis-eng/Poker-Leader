@@ -388,6 +388,12 @@ struct TableSeatSelectionView: View {
 
         do {
             settlement = try await vault.leaveTable(inviteCode: table.inviteCode)
+            // The money is settled, so the table can go. Let go of it here
+            // first: `remove` deletes the stored object, and this screen must
+            // not still be reading from it when the next redraw comes round.
+            self.table = nil
+            occupants = []
+            hand = nil
             await repo.remove(table)
         } catch {
             cashOffError = VaultError.from(error).errorDescription

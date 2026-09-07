@@ -184,15 +184,18 @@ struct AddMoneySheet: View {
         errorMessage = nil
         phase = .authorizing
 
-        do {
-            // The provider step and the settlement step both live inside
-            // `addMoney`; this only reflects which half is running.
-            let requested = amount
-            async let settled = store.addMoney(requested)
-            try? await Task.sleep(for: .milliseconds(700))
+        let requested = amount
+        // The provider step and the settlement step both live inside `addMoney`.
+        // This timer only moves the label on from "Waiting for Apple Pay" to
+        // "Verifying" while that runs; it decides nothing.
+        let label = Task {
+            try? await Task.sleep(for: .milliseconds(900))
             if phase == .authorizing { phase = .verifying }
-            _ = try await settled
+        }
+        defer { label.cancel() }
 
+        do {
+            _ = try await store.addMoney(requested)
             confirmedAmount = requested
             phase = .done
         } catch {
