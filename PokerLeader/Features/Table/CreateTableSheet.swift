@@ -73,7 +73,7 @@ struct CreateTableSheet: View {
                     tableCurrencyRow
 
                     StandardBuyInCard(
-                        title: "Pay in",
+                        title: "Buy-in",
                         amount: buyInAmount ?? 0,
                         currencyCode: payInCurrencyCode,
                         onAmountTap: presentPayInEditor,
@@ -200,7 +200,7 @@ struct CreateTableSheet: View {
         editingAmount = .payIn(
             MoneyAmountEditorState(
                 id: UUID(),
-                title: "Pay in",
+                title: "Buy-in",
                 subtitle: "What you sit down with",
                 currencyCode: payInCurrencyCode,
                 text: buyInText

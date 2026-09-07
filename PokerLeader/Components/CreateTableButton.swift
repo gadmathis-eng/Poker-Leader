@@ -17,6 +17,6 @@ struct CreateTableButton: View {
         .buttonStyle(.plain)
         .disabled(isBusy)
         .accessibilityLabel("Create table")
-        .accessibilityHint("Choose the table currency, pay-in, and ante")
+        .accessibilityHint("Choose the table currency, buy-in, and ante")
     }
 }
