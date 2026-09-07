@@ -10,25 +10,38 @@ struct EditTableView: View {
     private let inviteCode: String
     private let hostName: String
     private let isHost: Bool
+    private let showsCloseButton: Bool
 
     @State private var name: String
     @State private var currencyCode: String
+    @State private var anteText: String
     @State private var seatNumber: Int?
     @State private var seatAmount: Decimal = 0
     @State private var activeInviteCode: String?
     @State private var showCurrencyPicker = false
+    @State private var editingAnte: MoneyAmountEditorState?
     @State private var showRemoveConfirmation = false
     @State private var isRemoving = false
     @State private var isDealtIn = false
 
-    init(table: OpenTableModel, onChange: @escaping () -> Void = {}) {
+    init(
+        table: OpenTableModel,
+        onChange: @escaping () -> Void = {},
+        showsCloseButton: Bool = false
+    ) {
         self.table = table
         self.onChange = onChange
+        self.showsCloseButton = showsCloseButton
         self.inviteCode = table.inviteCode
         self.hostName = table.hostDisplayName
         self.isHost = table.isHostLocally
         _name = State(initialValue: table.name ?? "")
         _currencyCode = State(initialValue: table.sessionCurrencyCode)
+        let storedAnte = TableMoney.decimal(table.anteAmount)
+        let initialAnte = storedAnte > 0 || table.isStarted
+            ? storedAnte
+            : TableAnte.defaultAmount(forBuyIn: 0)
+        _anteText = State(initialValue: TableMoney.string(initialAnte))
     }
 
     private var repo: TableRepository { TableRepository(context: context) }
@@ -45,6 +58,14 @@ struct EditTableView: View {
 
     private var currencyLabel: String {
         "\(MoneyFormatting.currencySymbol(for: currencyCode)) \(currencyCode)"
+    }
+
+    private var anteAmount: Decimal {
+        Decimal(string: MoneyAmountKeypad.normalizedText(anteText)) ?? 0
+    }
+
+    private var anteLabel: String {
+        MoneyFormatting.plain(anteAmount, currencyCode: currencyCode)
     }
 
     private var removeActionTitle: String {
@@ -65,7 +86,7 @@ struct EditTableView: View {
                 Text("Only you see this name. Tables without one show their code.")
             }
 
-            Section("Table") {
+            Section {
                 LabeledContent("Code") {
                     InviteCodeCopyLabel(code: inviteCode)
                 }
@@ -75,9 +96,22 @@ struct EditTableView: View {
                         editableRow(title: "Currency", value: currencyLabel, valueColor: AppTheme.text)
                     }
                     .buttonStyle(.plain)
+                    Button(action: presentAnteEditor) {
+                        editableRow(title: "Ante", value: anteLabel, valueColor: AppTheme.gold)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Edit ante")
+                    .accessibilityValue(anteLabel)
                 } else {
                     LabeledContent("Currency", value: currencyLabel)
+                    LabeledContent("Ante", value: anteLabel)
                 }
+            } header: {
+                Text("Table")
+            } footer: {
+                Text(isHost
+                     ? "Each player puts the ante in before the flop. A change applies from the next hand."
+                     : "The host sets the ante. A change applies from the next hand.")
             }
 
             Section {
@@ -137,6 +171,12 @@ struct EditTableView: View {
         .navigationTitle("Edit table")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if showsCloseButton {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Close") { dismiss() }
+                        .disabled(isRemoving)
+                }
+            }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save", action: save)
                     .disabled(isRemoving)
@@ -150,6 +190,13 @@ struct EditTableView: View {
                 currencyCode = cleaned
             }
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $editingAnte) { editor in
+            MoneyAmountEditorSheet(editor: editor) { text in
+                anteText = text
+            }
+            .presentationDetents([.height(420)])
             .presentationDragIndicator(.visible)
         }
         .confirmationDialog(
@@ -190,6 +237,19 @@ struct EditTableView: View {
         seatAmount = seat.amountDecimal.clampedToNonNegative
     }
 
+    private func presentAnteEditor() {
+        guard isHost else { return }
+        editingAnte = MoneyAmountEditorState(
+            id: UUID(),
+            title: "Ante",
+            subtitle: table.isStarted
+                ? "Applies from the next hand"
+                : "Per hand, in \(currencyCode)",
+            currencyCode: currencyCode,
+            text: anteText.isEmpty ? "0" : anteText
+        )
+    }
+
     private func makeActive() {
         repo.makeActive(table)
         activeInviteCode = repo.activeInviteCode
@@ -202,6 +262,7 @@ struct EditTableView: View {
 
         if isHost {
             repo.updateSessionCurrency(on: table, to: currencyCode)
+            repo.updateAnte(anteAmount, on: table)
         }
 
         onChange()

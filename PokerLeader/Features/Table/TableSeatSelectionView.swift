@@ -7,6 +7,7 @@ struct TableSeatSelectionView: View {
     let sessionCurrencyCode: String
 
     @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     @AppStorage("displayName") private var displayName = "Your name"
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
@@ -18,6 +19,9 @@ struct TableSeatSelectionView: View {
     @State private var occupants: [SharedTableSeat] = []
     @State private var hand: SharedTableHand?
     @State private var handMessage: String?
+    @State private var showTableSettings = false
+    /// Bumped when the stake changes so the felt and editor re-read the table.
+    @State private var anteStamp: Decimal = 0
 
     private static let nextHandPause: Duration = .seconds(2)
 
@@ -53,8 +57,11 @@ struct TableSeatSelectionView: View {
     }
 
     private var anteAmount: Decimal {
-        let stored = table?.anteDecimal ?? 0
-        return stored > 0 ? stored : TableAnte.defaultAmount(forBuyIn: tableBuyInAmount)
+        let stored = table?.anteDecimal ?? anteStamp
+        if stored > 0 || table?.isStarted == true {
+            return stored
+        }
+        return TableAnte.defaultAmount(forBuyIn: tableBuyInAmount)
     }
 
     /// Seats can still be changed until the player is dealt into a hand.
@@ -63,7 +70,7 @@ struct TableSeatSelectionView: View {
     }
 
     private var canEditAnte: Bool {
-        !isGameStarted && (table?.isHostLocally ?? true)
+        table?.isHostLocally ?? true
     }
 
     private var localHandSeat: SharedTableHandSeat? {
@@ -184,8 +191,9 @@ struct TableSeatSelectionView: View {
 
     private var feltStakes: String {
         var parts = ["NLH", tableCurrencyCode]
-        if anteAmount > 0 {
-            parts.append("Ante \(MoneyFormatting.plain(anteAmount, currencyCode: tableCurrencyCode))")
+        let shownAnte = hand?.anteDecimal ?? anteAmount
+        if shownAnte > 0 {
+            parts.append("Ante \(MoneyFormatting.plain(shownAnte, currencyCode: tableCurrencyCode))")
         }
         return parts.joined(separator: " · ")
     }
@@ -205,6 +213,9 @@ struct TableSeatSelectionView: View {
 
                 if isGameStarted {
                     handCard
+                    if canEditAnte {
+                        gameAnteCard
+                    }
                 } else if selectedSeat == nil {
                     seatHint
                 } else {
@@ -229,6 +240,11 @@ struct TableSeatSelectionView: View {
                         Image(systemName: "square.and.arrow.up")
                     }
                     .accessibilityLabel("Share table")
+
+                    Button { showTableSettings = true } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Table settings")
                 }
             }
         }
@@ -253,6 +269,19 @@ struct TableSeatSelectionView: View {
             }
             .presentationDetents([.height(420)])
             .presentationDragIndicator(.hidden)
+        }
+        .sheet(isPresented: $showTableSettings) {
+            if let table {
+                NavigationStack {
+                    EditTableView(
+                        table: table,
+                        onChange: handleSettingsChange,
+                        showsCloseButton: true
+                    )
+                }
+                .presentationDragIndicator(.visible)
+                .presentationBackground(AppTheme.background)
+            }
         }
     }
 
@@ -413,6 +442,25 @@ struct TableSeatSelectionView: View {
         .padding(.horizontal)
     }
 
+    /// Hosts can still change the stake after Play. It applies from the next hand.
+    private var gameAnteCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AnteEditorRow(
+                amount: anteAmount,
+                currencyCode: tableCurrencyCode,
+                isEditable: canEditAnte,
+                action: presentAnteEditor
+            )
+            if let hand, !hand.isComplete, hand.anteDecimal != anteAmount {
+                Text("Applies from the next hand")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.muted)
+            }
+        }
+        .cardSurface()
+        .padding(.horizontal)
+    }
+
     private func stackAmount(for seat: SharedTableSeat) -> Decimal {
         if let handSeat = hand?.seat(forPlayerKey: seat.playerKey) {
             return (handSeat.remaining + handSeat.awardedDecimal + handSeat.toppedUpDecimal).roundedToHundredths
@@ -428,6 +476,7 @@ struct TableSeatSelectionView: View {
         guard let table else { return }
         persistSelectedSeat()
         repo.updateAnte(anteAmount, on: table)
+        rememberAnte(from: table)
         dealHandIfPossible(on: table)
     }
 
@@ -518,10 +567,10 @@ struct TableSeatSelectionView: View {
             MoneyAmountEditorState(
                 id: UUID(),
                 title: "Ante",
-                subtitle: "Per hand",
+                subtitle: isGameStarted ? "Applies from the next hand" : "Per hand",
                 currencyCode: tableCurrencyCode,
                 text: TableMoney.string(anteAmount),
-                maximum: tableBuyInAmount
+                maximum: isGameStarted || tableBuyInAmount <= 0 ? nil : tableBuyInAmount
             )
         )
     }
@@ -583,6 +632,23 @@ struct TableSeatSelectionView: View {
         guard let table else { return }
         let amount = Decimal(string: MoneyAmountKeypad.normalizedText(text)) ?? 0
         repo.updateAnte(amount, on: table)
+        rememberAnte(from: table)
+    }
+
+    private func handleSettingsChange() {
+        guard let table, (try? repo.table(inviteCode: table.inviteCode)) != nil else {
+            showTableSettings = false
+            dismiss()
+            return
+        }
+        occupants = table.seats
+        isGameStarted = table.isStarted || isGameStarted
+        hand = table.hand
+        rememberAnte(from: table)
+    }
+
+    private func rememberAnte(from table: OpenTableModel) {
+        anteStamp = table.anteDecimal
     }
 
     private func persistSelectedSeat() {
@@ -619,6 +685,9 @@ struct TableSeatSelectionView: View {
         if let resolved, resolved.isHostLocally, !resolved.isStarted, resolved.anteDecimal == 0 {
             repo.updateAnte(TableAnte.defaultAmount(forBuyIn: tableBuyInAmount), on: resolved)
         }
+        if let resolved {
+            rememberAnte(from: resolved)
+        }
 
         if let mine = resolved?.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
             selectedSeat = mine.seatNumber
@@ -651,6 +720,7 @@ struct TableSeatSelectionView: View {
         withAnimation(.easeOut(duration: 0.18)) {
             hand = table.hand
         }
+        rememberAnte(from: table)
 
         if let mine = table.seats.first(where: { $0.playerKey == repo.localPlayerKey }) {
             selectedSeat = mine.seatNumber

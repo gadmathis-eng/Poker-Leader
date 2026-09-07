@@ -307,6 +307,7 @@ final class TableRepository {
     }
 
     func updateAnte(_ amount: Decimal, on table: OpenTableModel) {
+        guard table.isHostLocally else { return }
         table.anteAmount = TableMoney.string(amount)
         table.updatedAt = .now
         try? context.save()
