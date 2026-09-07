@@ -4,7 +4,7 @@ import UIKit
 enum TableCenterContent: Equatable {
     case lobby(isPlayEnabled: Bool, inviteCode: String?)
     case waiting(String)
-    case pot(title: String, board: [PlayingCard], potLabel: String, status: String)
+    case pot(title: String, board: [PlayingCard], potLabel: String, status: String, dealID: String)
 }
 
 struct TableFeltCaption: Equatable {
@@ -20,6 +20,10 @@ struct TableSeatOccupant: Equatable {
     var committedLabel: String?
     var cards: [PlayingCard] = []
     var faceDownCount: Int = 0
+    /// Changes when a new hand is dealt, so this seat's cards go out again.
+    var dealID: String = ""
+    /// Where this seat sits in the dealer's order.
+    var dealPosition: Int = 0
     var handSummary: String?
     var isLocalUser: Bool
     /// What tapping your own seat does right now.
@@ -94,9 +98,19 @@ struct PokerTableSeatLayout: View {
                 }
             }
             .frame(width: size.width, height: size.height)
+            .coordinateSpace(CardDealOrigin.space)
+            .environment(\.cardDealOrigin, dealOrigin(in: size))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .accessibilityElement(children: .contain)
+    }
+
+    /// The dealer works from just above the board, so the community cards are
+    /// spread out in front of them rather than appearing where they already sit.
+    private func dealOrigin(in size: CGSize) -> CardDealOrigin {
+        CardDealOrigin(
+            point: CGPoint(x: size.width / 2, y: size.height / 2 - 22)
+        )
     }
 
     @ViewBuilder
@@ -233,12 +247,12 @@ private struct TableCenterView: View {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(AppTheme.cardBorder)
                 )
-        case .pot(let title, let board, let potLabel, let status):
+        case .pot(let title, let board, let potLabel, let status, let dealID):
             VStack(spacing: 6) {
                 Text(title)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                BoardCardsView(cards: board, size: .table)
+                BoardCardsView(cards: board, size: .table, dealID: dealID)
                 Text(potLabel)
                     .font(.system(.title3, design: .rounded).weight(.bold))
                     .foregroundStyle(AppTheme.gold)
@@ -387,7 +401,9 @@ private struct SeatMarker: View {
             VStack(spacing: 2) {
                 if let occupant {
                     if isMirrored {
-                        handRow(for: occupant)
+                        // Above the rest of the seat, so a card still in the air
+                        // passes over the name disc rather than behind it.
+                        handRow(for: occupant).zIndex(1)
                         stackText(for: occupant)
                         nameText(for: occupant)
                         disc(for: occupant)
@@ -395,7 +411,7 @@ private struct SeatMarker: View {
                         disc(for: occupant)
                         nameText(for: occupant)
                         stackText(for: occupant)
-                        handRow(for: occupant)
+                        handRow(for: occupant).zIndex(1)
                     }
                 } else {
                     openSeat
@@ -505,7 +521,9 @@ private struct SeatMarker: View {
                     CardRowView(
                         cards: occupant.cards,
                         faceDownCount: occupant.faceDownCount,
-                        size: .seat
+                        size: .seat,
+                        dealID: occupant.dealID,
+                        dealPosition: occupant.dealPosition
                     )
                 }
                 if let committedLabel = occupant.committedLabel {

@@ -114,33 +114,58 @@ struct FaceDownCardView: View {
 }
 
 /// A row of cards: face up where they are known, face down where they are not.
+/// Each one is dealt in, in turn, and a back turns over where it lies once its
+/// face is known.
 struct CardRowView: View {
     var cards: [PlayingCard] = []
     /// How many cards to show on their backs after the face-up ones.
     var faceDownCount: Int = 0
     var size: PlayingCardSize = .board
+    /// Changes when a fresh set of cards is dealt, so they go out again.
+    var dealID: String = ""
+    /// Where this player sits in the dealer's order, so the seats are dealt to
+    /// one after another rather than all at once.
+    var dealPosition: Int = 0
 
-    private var backs: [Int] {
-        Array(0..<max(faceDownCount, 0))
+    private var slots: [DealtCardSlot] {
+        let total = cards.count + max(faceDownCount, 0)
+        return (0..<total).map { index in
+            DealtCardSlot(
+                id: "\(dealID)/\(index)",
+                card: index < cards.count ? cards[index] : nil,
+                pitchDelay: CardDealSequence.pitch(cardIndex: index, seatPosition: dealPosition)
+            )
+        }
     }
 
     var body: some View {
         HStack(spacing: size.spacing) {
-            ForEach(cards) { card in
-                PlayingCardView(card: card, size: size)
-            }
-            ForEach(backs, id: \.self) { _ in
-                FaceDownCardView(size: size)
+            ForEach(slots) { slot in
+                DealtCardView(card: slot.card, size: size, pitchDelay: slot.pitchDelay)
             }
         }
     }
 }
 
 /// The three, four, or five cards in the middle of the table, with the ones
-/// still to come shown as empty slots.
+/// still to come shown as empty slots. A street is laid out card by card into
+/// the slots waiting for it.
 struct BoardCardsView: View {
     let cards: [PlayingCard]
     var size: PlayingCardSize = .board
+    /// Changes when a new hand is dealt, so the board is laid out again.
+    var dealID: String = ""
+
+    private var slots: [DealtCardSlot] {
+        let firstNew = CardDealSequence.firstNewBoardCard(inBoardOf: cards.count)
+        return cards.enumerated().map { index, card in
+            DealtCardSlot(
+                id: "\(dealID)/\(index)",
+                card: card,
+                pitchDelay: CardDealSequence.pitch(cardIndex: max(index - firstNew, 0))
+            )
+        }
+    }
 
     private var slotsToCome: [Int] {
         Array(0..<max(PokerHandEvaluator.handSize - cards.count, 0))
@@ -148,13 +173,12 @@ struct BoardCardsView: View {
 
     var body: some View {
         HStack(spacing: size.spacing) {
-            ForEach(cards) { card in
-                PlayingCardView(card: card, size: size)
+            ForEach(slots) { slot in
+                DealtCardView(card: slot.card, size: size, pitchDelay: slot.pitchDelay)
+                    .background { emptySlot }
             }
             ForEach(slotsToCome, id: \.self) { _ in
-                RoundedRectangle(cornerRadius: size.cornerRadius)
-                    .stroke(AppTheme.muted.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .frame(width: size.width, height: size.height)
+                emptySlot
             }
         }
         .accessibilityElement(children: .combine)
@@ -163,5 +187,16 @@ struct BoardCardsView: View {
                 ? "No cards on the table yet"
                 : "On the table: \(cards.map(\.accessibilityName).joined(separator: ", "))"
         )
+    }
+
+    /// Where a card is going to land, left marked until it gets there. Drawn
+    /// inside the slot, so a card that has landed covers it over.
+    private var emptySlot: some View {
+        RoundedRectangle(cornerRadius: size.cornerRadius)
+            .strokeBorder(
+                AppTheme.muted.opacity(0.4),
+                style: StrokeStyle(lineWidth: 1, dash: [3, 3])
+            )
+            .frame(width: size.width, height: size.height)
     }
 }
