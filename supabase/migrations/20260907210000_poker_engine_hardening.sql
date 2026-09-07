@@ -24,6 +24,273 @@
 -- Timeout column
 -- ---------------------------------------------------------------------------
 
+create or replace function public.poker_draw_card(p_hand_id uuid)
+returns text
+language plpgsql
+volatile
+as $$
+declare
+    remaining jsonb;
+    drawn text;
+begin
+    select h.deck into remaining from public.poker_hands h where h.id = p_hand_id;
+    if remaining is null or jsonb_array_length(remaining) = 0 then
+        return null;
+    end if;
+    drawn := remaining->>0;
+    update public.poker_hands
+    set deck = coalesce(remaining - 0, '[]'::jsonb)
+    where id = p_hand_id;
+    return drawn;
+end;
+$$;
+
+revoke all on function public.poker_draw_card(uuid) from public, anon, authenticated;
+
+create or replace function public.poker_rank_five(p_cards jsonb)
+returns jsonb
+language plpgsql
+immutable
+as $$
+declare
+    codes text[];
+    ranks int[];
+    suits text[];
+    is_flush boolean;
+    straight_high int;
+    wheel boolean := false;
+    unique_ranks int;
+    high int;
+    low int;
+    groups jsonb := '[]'::jsonb;
+    counts int[];
+    tiebreakers int[] := '{}';
+    category int;
+    summary text;
+    ordered text[];
+    grp_rank int;
+    grp_count int;
+    leftover text[];
+begin
+    if jsonb_array_length(coalesce(p_cards, '[]'::jsonb)) <> 5 then
+        return null;
+    end if;
+
+    select array_agg(code_txt) into codes
+    from jsonb_array_elements_text(p_cards) as code_txt;
+
+    ranks := array(
+        select public.poker_card_rank(code_txt) from unnest(codes) as code_txt
+    );
+    suits := array(
+        select public.poker_card_suit(code_txt) from unnest(codes) as code_txt
+    );
+
+    if ranks @> array[null::int] or array_position(ranks, null) is not null then
+        return null;
+    end if;
+
+    select array_agg(code_txt order by public.poker_card_rank(code_txt) desc)
+    into codes
+    from unnest(codes) as code_txt;
+    ranks := array(select public.poker_card_rank(code_txt) from unnest(codes) as code_txt);
+
+    is_flush := (select count(distinct suit_txt) = 1 from unnest(suits) as suit_txt);
+    unique_ranks := (select count(distinct rank_val) from unnest(ranks) as rank_val);
+    high := ranks[1];
+    low := ranks[5];
+
+    straight_high := null;
+    if unique_ranks = 5 then
+        if high - low = 4 then
+            straight_high := high;
+        elsif ranks[1] = 14 and ranks[2] = 5 and ranks[3] = 4
+           and ranks[4] = 3 and ranks[5] = 2 then
+            straight_high := 5;
+            wheel := true;
+        end if;
+    end if;
+
+    if wheel then
+        ordered := array(
+            select code_txt from unnest(codes) as code_txt
+            where public.poker_card_rank(code_txt) <> 14
+            order by public.poker_card_rank(code_txt) desc
+        ) || array(
+            select code_txt from unnest(codes) as code_txt
+            where public.poker_card_rank(code_txt) = 14
+        );
+    else
+        ordered := codes;
+    end if;
+
+    if straight_high is not null then
+        category := case when is_flush then 9 else 5 end;
+        if category = 9 and straight_high = 14 then
+            summary := 'Royal flush';
+        elsif category = 9 then
+            summary := 'Straight flush, ' || public.poker_rank_name(straight_high) || ' high';
+        else
+            summary := 'Straight, ' || public.poker_rank_name(straight_high) || ' high';
+        end if;
+        return jsonb_build_object(
+            'category', category,
+            'tiebreakers', jsonb_build_array(straight_high),
+            'cards', to_jsonb(ordered),
+            'summary', summary
+        );
+    end if;
+
+    if is_flush then
+        return jsonb_build_object(
+            'category', 6,
+            'tiebreakers', to_jsonb(ranks),
+            'cards', to_jsonb(codes),
+            'summary', 'Flush, ' || public.poker_rank_name(ranks[1]) || ' high'
+        );
+    end if;
+
+    for grp_rank, grp_count in
+        select public.poker_card_rank(code_txt) as rk, count(*)::int
+        from unnest(codes) as code_txt
+        group by 1
+        order by 2 desc, 1 desc
+    loop
+        leftover := array(
+            select code_txt from unnest(codes) as code_txt
+            where public.poker_card_rank(code_txt) = grp_rank
+        );
+        groups := groups || jsonb_build_array(
+            jsonb_build_object('rank', grp_rank, 'count', grp_count, 'cards', to_jsonb(leftover))
+        );
+        tiebreakers := tiebreakers || grp_rank;
+        counts := coalesce(counts, '{}') || grp_count;
+    end loop;
+
+    ordered := array(
+        select jsonb_array_elements_text(g->'cards')
+        from jsonb_array_elements(groups) as g
+    );
+
+    if counts = array[4, 1] then
+        category := 8;
+        summary := 'Four of a kind, ' || public.poker_rank_name(tiebreakers[1], true);
+    elsif counts = array[3, 2] then
+        category := 7;
+        summary := 'Full house, ' || public.poker_rank_name(tiebreakers[1], true)
+            || ' full of ' || public.poker_rank_name(tiebreakers[2], true);
+    elsif counts = array[3, 1, 1] then
+        category := 4;
+        summary := 'Three of a kind, ' || public.poker_rank_name(tiebreakers[1], true);
+    elsif counts = array[2, 2, 1] then
+        category := 3;
+        summary := 'Two pair, ' || public.poker_rank_name(tiebreakers[1], true)
+            || ' and ' || public.poker_rank_name(tiebreakers[2], true);
+    elsif counts = array[2, 1, 1, 1] then
+        category := 2;
+        summary := 'Pair of ' || public.poker_rank_name(tiebreakers[1], true);
+    else
+        category := 1;
+        summary := initcap(public.poker_rank_name(tiebreakers[1])) || ' high';
+    end if;
+
+    return jsonb_build_object(
+        'category', category,
+        'tiebreakers', to_jsonb(tiebreakers),
+        'cards', to_jsonb(ordered),
+        'summary', summary
+    );
+end;
+$$;
+
+revoke all on function public.poker_rank_five(jsonb) from public, anon, authenticated;
+
+create or replace function public.poker_action_order(p_seats integer[], p_dealer integer)
+returns integer[]
+language plpgsql
+immutable
+as $$
+declare
+    sorted integer[];
+    pivot int;
+begin
+    select array_agg(s order by s) into sorted from unnest(p_seats) as s;
+    if sorted is null then
+        return '{}';
+    end if;
+    select min(idx) into pivot
+    from generate_subscripts(sorted, 1) as idx
+    where sorted[idx] > p_dealer;
+    if pivot is null then
+        return sorted;
+    end if;
+    return sorted[pivot:] || sorted[:pivot-1];
+end;
+$$;
+
+create or replace function public.poker_next_acting_seat(p_hand_id uuid, p_after integer)
+returns integer
+language plpgsql
+stable
+as $$
+declare
+    hand public.poker_hands;
+    order_seats integer[];
+    start_at int := 1;
+    step int;
+    seat_no int;
+    rec record;
+    call_target bigint;
+    contenders int;
+begin
+    select * into hand from public.poker_hands where id = p_hand_id;
+    select count(*) into contenders
+    from public.poker_hand_seats
+    where poker_hand_seats.hand_id = p_hand_id and not is_folded;
+    if contenders < 2 then
+        return null;
+    end if;
+
+    select public.poker_action_order(array_agg(seat_number), hand.dealer_seat)
+    into order_seats
+    from public.poker_hand_seats
+    where poker_hand_seats.hand_id = p_hand_id;
+
+    if order_seats is null or array_length(order_seats, 1) is null then
+        return null;
+    end if;
+
+    call_target := public.poker_call_target(p_hand_id);
+    if p_after is not null then
+        select min(idx) into start_at
+        from generate_subscripts(order_seats, 1) as idx
+        where order_seats[idx] = p_after;
+        if start_at is null then
+            start_at := 1;
+        else
+            start_at := start_at + 1;
+        end if;
+    end if;
+
+    for step in 0 .. coalesce(array_length(order_seats, 1), 0) - 1 loop
+        seat_no := order_seats[1 + ((start_at - 1 + step) % array_length(order_seats, 1))];
+        select * into rec
+        from public.poker_hand_seats
+        where poker_hand_seats.hand_id = p_hand_id and seat_number = seat_no;
+        if public.poker_needs_action(
+            rec.is_folded,
+            public.poker_remaining(rec.stack_cents, rec.committed_cents),
+            rec.has_acted,
+            rec.street_committed_cents,
+            call_target
+        ) then
+            return seat_no;
+        end if;
+    end loop;
+    return null;
+end;
+$$;
+
 alter table public.poker_hands
     add column if not exists action_deadline timestamptz;
 
@@ -930,6 +1197,178 @@ begin
     );
 end;
 $$;
+
+create or replace function public.poker_start_hand_internal(
+    p_invite_code text,
+    p_deck jsonb default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+    uid uuid := public.vault_require_user();
+    code text := upper(trim(p_invite_code));
+    tbl_row public.open_tables;
+    live public.poker_hands;
+    players_count int := 0;
+    dealer int;
+    prev_dealer int;
+    v_hand_id uuid := gen_random_uuid();
+    hand_no int;
+    ante bigint;
+    deck jsonb;
+    order_seats integer[];
+    seat_no int;
+    card text;
+    pass int;
+    first_actor int;
+begin
+    if code = '' then
+        raise exception 'poker: unknown table' using errcode = 'P0002';
+    end if;
+
+    select * into tbl_row from public.open_tables where invite_code = code for update;
+    if not found then
+        raise exception 'poker: unknown table' using errcode = 'P0002';
+    end if;
+
+    if not exists (
+        select 1
+        from jsonb_array_elements(coalesce(tbl_row.seats, '[]'::jsonb)) seat
+        where seat->>'playerKey' = uid::text
+    ) then
+        raise exception 'poker: you are not at that table' using errcode = '42501';
+    end if;
+
+    perform public.poker_sweep_timeouts(code);
+
+    select * into live
+    from public.poker_hands
+    where invite_code = code and not is_complete
+    for update;
+    if found then
+        return public.poker_hand_snapshot(live.id, uid::text);
+    end if;
+
+    create temporary table if not exists poker_start_players (
+        user_id uuid,
+        player_key text,
+        seat_number int,
+        player_name text,
+        stack_cents bigint,
+        is_host boolean
+    ) on commit drop;
+    delete from poker_start_players;
+
+    insert into poker_start_players (user_id, player_key, seat_number, player_name, stack_cents, is_host)
+    select s.user_id,
+           s.player_key,
+           nullif(seat->>'seatNumber', '')::int,
+           coalesce(nullif(seat->>'playerName', ''), s.display_name, 'Player'),
+           s.in_play_cents,
+           coalesce((seat->>'isHost')::boolean, tbl_row.host_user_id = s.user_id)
+    from public.vault_table_stakes s
+    join jsonb_array_elements(coalesce(tbl_row.seats, '[]'::jsonb)) seat
+      on seat->>'playerKey' = s.player_key
+    where s.invite_code = code
+      and s.status = 'seated'
+      and s.in_play_cents > 0
+      and nullif(seat->>'seatNumber', '')::int between 1 and 8;
+
+    select count(*) into players_count from poker_start_players;
+    if players_count < 2 then
+        raise exception 'poker: two players need money on the table to deal a hand'
+            using errcode = 'P0002';
+    end if;
+
+    select dealer_seat into prev_dealer
+    from public.poker_hands
+    where invite_code = code
+    order by hand_number desc
+    limit 1;
+
+    if prev_dealer is not null then
+        dealer := (
+            public.poker_action_order(
+                array(select seat_number from poker_start_players),
+                prev_dealer
+            )
+        )[1];
+    else
+        select seat_number into dealer
+        from poker_start_players
+        where is_host
+        order by seat_number
+        limit 1;
+        if dealer is null then
+            select min(seat_number) into dealer from poker_start_players;
+        end if;
+    end if;
+
+    select coalesce(max(hand_number), 0) + 1 into hand_no
+    from public.poker_hands where invite_code = code;
+
+    ante := public.poker_ante_cents(tbl_row.ante_amount);
+    if p_deck is null or jsonb_array_length(p_deck) = 0 then
+        deck := public.poker_shuffle_deck(public.poker_full_deck());
+    else
+        deck := p_deck;
+        -- Append any missing cards so a stacked test deck still has a board.
+        -- The column cannot be named `card` — that is a PL/pgSQL variable here.
+        deck := deck || coalesce((
+            select jsonb_agg(remaining)
+            from jsonb_array_elements_text(public.poker_full_deck()) as remaining
+            where not exists (
+                select 1
+                from jsonb_array_elements_text(p_deck) as dealt
+                where dealt = remaining
+            )
+        ), '[]'::jsonb);
+    end if;
+
+    insert into public.poker_hands (
+        id, invite_code, hand_number, revision, dealer_seat, ante_cents, deck
+    ) values (
+        v_hand_id, code, hand_no, 1, dealer, ante, deck
+    );
+
+    insert into public.poker_hand_seats (
+        hand_id, user_id, player_key, seat_number, player_name, stack_cents
+    )
+    select v_hand_id, user_id, player_key, seat_number, player_name, stack_cents
+    from poker_start_players;
+
+    select public.poker_action_order(array_agg(seat_number), dealer)
+    into order_seats
+    from public.poker_hand_seats
+    where poker_hand_seats.hand_id = v_hand_id;
+
+    for pass in 1..2 loop
+        foreach seat_no in array order_seats loop
+            card := public.poker_draw_card(v_hand_id);
+            update public.poker_hand_seats
+            set hole_cards = hole_cards || jsonb_build_array(card)
+            where poker_hand_seats.hand_id = v_hand_id and seat_number = seat_no;
+        end loop;
+    end loop;
+
+    first_actor := public.poker_first_to_act(v_hand_id);
+    update public.poker_hands
+    set acting_seat = first_actor, updated_at = now()
+    where id = v_hand_id;
+    if first_actor is null then
+        perform public.poker_close_street(v_hand_id);
+    end if;
+
+    perform public.poker_publish_snapshot(v_hand_id);
+    return public.poker_hand_snapshot(v_hand_id, uid::text);
+end;
+$$;
+
+revoke all on function public.poker_start_hand_internal(text, jsonb) from public, anon, authenticated;
 
 create or replace function public.poker_start_hand(p_invite_code text)
 returns jsonb

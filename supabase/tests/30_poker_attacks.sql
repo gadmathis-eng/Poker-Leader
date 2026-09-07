@@ -11,6 +11,16 @@ insert into auth.users (id, email) values
     ('33333333-3333-3333-3333-333333333333', 'attacker@example.com')
 on conflict (id) do nothing;
 
+-- 10_vault_flow.sql turns self-exclusion on for the guest. This script shares
+-- the users, not that restriction.
+update public.vault_compliance_profiles
+set self_excluded_until = null
+where user_id in (
+    '11111111-1111-1111-1111-111111111111',
+    '22222222-2222-2222-2222-222222222222',
+    '33333333-3333-3333-3333-333333333333'
+);
+
 -- ---------------------------------------------------------------------------
 -- Honest table: host $40, guest $50, ante $1. Known deck so Ana (host) has
 -- Ah Kh and wins a flush — the same hand as HandRoundTests.
@@ -271,7 +281,10 @@ select public.poker_start_hand_internal('POKER1', '["2c","Ah","7d","Kh","3h","9h
 -- Left of the new dealer acts first. After hand 1 the button moves to seat 2,
 -- so the host (seat 1) is first to act. Have them post the ante, then leave.
 select public.poker_act('POKER1', 'call', null, 'leave-host-call');
-select public.vault_summary()->>'in_play_cents' as host_in_play_before_leave \gset
+select in_play_cents as host_poker1_before_leave
+from public.vault_table_stakes
+where invite_code = 'POKER1'
+  and user_id = '11111111-1111-1111-1111-111111111111' \gset
 select public.vault_leave_table('POKER1', 'host-leave-midhand') as host_leave \gset
 select :'host_leave'::jsonb->>'returned_cents' as returned_cents,
        :'host_leave'::jsonb->>'bought_in_cents' as bought_in_cents;
@@ -279,7 +292,7 @@ select :'host_leave'::jsonb->>'returned_cents' as returned_cents,
 -- The host had posted the ante. Walking out must not give that 100 cents back.
 select (
     (:'host_leave'::jsonb->>'returned_cents')::bigint
-    = :'host_in_play_before_leave'::bigint - 100
+    = :'host_poker1_before_leave'::bigint - 100
 ) as host_left_without_committed_ante;
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
@@ -289,11 +302,9 @@ select public.poker_hand_view('POKER1')->>'resultSummary' as result_summary;
 select public.vault_summary()->>'in_play_cents' as guest_in_play_after_foldout;
 
 \echo '=== P14. hole cards stay hidden from a direct select as authenticated ==='
-set role authenticated;
-select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
-select count(*) as visible_hand_rows from public.poker_hands;
-select count(*) as visible_hole_rows from public.poker_hand_seats;
-reset role;
+select has_table_privilege('authenticated', 'public.poker_hands', 'SELECT') as can_select_hands,
+       has_table_privilege('authenticated', 'public.poker_hand_seats', 'SELECT') as can_select_seats,
+       has_table_privilege('authenticated', 'public.poker_hand_actions', 'SELECT') as can_select_actions;
 
 \echo '=== P15. books still reconcile ==='
 select * from public.vault_reconcile_accounts();
@@ -399,7 +410,7 @@ $$;
 -- at the same time. The hand must stay, and leaving must still withhold.
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 update public.open_tables
-set host_display_name = 'Host',
+set host_display_name = 'Table Host',
     hand = null
 where invite_code = 'POKER2';
 
