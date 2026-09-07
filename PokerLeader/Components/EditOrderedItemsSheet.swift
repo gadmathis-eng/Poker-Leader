@@ -29,37 +29,27 @@ struct EditOrderedItemRow: View {
 }
 
 struct EditOrderedItemInviteActions: View {
-    let code: String
     let shareURL: URL
     let subject: String
     let message: String
     var shareTitle: String = "Share invite"
 
     var body: some View {
-        VStack(spacing: 12) {
-            InviteCodeCopyLabel(code: code, style: .headline)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        ShareLink(
+            item: shareURL,
+            subject: Text(subject),
+            message: Text(message)
+        ) {
+            Label(shareTitle, systemImage: "square.and.arrow.up")
+                .font(.headline.weight(.semibold))
+                .frame(maxWidth: .infinity)
                 .padding()
                 .background(AppTheme.card)
+                .foregroundStyle(AppTheme.text)
                 .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
                 .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
-
-            ShareLink(
-                item: shareURL,
-                subject: Text(subject),
-                message: Text(message)
-            ) {
-                Label(shareTitle, systemImage: "square.and.arrow.up")
-                    .font(.headline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(AppTheme.card)
-                    .foregroundStyle(AppTheme.text)
-                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-                    .overlay(RoundedRectangle(cornerRadius: AppTheme.cornerRadius).stroke(AppTheme.cardBorder))
-            }
-            .buttonStyle(.plain)
         }
+        .buttonStyle(.plain)
     }
 }
 

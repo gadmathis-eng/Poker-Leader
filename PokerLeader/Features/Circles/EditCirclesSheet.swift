@@ -24,7 +24,6 @@ struct EditCirclesSheet: View {
         } aboveSave: { circle in
             if let circle, CircleCreatorStore.isCreator(of: circle.id) {
                 EditOrderedItemInviteActions(
-                    code: circle.shortCode,
                     shareURL: CircleInviteSharing.url(for: circle),
                     subject: "Join \(circle.name) on Pot Master",
                     message: CircleInviteSharing.message(for: circle)

@@ -23,7 +23,6 @@ struct EditTablesSheet: View {
         } aboveSave: { table in
             if let table {
                 EditOrderedItemInviteActions(
-                    code: table.inviteCode,
                     shareURL: TableInviteSharing.url(forInviteCode: table.inviteCode),
                     subject: "Join my Pot Master table",
                     message: TableInviteSharing.message(
