@@ -17,6 +17,6 @@ struct CreateTableButton: View {
         .buttonStyle(.plain)
         .disabled(isBusy)
         .accessibilityLabel("Create table")
-        .accessibilityHint("Starts a new hosted poker table")
+        .accessibilityHint("Choose the table currency, pay-in, and ante")
     }
 }

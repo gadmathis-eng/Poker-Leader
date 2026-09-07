@@ -11,6 +11,7 @@ struct CirclesHomeView: View {
     @State private var showNewCircle = false
     @State private var showJoinCircle = false
     @State private var showJoinTable = false
+    @State private var showCreateTable = false
     @State private var showEditCircles = false
     @State private var showNotificationCenter = false
     @State private var rateStatusText = ExchangeRateService.shared.rateStatusText
@@ -44,7 +45,7 @@ struct CirclesHomeView: View {
 
                     VStack(spacing: 12) {
                         CreateTableButton {
-                            router.pendingCreateTable = true
+                            showCreateTable = true
                         }
 
                         Button { showJoinTable = true } label: {
@@ -160,6 +161,9 @@ struct CirclesHomeView: View {
             }
             .sheet(isPresented: $showJoinTable) {
                 JoinTableSheet()
+            }
+            .sheet(isPresented: $showCreateTable) {
+                CreateTableSheet()
             }
             .sheet(isPresented: $showEditCircles) {
                 EditCirclesSheet(circles: orderedCircles)

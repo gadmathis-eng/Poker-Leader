@@ -23,8 +23,6 @@ final class AppRouter {
     var pendingInviteCode: String?
     var pendingSettlementSessionId: UUID?
     var pendingTableInviteCode: String?
-    /// Set from the Circles tab so the Table tab can host a new table.
-    var pendingCreateTable = false
 
     func push(_ route: AppRoute) {
         circlesPath.append(route)

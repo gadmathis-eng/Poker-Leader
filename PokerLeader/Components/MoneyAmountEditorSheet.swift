@@ -37,6 +37,7 @@ struct MoneyAmountPill: View {
 }
 
 struct StandardBuyInCard: View {
+    var title: String = "Buy-in"
     let amount: Decimal
     let currencyCode: String
     let onAmountTap: () -> Void
@@ -57,7 +58,7 @@ struct StandardBuyInCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
-                Text("Buy-in")
+                Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.muted)
                 Spacer()

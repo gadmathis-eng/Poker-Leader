@@ -117,15 +117,21 @@ final class TableRepository {
         name: String?,
         sessionCurrencyCode: String,
         hostDisplayName: String,
-        sessionSeats: [SessionTableSeat] = []
+        sessionSeats: [SessionTableSeat] = [],
+        anteAmount: Decimal? = nil
     ) throws -> OpenTableModel {
         let table = try makeHostedTable(
             name: name,
             sessionCurrencyCode: sessionCurrencyCode,
             hostDisplayName: hostDisplayName
         )
+        if let anteAmount {
+            table.anteAmount = TableMoney.string(anteAmount)
+        }
         if !sessionSeats.isEmpty {
             table.seats = try occupySessionSeats(sessionSeats)
+        }
+        if anteAmount != nil || !sessionSeats.isEmpty {
             try context.save()
         }
         return table

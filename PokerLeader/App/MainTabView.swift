@@ -69,7 +69,7 @@ struct MainTabView: View {
         }
         .onAppear {
             showProfileOnboarding = needsProfileOnboarding
-            if router.pendingTableInviteCode != nil || router.pendingCreateTable {
+            if router.pendingTableInviteCode != nil {
                 selectedTab = 2
             }
         }
@@ -90,11 +90,6 @@ struct MainTabView: View {
         }
         .onChange(of: router.pendingTableInviteCode) { _, code in
             if code != nil {
-                selectedTab = 2
-            }
-        }
-        .onChange(of: router.pendingCreateTable) { _, pending in
-            if pending {
                 selectedTab = 2
             }
         }
