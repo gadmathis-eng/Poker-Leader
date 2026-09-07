@@ -258,6 +258,84 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(next.seat(forPlayerKey: "ben")?.stackDecimal, 19)
     }
 
+    func testChangingTheAnteAppliesToTheNextHandNotTheCurrentOne() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try hostedHeadsUpTable(repo)
+        repo.updateAnte(1, on: table)
+
+        let first = try repo.dealHand(on: table)
+        XCTAssertEqual(first.anteDecimal, 1)
+
+        repo.updateAnte(2, on: table)
+        XCTAssertEqual(table.anteDecimal, 2)
+        XCTAssertEqual(table.hand?.anteDecimal, 1, "The hand already being played keeps its ante")
+
+        var finished = try HandRound.apply(move: .call, playerKey: "ben", to: first)
+        finished = try HandRound.apply(move: .call, playerKey: "host-key", to: finished)
+        finished = try HandRound.apply(move: .fold, playerKey: "ben", to: finished)
+        repo.updateHand(finished, on: table)
+        try repo.dealNextHand(on: table)
+
+        XCTAssertEqual(table.hand?.anteDecimal, 2)
+        XCTAssertEqual(table.hand?.handNumber, 2)
+    }
+
+    func testChangingTheAnteBeforeDealingUsesTheNewAmount() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try hostedHeadsUpTable(repo)
+
+        repo.updateAnte(3, on: table)
+
+        let hand = try repo.dealHand(on: table)
+        XCTAssertEqual(hand.anteDecimal, 3)
+        XCTAssertEqual(table.anteDecimal, 3)
+    }
+
+    func testGuestsCannotChangeTheAnte() throws {
+        let context = try makeContext()
+        let joined = OpenTableModel(
+            inviteCode: "JOIN01",
+            name: "Friend's table",
+            hostDisplayName: "Ben",
+            hostPlayerKey: "host-key",
+            sessionCurrencyCode: "GBP",
+            isHostLocally: false,
+            anteAmount: "1"
+        )
+        context.insert(joined)
+        try context.save()
+
+        let repo = TableRepository(context: context)
+        repo.updateAnte(5, on: joined)
+
+        XCTAssertEqual(joined.anteAmount, "1")
+        XCTAssertEqual(joined.anteDecimal, 1)
+    }
+
+    private func hostedHeadsUpTable(_ repo: TableRepository) throws -> OpenTableModel {
+        try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "GBP",
+            hostDisplayName: "Ana",
+            sessionSeats: [
+                SessionTableSeat(
+                    playerKey: "host-key",
+                    playerName: "Ana",
+                    handle: nil,
+                    amount: 20,
+                    isHost: true
+                ),
+                SessionTableSeat(
+                    playerKey: "ben",
+                    playerName: "Ben",
+                    handle: nil,
+                    amount: 20,
+                    isHost: false
+                )
+            ]
+        )
+    }
+
     private func makeContext() throws -> ModelContext {
         let schema = Schema([OpenTableModel.self])
         let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
