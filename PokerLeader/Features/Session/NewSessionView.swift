@@ -252,7 +252,7 @@ struct NewSessionView: View {
                         buyInText = sanitizedNonNegativeDecimalText(text)
                     }
                     .presentationDetents([.height(420)])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                 }
                 .sheet(isPresented: $showingCurrencyPicker) {
                     CurrencyPickerSheet(selectedCurrencyCode: currencyCode) { code in

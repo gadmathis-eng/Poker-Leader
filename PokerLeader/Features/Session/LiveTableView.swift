@@ -115,7 +115,7 @@ struct LiveTableView: View {
                         syncMoneyText(for: player)
                     }
                     .presentationDetents([.height(420)])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                 }
             } else {
                 ContentUnavailableView("Session not found", systemImage: "exclamationmark.circle")

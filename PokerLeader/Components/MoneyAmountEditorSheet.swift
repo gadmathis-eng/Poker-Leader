@@ -169,9 +169,7 @@ struct MoneyAmountEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Capsule()
-                .fill(AppTheme.muted.opacity(0.4))
-                .frame(width: 44, height: 4)
+            SheetDragHandle()
 
             if !title.isEmpty || !subtitle.isEmpty {
                 VStack(spacing: 6) {
@@ -244,6 +242,7 @@ struct MoneyAmountEditorSheet: View {
         }
         .padding(20)
         .background(AppTheme.background)
+        .presentationDragIndicator(.hidden)
     }
 
     private var canSave: Bool {

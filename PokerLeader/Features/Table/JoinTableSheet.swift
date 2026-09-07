@@ -36,7 +36,7 @@ struct JoinTableSheet: View {
                     }
                 }
                 Section {
-                    Text("Ask the host for their table link or code. You'll pick a seat once you're at the table.")
+                    Text("Ask the host for their table link or code. Before you sit, you'll choose how much to put in.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

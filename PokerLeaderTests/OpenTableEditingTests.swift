@@ -47,6 +47,30 @@ final class SharedTableSeatingRemovalTests: XCTestCase {
         XCTAssertEqual(remaining.map(\.playerKey), ["host"])
     }
 
+    func testEachPlayerKeepsTheirOwnBuyIn() throws {
+        var seats = try SharedTableSeating.occupy(
+            seats: [],
+            seatNumber: 1,
+            playerKey: "host",
+            playerName: "Alex",
+            handle: nil,
+            amount: 50,
+            isHost: true
+        )
+        seats = try SharedTableSeating.occupy(
+            seats: seats,
+            seatNumber: 3,
+            playerKey: "guest",
+            playerName: "Ben",
+            handle: nil,
+            amount: 15,
+            isHost: false
+        )
+
+        XCTAssertEqual(seats.map(\.amountDecimal), [50, 15])
+        XCTAssertEqual(seats.map(\.playerKey), ["host", "guest"])
+    }
+
     func testRemovingAPlayerWithoutASeatChangesNothing() throws {
         let seats = try SharedTableSeating.occupy(
             seats: [],

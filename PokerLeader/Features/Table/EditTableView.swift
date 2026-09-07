@@ -98,7 +98,7 @@ struct EditTableView: View {
                 if seatNumber != nil {
                     Text(isDealtIn
                          ? "This is your buy-in. You are in a hand, so it changes again once the pot is settled."
-                         : "This is your buy-in. It cannot be changed after you sit down.")
+                         : "This is your buy-in. It is chosen on the Table tab before you sit down.")
                 }
             }
 

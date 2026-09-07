@@ -31,11 +31,9 @@ struct PersonalSessionSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(AppTheme.muted.opacity(0.4))
-                .frame(width: 44, height: 4)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
+            SheetDragHandle()
+                .padding(.top, 8)
+                .padding(.bottom, 16)
 
             VStack(spacing: 6) {
                 Text("New session")

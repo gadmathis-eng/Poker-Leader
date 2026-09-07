@@ -152,7 +152,7 @@ struct CreateTableSheet: View {
                     }
                 }
                 .presentationDetents([.height(420)])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: $showSignIn) {
                 SignInSheet()
