@@ -13,12 +13,11 @@ struct EditTablesSheet: View {
             items: tables,
             id: \.id,
             onSave: save
-        ) { table, isSelected in
+        ) { table in
             EditOrderedItemRow(
                 leadingText: table.inviteCode,
                 title: table.displayTitle,
-                subtitle: summary(for: table),
-                isSelected: isSelected
+                subtitle: summary(for: table)
             )
         }
     }
