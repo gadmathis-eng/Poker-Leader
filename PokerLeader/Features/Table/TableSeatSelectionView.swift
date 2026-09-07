@@ -404,40 +404,18 @@ struct TableSeatSelectionView: View {
     private var sitDownCard: some View {
         VStack(spacing: 14) {
             moneyInRows
-                .cardSurface()
 
-            if canEditAnte {
-                StandardBuyInCard(
-                    title: "Ante",
-                    showsCurrencyButton: false,
-                    showsEditHint: true,
-                    amount: anteAmount,
-                    currencyCode: tableCurrencyCode,
-                    onAmountTap: presentAnteEditor,
-                    onCurrencyTap: {}
-                )
-                Text("What everyone puts in to stay in the hand. Tap Edit to change it.")
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.muted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Ante")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundStyle(AppTheme.text)
-                        Text("What everyone puts in to stay in the hand")
-                            .font(.caption2)
-                            .foregroundStyle(AppTheme.muted)
-                    }
-                    Spacer()
-                    Text(MoneyFormatting.plain(anteAmount, currencyCode: tableCurrencyCode))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
-                .cardSurface()
-            }
+            Divider()
+                .overlay(AppTheme.cardBorder)
+
+            AnteEditorRow(
+                amount: anteAmount,
+                currencyCode: tableCurrencyCode,
+                isEditable: canEditAnte,
+                action: presentAnteEditor
+            )
         }
+        .cardSurface()
         .padding(.horizontal)
     }
 

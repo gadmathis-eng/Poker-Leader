@@ -618,8 +618,8 @@ final class HandRoundTests: XCTestCase {
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 100), 1)
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 20), 1)
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 50), 1)
-        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: dec("0.2")), dec("0.2"))
-        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 0), 0)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: dec("0.2")), 1)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 0), 1)
     }
 
     // MARK: - Nothing is ever created or lost

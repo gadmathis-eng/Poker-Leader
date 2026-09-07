@@ -86,18 +86,19 @@ struct CreateTableSheet: View {
                             .foregroundStyle(AppTheme.muted)
                     }
 
-                    StandardBuyInCard(
-                        title: "Ante",
-                        showsCurrencyButton: false,
-                        showsEditHint: true,
+                    AnteEditorRow(
                         amount: anteAmount ?? 0,
                         currencyCode: tableCurrencyCode,
-                        onAmountTap: presentAnteEditor,
-                        onCurrencyTap: {}
+                        action: presentAnteEditor
                     )
-                    Text("What everyone puts in to stay in the hand. Tap Edit to change it.")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.muted)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .background(AppTheme.card)
+                    .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                            .stroke(AppTheme.cardBorder)
+                    )
 
                     if let errorMessage {
                         Text(errorMessage)

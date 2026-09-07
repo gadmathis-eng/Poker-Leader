@@ -220,10 +220,8 @@ private struct OpenTableHandMarker: Codable, Equatable {
 }
 
 enum TableAnte {
-    static func defaultAmount(forBuyIn buyIn: Decimal) -> Decimal {
-        let stack = buyIn.clampedToNonNegative
-        guard stack > 0 else { return 0 }
-        return min(1, stack)
+    static func defaultAmount(forBuyIn _: Decimal) -> Decimal {
+        1
     }
 }
 
