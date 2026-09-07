@@ -60,6 +60,7 @@ struct JoinBuyInSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             SheetDragHandle()
+                .padding(.bottom, 6)
 
             VStack(spacing: 6) {
                 Text("How much do you want to put in?")
