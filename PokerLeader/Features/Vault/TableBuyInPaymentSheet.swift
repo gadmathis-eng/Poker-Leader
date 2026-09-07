@@ -212,7 +212,7 @@ struct TableBuyInPaymentSheet: View {
                 methodRow(
                     .topUp,
                     title: "Use Vault + Apple Pay",
-                    subtitle: "\(available.formatted(currencyCode: currencyCode)) from your Vault, \(shortfall.formatted(currencyCode: currencyCode)) on Apple Pay",
+                    subtitle: "Add the missing \(shortfall.formatted(currencyCode: currencyCode)) to your Vault, then buy in with the full \(requestedAmount.formatted(currencyCode: currencyCode))",
                     isEnabled: true,
                     icon: "rectangle.split.2x1.fill"
                 )
@@ -303,20 +303,20 @@ struct TableBuyInPaymentSheet: View {
                 )
 
             case .topUp:
-                // Two verified movements rather than one. The Vault part settles
-                // first so a declined card leaves the player's own money where it
-                // was rather than stranded halfway onto a table.
-                statusLine = "Using your Vault balance…"
-                _ = try await store.buyInFromVault(
+                // Top the Vault up first, then buy in once for the whole amount.
+                // Splitting the buy-in itself would not work: a table's minimum
+                // applies to each buy-in, so the small remainder would be turned
+                // away on its own. Doing it this way also means a declined card
+                // leaves the player's own money untouched in their Vault rather
+                // than stranded halfway onto a table.
+                let missing = shortfall
+                statusLine = "Topping up your Vault with Apple Pay…"
+                _ = try await store.addMoney(missing)
+
+                statusLine = "Moving your buy-in onto the table…"
+                receipt = try await store.buyInFromVault(
                     inviteCode: inviteCode,
-                    amount: available,
-                    playerKey: playerKey,
-                    displayName: displayName
-                )
-                statusLine = "Verifying the rest with Apple Pay…"
-                receipt = try await store.buyInWithApplePay(
-                    inviteCode: inviteCode,
-                    amount: shortfall,
+                    amount: requestedAmount,
                     playerKey: playerKey,
                     displayName: displayName
                 )

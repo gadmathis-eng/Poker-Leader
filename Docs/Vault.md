@@ -228,6 +228,12 @@ Worth being plain about, because the architecture points at them:
   been posted, so a client cannot invent money — but it could still misreport how
   the money moved *between* seats. A server-side game engine would close that,
   and `vault_record_hand` is the seam it would replace.
+- **A table's buy-in range is set by whoever registers it first.** Normally that
+  is the host, and `vault_register_table` will not let anyone else change an
+  existing range. But a guest who reaches the backend before the host does can
+  create the row, and the range is then derived from their own buy-in rather than
+  the host's. The fix is a host-published minimum and maximum on the shared table
+  row, which `open_tables` does not carry yet.
 - **One currency.** The Vault settles in USD and table amounts are converted at
   the app's exchange rate. Multi-currency accounts would mean per-currency
   accounts and an explicit FX posting.

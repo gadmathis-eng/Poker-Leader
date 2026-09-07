@@ -415,11 +415,14 @@ struct TableView: View {
             vaultCurrencyCode: vault.currencyCode
         )
 
-        // The host is the one who tells the backend what this table accepts, so
-        // a guest arriving later is checked against a range they did not set.
-        if table.isHostLocally {
+        // The host sets what this table accepts, and a guest arriving later is
+        // checked against a range they did not choose. A guest still calls this
+        // in case the host has not reached the backend yet — registering a table
+        // that already exists cannot change its range unless you are its host.
+        var limits = await vault.limits(forTable: table.inviteCode)
+        if limits == nil || table.isHostLocally {
             let range = TableBuyInPolicy.limits(forStandardBuyIn: vaultAmount)
-            await vault.registerTable(
+            limits = await vault.registerTable(
                 inviteCode: table.inviteCode,
                 minimum: range.minimum,
                 maximum: range.maximum,
@@ -433,7 +436,7 @@ struct TableView: View {
             amount: vaultAmount,
             tableAmount: tableAmount,
             tableCurrencyCode: table.sessionCurrencyCode,
-            limits: await vault.limits(forTable: table.inviteCode)
+            limits: limits
         )
     }
 
