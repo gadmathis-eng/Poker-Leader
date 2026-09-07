@@ -169,10 +169,6 @@ struct MoneyAmountEditorSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Capsule()
-                .fill(AppTheme.muted.opacity(0.4))
-                .frame(width: 44, height: 4)
-
             if !title.isEmpty || !subtitle.isEmpty {
                 VStack(spacing: 6) {
                     if !title.isEmpty {

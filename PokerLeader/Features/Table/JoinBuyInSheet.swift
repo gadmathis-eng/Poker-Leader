@@ -59,10 +59,6 @@ struct JoinBuyInSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Capsule()
-                .fill(AppTheme.muted.opacity(0.4))
-                .frame(width: 44, height: 4)
-
             VStack(spacing: 6) {
                 Text("How much do you want to put in?")
                     .font(.headline)

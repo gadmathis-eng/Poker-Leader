@@ -31,12 +31,6 @@ struct PersonalSessionSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            Capsule()
-                .fill(AppTheme.muted.opacity(0.4))
-                .frame(width: 44, height: 4)
-                .padding(.top, 12)
-                .padding(.bottom, 20)
-
             VStack(spacing: 6) {
                 Text("New session")
                     .font(.title3.bold())
@@ -46,6 +40,7 @@ struct PersonalSessionSheet: View {
                     .foregroundStyle(AppTheme.muted)
                     .textCase(.uppercase)
             }
+            .padding(.top, 20)
             .padding(.bottom, 24)
 
             DualCurrencyBuyInSetup(
