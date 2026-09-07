@@ -426,6 +426,7 @@ final class SupabaseSyncService {
         return row.snapshot
     }
 
+    /// Looks up a live table by invite code. Friendship is not required.
     func fetchOpenTable(inviteCode: String) async throws -> CloudOpenTableSnapshot? {
         _ = try await ensureReady()
         let normalized = TableInviteDeepLink.normalizedCode(inviteCode)
@@ -504,7 +505,7 @@ final class SupabaseSyncService {
 
     /// Dedicated hand columns are preferred. When they are missing the same
     /// write is sent again with the ante and the hand packed into `seats`, so
-    /// friends still see the pot without a new migration.
+    /// everyone at the table still sees the pot without a new migration.
     private func shouldRetryWithoutHandColumns(after error: Error) -> Bool {
         guard openTablesHasHandColumns, OpenTableSchema.isMissingHandColumn(error) else { return false }
         openTablesHasHandColumns = false

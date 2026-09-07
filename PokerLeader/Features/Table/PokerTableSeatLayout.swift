@@ -280,7 +280,7 @@ private struct TableLobbyCard: View {
 
             Text(
                 isPlayEnabled
-                    ? "Share this table with your friends, then deal."
+                    ? "Share the table code so others can sit, then deal."
                     : "Tap SIT to take a seat, then share the table."
             )
             .font(.caption2)

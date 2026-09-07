@@ -41,7 +41,7 @@ struct AddFriendSheet: View {
                         }
                 }
 
-                Text("Send a friend request using their PokerLeader nickname.")
+                Text("Send a friend request using their nickname. To sit at a live table, use their 6-character table code instead — no friend request needed.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.muted)
 

@@ -52,7 +52,7 @@ PokerLeader/
 ## What works now (local)
 
 - **Circles** home with sample data (Uni Boys, London, Work)
-- **Join a table** on the Circles tab (top of the list) and on a circle's detail page
+- **Join a table** with the 6-character code or share link — no friend request needed — from the Circles tab, a circle's detail page, or the Table tab
 - **Table** tab: the table you are at comes first — its code, Share, Edit, and **Open table** — with your buy-in, a join box, and any other tables underneath
 - **Your tables** — hosted and joined tables, tap any one to edit its name, currency, or seat money
 - **8-seat table** with a Play button after you save a buy-in and sit down — the table code sits next to the share button at the top, so you can read it out or tap it to copy without leaving the table
@@ -107,7 +107,7 @@ Run the account deletion migration before release:
 
 `supabase/migrations/20260904120000_open_tables.sql`
 
-That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
+That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Anyone signed in can then join from the share link or the 6-character table code — a friend request is not required.
 
 The ante and the hand in progress — cards, board, pot, and whose turn it is — sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
 

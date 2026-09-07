@@ -177,6 +177,8 @@ final class TableRepository {
         return table
     }
 
+    /// Sits at a cloud table from its invite code or share link. Friendship is
+    /// not required — anyone signed in who has the code can join.
     func join(inviteCode: String, displayName: String) async throws -> OpenTableModel {
         let normalized = TableInviteDeepLink.pastedInviteCode(inviteCode)
         guard !normalized.isEmpty else {

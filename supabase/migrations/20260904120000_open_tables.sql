@@ -1,4 +1,5 @@
--- Shareable open tables that friends can join from a tapable link or a 6-character code.
+-- Shareable open tables. Anyone signed in can join from a tapable link or a
+-- 6-character code. An accepted friend request is not required.
 --
 -- If the app shows:
 --   Could not find the table 'public.open_tables' in the schema cache

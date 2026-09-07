@@ -173,7 +173,7 @@ struct TableView: View {
             Text("Table")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.text)
-            Text("Create a table with a currency, buy-in, and ante, then share the code. Everyone who joins chooses how much they sit down with.")
+            Text("Create a table with a currency, buy-in, and ante, then share the code. Anyone with the code can join — no friend request. Each player chooses how much they sit down with.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
         }
@@ -221,7 +221,7 @@ struct TableView: View {
                 .foregroundStyle(AppTheme.text)
             Text(
                 router.pendingTableInviteCode == nil
-                    ? "A table on this phone stays private until you sign in. Then friends can join with the 6-character code."
+                    ? "A table on this phone stays private until you sign in. Then anyone with the 6-character code can join — no friend request needed."
                     : "The host shared a link. Sign in and you'll sit at their table."
             )
             .font(.caption)
@@ -399,7 +399,7 @@ struct TableView: View {
 
     private var joinSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Join a friend's table")
+            SectionHeader(title: "Join a table")
 
             HStack(spacing: 10) {
                 TextField("Table code", text: $joinCodeText)

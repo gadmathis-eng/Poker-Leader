@@ -65,6 +65,7 @@ final class TableInviteDeepLinkTests: XCTestCase {
         XCTAssertTrue(message.contains("https://potmaster.app/?table=ABC123"))
         XCTAssertTrue(message.contains("Table code: ABC123"))
         XCTAssertTrue(message.contains("Alex's"))
+        XCTAssertFalse(message.lowercased().contains("friend request"))
     }
 }
 
@@ -110,6 +111,23 @@ final class TableRepositoryErrorTests: XCTestCase {
         XCTAssertTrue(
             TableRepositoryError.schemaMissing.localizedDescription.contains("open_tables.sql")
         )
+    }
+
+    func testJoinErrorsDoNotAskForAFriendRequest() {
+        let errors: [TableRepositoryError] = [
+            .tableNotFound,
+            .notSignedIn,
+            .cloudUnavailable,
+            .schemaMissing
+        ]
+
+        for error in errors {
+            let text = error.localizedDescription.lowercased()
+            XCTAssertFalse(
+                text.contains("friend"),
+                "Joining a table should not require a friend request: \(error.localizedDescription)"
+            )
+        }
     }
 
     func testMapsRemoteSeatTakenError() {

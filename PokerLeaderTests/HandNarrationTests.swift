@@ -40,7 +40,8 @@ final class HandNarrationTests: XCTestCase {
         XCTAssertEqual(told.turn, .waitingForPlayers)
         XCTAssertEqual(told.boardTitle, "Waiting for players")
         XCTAssertEqual(told.title, "Waiting for players")
-        XCTAssertTrue(told.detail.contains("Share the table"))
+        XCTAssertTrue(told.detail.contains("Share the table code"))
+        XCTAssertFalse(told.detail.lowercased().contains("friend request"))
         XCTAssertNil(told.stackLine)
         XCTAssertNil(told.yourHand)
     }

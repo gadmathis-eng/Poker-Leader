@@ -89,7 +89,7 @@ struct HandNarration {
 
     var detail: String {
         guard let hand else {
-            return "Share the table so a friend can sit down. The first hand deals as soon as two of you have money on the table."
+            return "Share the table code so anyone can sit down. The first hand deals as soon as two of you have money on the table."
         }
         switch turn {
         case .handOver:
