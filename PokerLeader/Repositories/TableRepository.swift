@@ -529,6 +529,7 @@ final class TableRepository {
         if activeInviteCode == table.inviteCode {
             activeInviteCode = nil
         }
+        TableOrderStore.removing(table.id)
         context.delete(table)
         try? context.save()
     }

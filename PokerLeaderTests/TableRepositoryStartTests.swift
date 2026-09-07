@@ -64,14 +64,22 @@ final class SessionTableSeatingTests: XCTestCase {
 final class TableRepositoryStartTests: XCTestCase {
     private let activeInviteCodeKey = "activeTableInviteCode"
     private let playerKeyKey = "tablePlayerKey"
+    private let tableOrderSuiteName = "TableRepositoryStartTests-order"
+    private var tableOrderDefaults: UserDefaults!
 
     override func setUp() {
         super.setUp()
         UserDefaults.standard.removeObject(forKey: activeInviteCodeKey)
         UserDefaults.standard.set("host-key", forKey: playerKeyKey)
+        tableOrderDefaults = UserDefaults(suiteName: tableOrderSuiteName)
+        tableOrderDefaults.removePersistentDomain(forName: tableOrderSuiteName)
+        TableOrderStore.defaults = tableOrderDefaults
     }
 
     override func tearDown() {
+        TableOrderStore.clearAll()
+        TableOrderStore.defaults = .standard
+        tableOrderDefaults.removePersistentDomain(forName: tableOrderSuiteName)
         UserDefaults.standard.removeObject(forKey: activeInviteCodeKey)
         UserDefaults.standard.removeObject(forKey: playerKeyKey)
         super.tearDown()
@@ -256,6 +264,85 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertNotEqual(next.id, first.id)
         XCTAssertEqual(next.seat(forPlayerKey: "host-key")?.stackDecimal, 21)
         XCTAssertEqual(next.seat(forPlayerKey: "ben")?.stackDecimal, 19)
+    }
+
+    func testRemoveDeletesAHostedTableAndClearsItAsActive() async throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "USD",
+            hostDisplayName: "Alex"
+        )
+        TableOrderStore.save([table.id])
+
+        await repo.remove(table)
+
+        XCTAssertNil(try repo.table(inviteCode: table.inviteCode))
+        XCTAssertNil(repo.activeInviteCode)
+        XCTAssertTrue(TableOrderStore.load().isEmpty)
+    }
+
+    func testRemoveKeepsTheOtherTablesInTheSavedOrder() async throws {
+        let repo = TableRepository(context: try makeContext())
+        let first = try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "USD",
+            hostDisplayName: "Alex"
+        )
+        let second = try repo.startHostedTable(
+            name: "Sunday",
+            sessionCurrencyCode: "USD",
+            hostDisplayName: "Alex"
+        )
+        TableOrderStore.save([first.id, second.id])
+
+        await repo.remove(first)
+
+        XCTAssertNil(try repo.table(inviteCode: first.inviteCode))
+        XCTAssertEqual(try repo.table(inviteCode: second.inviteCode)?.id, second.id)
+        XCTAssertEqual(TableOrderStore.load(), [second.id])
+        XCTAssertEqual(repo.activeInviteCode, second.inviteCode)
+    }
+
+    func testRemoveLeavesAJoinedTableAndFreesTheLocalSeat() async throws {
+        let context = try makeContext()
+        var seats = try SharedTableSeating.occupy(
+            seats: [],
+            seatNumber: 1,
+            playerKey: "host-friend",
+            playerName: "Ben",
+            handle: nil,
+            amount: 20,
+            isHost: true
+        )
+        seats = try SharedTableSeating.occupy(
+            seats: seats,
+            seatNumber: 3,
+            playerKey: "host-key",
+            playerName: "Alex",
+            handle: nil,
+            amount: 15,
+            isHost: false
+        )
+        let joined = OpenTableModel(
+            inviteCode: "JOIN02",
+            name: "Friend's table",
+            hostDisplayName: "Ben",
+            hostPlayerKey: "host-friend",
+            sessionCurrencyCode: "EUR",
+            isHostLocally: false,
+            seats: seats
+        )
+        context.insert(joined)
+        try context.save()
+
+        let repo = TableRepository(context: context)
+        repo.makeActive(joined)
+
+        await repo.remove(joined)
+
+        XCTAssertNil(try repo.table(inviteCode: "JOIN02"))
+        XCTAssertNil(repo.activeInviteCode)
     }
 
     private func makeContext() throws -> ModelContext {

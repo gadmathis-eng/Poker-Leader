@@ -24,11 +24,20 @@ struct TableView: View {
     @State private var didConfirmJoinBuyIn = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
+    @State private var tablePendingRemoval: OpenTableModel?
+    @State private var showRemoveConfirmation = false
+    @State private var isRemovingTable = false
+    @State private var tableListEpoch = 0
 
     /// Every table but the one that is open, so the card at the top is not
     /// repeated in the list underneath it.
     private var otherTables: [OpenTableModel] {
-        tables.filter { $0.inviteCode != activeTable?.inviteCode }
+        _ = tableListEpoch
+        return TableOrderStore.ordered(tables).filter { $0.inviteCode != activeTable?.inviteCode }
+    }
+
+    private var tablesPendingRemoval: [OpenTableModel] {
+        tablePendingRemoval.map { [$0] } ?? []
     }
 
     private var repo: TableRepository { TableRepository(context: context) }
@@ -142,6 +151,20 @@ struct TableView: View {
                     .modelContext(context)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+            }
+            .confirmationDialog(
+                MyTablesSheet.removeConfirmationTitle(for: tablesPendingRemoval),
+                isPresented: $showRemoveConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(MyTablesSheet.removeActionTitle(for: tablesPendingRemoval), role: .destructive) {
+                    Task { await confirmRemoveTable() }
+                }
+                Button("Cancel", role: .cancel) {
+                    tablePendingRemoval = nil
+                }
+            } message: {
+                Text(MyTablesSheet.removeConfirmationMessage(for: tablesPendingRemoval))
             }
             .onChange(of: showSignIn) { _, isPresented in
                 if !isPresented {
@@ -461,6 +484,23 @@ struct TableView: View {
             .cardSurface()
         }
         .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                repo.makeActive(table)
+                handleTablesChanged()
+            } label: {
+                Label("Open on the Table tab", systemImage: "checkmark.circle")
+            }
+            Button(role: .destructive) {
+                tablePendingRemoval = table
+                showRemoveConfirmation = true
+            } label: {
+                Label(
+                    table.isHostLocally ? "Delete table" : "Leave table",
+                    systemImage: "trash"
+                )
+            }
+        }
     }
 
     private func tableListSummary(for table: OpenTableModel) -> String {
@@ -488,6 +528,18 @@ struct TableView: View {
     private func handleTablesChanged() {
         activeTable = try? repo.activeTable()
         draftSessionCurrencyCode = tableSessionCurrencyCode
+        tableListEpoch += 1
+    }
+
+    private func confirmRemoveTable() async {
+        guard !isRemovingTable, let table = tablePendingRemoval else { return }
+        isRemovingTable = true
+        defer {
+            isRemovingTable = false
+            tablePendingRemoval = nil
+        }
+        await repo.remove(table)
+        handleTablesChanged()
     }
 
     private func savePersonalBuyIn() async {
