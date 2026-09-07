@@ -439,7 +439,25 @@ final class SupabaseSyncService {
             .execute()
             .value
 
-        return rows.first?.snapshot
+        if let snapshot = rows.first?.snapshot {
+            return snapshot
+        }
+
+        // A six-character code is not enough to read the live hand. Joiners
+        // get names, seats and the ante — not the board, pot or cards.
+        do {
+            let preview: OpenTableRow = try await client
+                .rpc(
+                    "open_table_preview",
+                    params: OpenTablePreviewParams(inviteCode: normalized)
+                )
+                .execute()
+                .value
+            return preview.snapshot
+        } catch {
+            if OpenTableSchema.isMissingTable(error) { throw error }
+            return nil
+        }
     }
 
     func upsertOpenTable(_ table: OpenTableModel) async throws {
@@ -459,7 +477,7 @@ final class SupabaseSyncService {
             isStarted: table.isStarted,
             seats: table.seats,
             anteAmount: table.anteAmount,
-            hand: table.hand,
+            hand: nil,
             createdAt: table.createdAt,
             updatedAt: table.updatedAt,
             includesHandColumns: openTablesHasHandColumns
@@ -481,7 +499,7 @@ final class SupabaseSyncService {
             isStarted: table.isStarted,
             seats: table.seats,
             anteAmount: table.anteAmount,
-            hand: table.hand,
+            hand: nil,
             updatedAt: table.updatedAt,
             includesHandColumns: openTablesHasHandColumns
         )
@@ -1255,6 +1273,14 @@ private struct OpenTableStartedUpdate: Encodable {
     }
 }
 
+private struct OpenTablePreviewParams: Encodable {
+    let inviteCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+    }
+}
+
 private struct MergeOpenTableSeatParams: Encodable {
     let inviteCode: String
     let seat: SharedTableSeat
@@ -1286,7 +1312,6 @@ private struct OpenTableHandUpdate: Encodable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(hand, forKey: .hand)
         try container.encode(updatedAt, forKey: .updatedAt)
     }
 }

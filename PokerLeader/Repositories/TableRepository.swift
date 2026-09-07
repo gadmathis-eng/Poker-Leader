@@ -280,6 +280,12 @@ final class TableRepository {
         let added = amount.clampedToNonNegative.roundedToHundredths
         guard added > 0 else { return false }
 
+        if usesServerPoker {
+            // Extra chips on a cloud table are a Vault buy-in, not a local
+            // rewrite of the hand. The server stack is the Vault stake.
+            return false
+        }
+
         if let hand = table.hand,
            let next = HandRound.addingMoney(added, playerKey: localPlayerKey, to: hand) {
             table.hand = next
@@ -646,12 +652,14 @@ final class TableRepository {
         table.isStarted = snapshot.isStarted
         table.seats = snapshot.seats
         table.anteAmount = snapshot.anteAmount
-        table.hand = mergedHand(
-            local: localHand,
-            cloud: snapshot.hand,
-            cloudUpdatedAt: snapshot.updatedAt,
-            localUpdatedAt: localUpdatedAt
-        )
+        table.hand = usesServerPoker
+            ? snapshot.hand
+            : mergedHand(
+                local: localHand,
+                cloud: snapshot.hand,
+                cloudUpdatedAt: snapshot.updatedAt,
+                localUpdatedAt: localUpdatedAt
+            )
         table.updatedAt = snapshot.updatedAt
         try? context.save()
     }

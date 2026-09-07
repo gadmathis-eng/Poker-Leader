@@ -21,6 +21,7 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -d vaultdemo \
   -f supabase/migrations/20260907180000_vault_security_hardening.sql \
   -f supabase/migrations/20260907190000_open_tables_lockdown.sql \
   -f supabase/migrations/20260907200000_poker_server_engine.sql \
+  -f supabase/migrations/20260907210000_poker_engine_hardening.sql \
   -f supabase/tests/10_vault_flow.sql \
   -f supabase/tests/20_vault_attacks.sql \
   -f supabase/tests/30_poker_attacks.sql
@@ -32,5 +33,7 @@ reconciliation queries at the end of each script must both return no rows.
 seats, leftover client-chosen deposit confirm, over-withdrawal, and privacy.
 `30_poker_attacks.sql` is the poker-engine suite: a modified client cannot
 name a winner, submit cards, change the board, act out of turn, over-bet,
-rewrite the pot, replay an action, settle twice, or recover committed chips
-by leaving.
+rewrite the pot, replay an action, settle twice, recover committed chips by
+leaving or by forging a finished hand, hold the game open by disconnecting,
+read a live table from the invite code alone, or change settlement by
+picking a different currency.

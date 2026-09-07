@@ -1,13 +1,13 @@
 import Foundation
 
-/// Turns a table's stake into the buy-in range the backend enforces, and moves
-/// amounts between the table's currency and the Vault's.
+/// Turns a table's stake into the buy-in range the backend enforces.
 ///
-/// The Vault settles in one currency; a table can be played in another. Rather
-/// than let the two drift, everything the backend is asked to move is converted
-/// into the Vault currency first, and the range is derived from the same
-/// converted figure so a player is never shown a limit in one currency and
-/// checked against it in another.
+/// Cloud tables settle in integer cents of the table's own currency. A keypad
+/// that is showing a different display currency may convert *into* that table
+/// unit so the player can type a familiar figure. Once the amount is in table
+/// cents it is not converted again — not into the Vault's display currency,
+/// and not back again after a receipt. `vaultAmount` / `tableAmount` stay for
+/// local demo screens; they must not be used on the settlement path.
 enum TableBuyInPolicy {
     /// A table takes at least half and at most four times the stake the host
     /// set, which is roughly how a home game already behaves.
@@ -68,9 +68,9 @@ struct PendingTableBuyIn: Identifiable, Equatable {
     var id: String { inviteCode + ":" + String(amount.cents) }
     let inviteCode: String
     let tableName: String
-    /// In the Vault's currency, which is what the backend moves.
+    /// Integer cents of the table's currency — the figure the backend moves.
     let amount: Money
-    /// In the table's currency, which is what goes on the felt.
+    /// The same figure as a decimal, for putting chips on the seat.
     let tableAmount: Decimal
     let tableCurrencyCode: String
     let limits: TableBuyInLimits?

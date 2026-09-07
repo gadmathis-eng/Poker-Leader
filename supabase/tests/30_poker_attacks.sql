@@ -271,10 +271,16 @@ select public.poker_start_hand_internal('POKER1', '["2c","Ah","7d","Kh","3h","9h
 -- Left of the new dealer acts first. After hand 1 the button moves to seat 2,
 -- so the host (seat 1) is first to act. Have them post the ante, then leave.
 select public.poker_act('POKER1', 'call', null, 'leave-host-call');
-select public.vault_summary()->>'in_play_cents' as host_in_play_before_leave;
+select public.vault_summary()->>'in_play_cents' as host_in_play_before_leave \gset
 select public.vault_leave_table('POKER1', 'host-leave-midhand') as host_leave \gset
 select :'host_leave'::jsonb->>'returned_cents' as returned_cents,
        :'host_leave'::jsonb->>'bought_in_cents' as bought_in_cents;
+
+-- The host had posted the ante. Walking out must not give that 100 cents back.
+select (
+    (:'host_leave'::jsonb->>'returned_cents')::bigint
+    = :'host_in_play_before_leave'::bigint - 100
+) as host_left_without_committed_ante;
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select * from public.vault_table_chips('POKER1');
@@ -290,5 +296,289 @@ select count(*) as visible_hole_rows from public.poker_hand_seats;
 reset role;
 
 \echo '=== P15. books still reconcile ==='
+select * from public.vault_reconcile_accounts();
+select * from public.vault_reconcile_transactions();
+
+-- ---------------------------------------------------------------------------
+-- Fresh table for the remaining attacks, so they do not depend on POKER1.
+-- Host £40 / guest £50 / ante £1, all integer pence of GBP.
+-- ---------------------------------------------------------------------------
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+insert into public.open_tables (
+    id, invite_code, host_user_id, host_display_name, host_player_key,
+    session_currency_code, ante_amount, seats
+) values (
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'POKER2',
+    '11111111-1111-1111-1111-111111111111',
+    'Host',
+    '11111111-1111-1111-1111-111111111111',
+    'GBP',
+    '1',
+    '[
+        {"id":"20000000-0000-0000-0000-000000000001","seatNumber":1,"playerName":"Host","playerKey":"11111111-1111-1111-1111-111111111111","amount":"40","isHost":true},
+        {"id":"20000000-0000-0000-0000-000000000002","seatNumber":2,"playerName":"Guest","playerKey":"22222222-2222-2222-2222-222222222222","amount":"50","isHost":false}
+    ]'::jsonb
+);
+
+-- Client asks to register the table as USD. The server must keep GBP.
+select currency_code as registered_as
+from public.vault_register_table('POKER2', 2000, 8000, 'USD');
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.vault_open('GBP');
+select id as host_gbp_dep from public.vault_create_deposit_intent(
+    10000, 'poker2-host-dep', 'vault_deposit', null, 'mock_apple_pay', 'GBP'
+) \gset
+select status from public.vault_sandbox_confirm_deposit(:'host_gbp_dep');
+select public.vault_table_buy_in('POKER2', 4000, 'vault', 'poker2-host-buy', 'Host');
+
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.vault_open('GBP');
+select id as guest_gbp_dep from public.vault_create_deposit_intent(
+    10000, 'poker2-guest-dep', 'vault_deposit', null, 'mock_apple_pay', 'GBP'
+) \gset
+select status from public.vault_sandbox_confirm_deposit(:'guest_gbp_dep');
+select public.vault_table_buy_in('POKER2', 5000, 'vault', 'poker2-guest-buy', 'Guest');
+
+\echo '=== P16. a display-currency lie cannot change the table''s settlement unit ==='
+select currency_code as vault_table_currency
+from public.vault_tables where invite_code = 'POKER2';
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+update public.open_tables
+set session_currency_code = 'EUR'
+where invite_code = 'POKER2';
+select session_currency_code as currency_after_host_flip
+from public.open_tables where invite_code = 'POKER2';
+select currency_code as vault_currency_after_flip
+from public.vault_tables where invite_code = 'POKER2';
+
+\echo '=== P17. fake completion / clearing the shared hand cannot enable a cash-out ==='
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.poker_start_hand_internal(
+    'POKER2',
+    '["2c","Ah","7d","Kh","3h","9h","Jh","4s","5d"]'::jsonb
+)->>'actingSeat' as poker2_acting;
+
+-- Guest is first to act (host is the dealer) and posts the £1 ante.
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.poker_act('POKER2', 'call', null, 'p2-guest-ante');
+
+select in_play_cents as guest_in_play_before_forge
+from public.vault_table_stakes
+where invite_code = 'POKER2'
+  and user_id = '22222222-2222-2222-2222-222222222222' \gset
+
+do $$
+begin
+    update public.open_tables
+    set hand = jsonb_build_object('isComplete', true, 'winnerSeats', jsonb_build_array(2))
+    where invite_code = 'POKER2';
+    raise exception 'expected failure';
+exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
+    raise notice 'rejected as expected: %', sqlerrm;
+end;
+$$;
+
+do $$
+begin
+    update public.open_tables
+    set hand = null
+    where invite_code = 'POKER2';
+    raise exception 'expected failure';
+exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
+    raise notice 'rejected as expected: %', sqlerrm;
+end;
+$$;
+
+-- Mixed write from the host: keep a legal setting touch and wipe the hand
+-- at the same time. The hand must stay, and leaving must still withhold.
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+update public.open_tables
+set host_display_name = 'Host',
+    hand = null
+where invite_code = 'POKER2';
+
+select (hand ? 'isComplete') as server_hand_survived_mixed_clear
+from public.open_tables where invite_code = 'POKER2';
+
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.vault_leave_table('POKER2', 'guest-forge-leave') as guest_forge_leave \gset
+select :'guest_forge_leave'::jsonb->>'returned_cents' as forged_leave_returned;
+select (
+    (:'guest_forge_leave'::jsonb->>'returned_cents')::bigint
+    = :'guest_in_play_before_forge'::bigint - 100
+) as forged_leave_withheld_the_ante;
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select in_play_cents as host_in_play_after_guest_foldout
+from public.vault_table_stakes
+where invite_code = 'POKER2'
+  and user_id = '11111111-1111-1111-1111-111111111111';
+
+\echo '=== P18. disconnect timeout folds; committed chips stay in the pot ==='
+-- Guest already left POKER2. Use a fresh USD table so both players can act.
+
+insert into public.open_tables (
+    id, invite_code, host_user_id, host_display_name, host_player_key,
+    session_currency_code, ante_amount, seats
+) values (
+    'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'POKER3',
+    '11111111-1111-1111-1111-111111111111',
+    'Host',
+    '11111111-1111-1111-1111-111111111111',
+    'USD',
+    '1',
+    '[
+        {"id":"30000000-0000-0000-0000-000000000001","seatNumber":1,"playerName":"Host","playerKey":"11111111-1111-1111-1111-111111111111","amount":"40","isHost":true},
+        {"id":"30000000-0000-0000-0000-000000000002","seatNumber":2,"playerName":"Guest","playerKey":"22222222-2222-2222-2222-222222222222","amount":"50","isHost":false}
+    ]'::jsonb
+);
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.vault_open('USD');
+select public.vault_register_table('POKER3', 2000, 8000, 'USD');
+select public.vault_table_buy_in('POKER3', 4000, 'vault', 'poker3-host-buy', 'Host');
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.vault_open('USD');
+select public.vault_table_buy_in('POKER3', 5000, 'vault', 'poker3-guest-buy', 'Guest');
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.poker_start_hand_internal(
+    'POKER3',
+    '["2c","Ah","7d","Kh","3h","9h","Jh","4s","5d"]'::jsonb
+);
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.poker_act('POKER3', 'call', null, 'p3-guest-ante');
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.poker_act('POKER3', 'raise', 400, 'p3-host-raise');
+
+update public.poker_hands
+set action_deadline = clock_timestamp() - interval '1 second'
+where invite_code = 'POKER3' and not is_complete;
+
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.poker_sweep_timeouts('POKER3') as timeout_view \gset
+select :'timeout_view'::jsonb->>'isComplete' as timeout_complete,
+       :'timeout_view'::jsonb->>'resultSummary' as timeout_result,
+       :'timeout_view'::jsonb->>'winnerSeats' as timeout_winners;
+
+select * from public.vault_table_chips('POKER3') order by player_key;
+
+-- Guest called £1 / $1 and then timed out. Host raised to $4 and won the pot.
+-- Guest must be down 100 cents; host up 100. The 100 committed chips stayed.
+select (
+    (select in_play_cents from public.vault_table_stakes
+     where invite_code = 'POKER3'
+       and user_id = '22222222-2222-2222-2222-222222222222')
+    = 4900
+) as guest_lost_committed_on_timeout,
+(
+    (select in_play_cents from public.vault_table_stakes
+     where invite_code = 'POKER3'
+       and user_id = '11111111-1111-1111-1111-111111111111')
+    = 4100
+) as host_was_paid_the_pot;
+
+\echo '=== P19. unauthorized users cannot read live table state ==='
+set role authenticated;
+select set_config('test.uid', '33333333-3333-3333-3333-333333333333', false);
+select count(*) as outsider_live_rows
+from public.open_tables
+where invite_code in ('POKER1', 'POKER2', 'POKER3');
+select public.open_table_preview('POKER3') as preview \gset
+reset role;
+
+select :'preview'::jsonb ? 'hand' as preview_has_hand,
+       :'preview'::jsonb ? 'board' as preview_has_board,
+       jsonb_typeof(:'preview'::jsonb->'seats') as preview_seats,
+       :'preview'::jsonb->'seats'->0 ? 'cards' as preview_seat_has_cards,
+       :'preview'::jsonb->'seats'->0->>'amount' as preview_seat_amount;
+
+select set_config('test.uid', '33333333-3333-3333-3333-333333333333', false);
+do $$
+begin
+    perform public.poker_hand_view('POKER3');
+    raise exception 'expected failure';
+exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
+    raise notice 'rejected as expected: %', sqlerrm;
+end;
+$$;
+
+do $$
+begin
+    perform public.poker_sweep_timeouts('POKER3');
+    raise exception 'expected failure';
+exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
+    raise notice 'rejected as expected: %', sqlerrm;
+end;
+$$;
+
+\echo '=== P20. clients cannot write stacks, board, pot, turn or a winner ==='
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+update public.open_tables
+set seats = '[
+    {"playerKey":"11111111-1111-1111-1111-111111111111","seatNumber":1,"playerName":"Host","amount":"999","isHost":true},
+    {"playerKey":"22222222-2222-2222-2222-222222222222","seatNumber":2,"playerName":"Guest","amount":"1","isHost":false}
+]'::jsonb
+where invite_code = 'POKER3';
+
+select bool_or(seat->>'playerKey' = '11111111-1111-1111-1111-111111111111'
+               and seat->>'amount' = '41') as host_stack_from_vault,
+       bool_or(seat->>'playerKey' = '22222222-2222-2222-2222-222222222222'
+               and seat->>'amount' = '49') as guest_stack_from_vault
+from public.open_tables t,
+     jsonb_array_elements(t.seats) seat
+where t.invite_code = 'POKER3';
+
+do $$
+begin
+    update public.open_tables
+    set hand = jsonb_build_object(
+        'board', jsonb_build_array('As','Ks','Qs','Js','Ts'),
+        'actingSeat', 2,
+        'isComplete', true,
+        'winnerSeats', jsonb_build_array(2)
+    )
+    where invite_code = 'POKER3';
+    raise exception 'expected failure';
+exception when others then
+    if sqlerrm like 'expected failure%' then raise; end if;
+    raise notice 'rejected as expected: %', sqlerrm;
+end;
+$$;
+
+select count(*) as leftover_client_hand_writers
+from pg_proc p
+join pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname in ('update_open_table_hand', 'publish_open_table_hand')
+  and pg_get_function_identity_arguments(p.oid) like '%jsonb%';
+
+\echo '=== P21. GBP settlement is integer pence, not a converted USD figure ==='
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select in_play_cents as host_gbp_chips
+from public.vault_table_stakes
+where invite_code = 'POKER2'
+  and user_id = '11111111-1111-1111-1111-111111111111';
+select (
+    (select in_play_cents from public.vault_table_stakes
+     where invite_code = 'POKER2'
+       and user_id = '11111111-1111-1111-1111-111111111111')
+    = 4100
+) as host_won_100_gbp_pence,
+(
+    (select currency_code from public.vault_tables where invite_code = 'POKER2')
+    = 'GBP'
+) as settlement_currency_is_gbp;
+
+\echo '=== P22. books still reconcile after the extra attacks ==='
 select * from public.vault_reconcile_accounts();
 select * from public.vault_reconcile_transactions();

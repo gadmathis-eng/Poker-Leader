@@ -224,18 +224,21 @@ Worth being plain about, because the architecture points at them:
 
 - **The game is server-authoritative.** `poker_start_hand` deals, `poker_act`
   is the only betting entry, and settlement is posted from that result. A
-  modified client cannot name a winner, submit cards, or rewrite the pot.
-  Remaining gaps are operational (timeouts, disconnect handling, a richer
-  audit of every street) rather than “who decides the winner”.
-- **A table's buy-in range is set by whoever registers it first.** Normally that
-  is the host, and `vault_register_table` will not let anyone else change an
-  existing range. But a guest who reaches the backend before the host does can
-  create the row, and the range is then derived from their own buy-in rather than
-  the host's. The fix is a host-published minimum and maximum on the shared table
-  row, which `open_tables` does not carry yet.
-- **One currency.** The Vault settles in USD and table amounts are converted at
-  the app's exchange rate. Multi-currency accounts would mean per-currency
-  accounts and an explicit FX posting.
+  modified client cannot name a winner, submit cards, rewrite the pot, or
+  mark a hand finished so they can walk out of it. A player who disconnects
+  is folded after 45 seconds; chips they had already put in stay in the pot.
+  Live board, pot and turn are readable only by people at the table. A
+  six-character code is enough to preview who is sitting, not to watch the
+  hand.
+- **Table currency is the settlement unit.** Buy-ins, bets, stacks, pots and
+  Vault postings are integer cents of `open_tables.session_currency_code`.
+  The client cannot register a table in a different currency or settle
+  through a display-rate conversion. A keypad may convert *into* the table
+  unit so someone can type a familiar figure; after that the number does
+  not move again.
+- **A table's buy-in range is set by the published host.** `vault_register_table`
+  reads the host from `open_tables` and refuses anyone else. The range is
+  frozen once anyone has money on the table.
 - **The sandbox backend is not a security boundary.** It lives on the device and
   belongs to whoever is holding the phone. It exists so the flows can be walked
   through with test money, and `VaultStore` steps over it the moment a real

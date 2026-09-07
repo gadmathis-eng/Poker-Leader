@@ -13,6 +13,7 @@ PokerLeader/
 │   │                             HandRound + PokerHandEvaluator are the local
 │   │                             rules; the shared table uses the Postgres
 │   │                             engine in 20260907200000_poker_server_engine.sql
+│   │                             and 20260907210000_poker_engine_hardening.sql
 │   │                             HandNarration puts the hand in front of you into words
 │   ├── Theme/                    Colors, spacing
 │   ├── Extensions/               Money + date formatting
