@@ -319,8 +319,13 @@ final class TableRepository {
         publish(table)
     }
 
-    /// Deals a hand: two cards each, then the table gets asked, seat by seat,
-    /// whether it is in for the ante.
+    /// True when this phone must ask the server to deal and act, rather than
+    /// running the hand locally and publishing the result.
+    var usesServerPoker: Bool {
+        SupabaseBootstrap.isConfigured && SupabaseAuthManager.shared.isSignedIn
+    }
+
+    /// Deals a hand locally. Shared tables go through `dealHandAuthoritative`.
     @discardableResult
     func dealHand(on table: OpenTableModel) throws -> SharedTableHand {
         let hand = try HandRound.start(
@@ -331,8 +336,53 @@ final class TableRepository {
         table.isStarted = true
         table.hand = hand
         try context.save()
-        publish(table)
+        if !usesServerPoker {
+            publish(table)
+        }
         return hand
+    }
+
+    @discardableResult
+    func dealHandAuthoritative(on table: OpenTableModel) async throws -> SharedTableHand {
+        if usesServerPoker {
+            let hand = try await VaultStore.shared.startHand(inviteCode: table.inviteCode)
+            table.isStarted = true
+            table.hand = hand
+            try context.save()
+            return hand
+        }
+        return try dealHand(on: table)
+    }
+
+    func applyMove(
+        _ move: HandMove,
+        amount: Decimal? = nil,
+        on table: OpenTableModel,
+        hand: SharedTableHand
+    ) async throws -> SharedTableHand {
+        if usesServerPoker {
+            let money = amount.map { Money(decimal: $0) }
+            let next = try await VaultStore.shared.act(
+                inviteCode: table.inviteCode,
+                action: move,
+                amount: money
+            )
+            table.hand = next
+            if next.isComplete {
+                applyLocalStacks(from: next, on: table)
+            }
+            try context.save()
+            return next
+        }
+
+        let next = try HandRound.apply(
+            move: move,
+            amount: amount,
+            playerKey: localPlayerKey,
+            to: hand
+        )
+        updateHand(next, on: table)
+        return next
     }
 
     func updateHand(_ hand: SharedTableHand, on table: OpenTableModel) {
@@ -341,7 +391,9 @@ final class TableRepository {
             payOutHand(hand, on: table)
         }
         try? context.save()
-        publish(table)
+        if !usesServerPoker {
+            publish(table)
+        }
     }
 
     /// Puts what a finished hand paid into the money each player has on the
@@ -353,63 +405,39 @@ final class TableRepository {
         let stacks = HandRound.stacksAfter(hand)
         var seats = table.seats
         var changed = false
-        var deltas: [String: Decimal] = [:]
         for index in seats.indices {
             guard let stack = stacks[seats[index].playerKey] else { continue }
             let settled = TableMoney.string(stack)
             guard seats[index].amount != settled else { continue }
-            deltas[seats[index].playerKey] = stack - seats[index].amountDecimal
             seats[index].amount = settled
             changed = true
         }
         guard changed else { return }
         table.seats = seats
         try? context.save()
-        reportHandToVault(hand, on: table, deltas: deltas)
     }
 
-    /// Tells the Vault what the hand did to each seat, so the money in play on
-    /// the backend follows the game rather than the app's own tally.
-    ///
-    /// Only the host posts it, and it is keyed on the hand id: every phone works
-    /// the same hand out from the same shared state, so without that key the
-    /// same result would be banked once per device.
-    private func reportHandToVault(
-        _ hand: SharedTableHand,
-        on table: OpenTableModel,
-        deltas: [String: Decimal]
-    ) {
-        guard table.isHostLocally, !deltas.isEmpty else { return }
-
-        let vault = VaultStore.shared
-        let currency = table.sessionCurrencyCode
-        let converted = deltas.mapValues { delta in
-            TableBuyInPolicy.vaultDelta(
-                delta,
-                fromTableCurrency: currency,
-                vaultCurrencyCode: vault.currencyCode
-            )
-        }
-
-        Task {
-            await vault.recordHand(
-                inviteCode: table.inviteCode,
-                handID: hand.id.uuidString,
-                deltas: converted
-            )
-        }
+    /// Display stacks only. The Vault is posted by the server when the hand
+    /// finishes; the phone must not send a result.
+    private func applyLocalStacks(from hand: SharedTableHand, on table: OpenTableModel) {
+        payOutHand(hand, on: table)
     }
 
     /// Deals the next hand, moving the button on. The pot has already been paid
     /// into everybody's money on the table.
-    func dealNextHand(on table: OpenTableModel) throws {
+    func dealNextHand(on table: OpenTableModel) async throws {
         guard let hand = table.hand else {
-            try dealHand(on: table)
+            _ = try await dealHandAuthoritative(on: table)
             return
         }
         guard hand.isComplete else { throw HandRoundError.handInProgress }
 
         payOutHand(hand, on: table)
+        if usesServerPoker {
+            table.hand = try await VaultStore.shared.startHand(inviteCode: table.inviteCode)
+            try context.save()
+            return
+        }
         table.hand = try HandRound.start(
             seats: table.seats,
             dealerSeat: HandRound.nextDealerSeat(after: hand.dealerSeat, seats: table.seats),
@@ -426,6 +454,10 @@ final class TableRepository {
             return
         }
         apply(snapshot: snapshot, existing: table)
+        if let view = try? await VaultStore.shared.handView(inviteCode: table.inviteCode) {
+            table.hand = view
+            try? context.save()
+        }
     }
 
     func publish(_ table: OpenTableModel) {
@@ -436,9 +468,8 @@ final class TableRepository {
         Task {
             if table.isHostLocally {
                 try? await SupabaseSyncService.shared.upsertOpenTable(table)
-            } else {
-                try? await SupabaseSyncService.shared.updateOpenTableHand(table)
             }
+            // Guests do not write the hand. The server publishes it.
         }
     }
 
@@ -457,8 +488,6 @@ final class TableRepository {
             if table.isHostLocally {
                 try await SupabaseSyncService.shared.upsertOpenTable(table)
                 try await confirmPublished(table)
-            } else {
-                try await SupabaseSyncService.shared.updateOpenTableHand(table)
             }
         } catch {
             throw TableRepositoryError.wrapping(error)
@@ -545,7 +574,8 @@ final class TableRepository {
     private func leave(_ table: OpenTableModel) async {
         if mySeat(on: table) != nil {
             await refresh(table: table)
-            if let hand = table.hand,
+            if !usesServerPoker,
+               let hand = table.hand,
                let withdrawn = HandRound.withdraw(playerKey: localPlayerKey, from: hand) {
                 table.hand = withdrawn
                 payOutHand(withdrawn, on: table)
@@ -558,7 +588,7 @@ final class TableRepository {
                         inviteCode: table.inviteCode
                     )
                 } catch {
-                    try? await SupabaseSyncService.shared.updateOpenTableHand(table)
+                    // Seat removal is best-effort. Never write the hand.
                 }
             }
         }

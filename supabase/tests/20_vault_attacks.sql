@@ -127,28 +127,25 @@ exception when others then
 end;
 $$;
 
-\echo '=== A10. leave is refused while the caller is in a live hand ==='
--- The guest already stood up in the flow script. The host is still seated,
--- so the live-hand guard is checked against them.
-update public.open_tables
-set hand = jsonb_build_object(
-    'isComplete', false,
-    'seats', jsonb_build_array(
-        jsonb_build_object('playerKey', '11111111-1111-1111-1111-111111111111')
-    )
-)
-where invite_code = 'ABC123';
+\echo '=== A10. a client cannot write the hand, even as the host ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 do $$
 begin
-    perform public.vault_leave_table('ABC123', 'leave-during-hand');
+    update public.open_tables
+    set hand = jsonb_build_object(
+        'isComplete', true,
+        'winnerSeats', jsonb_build_array(1),
+        'seats', jsonb_build_array(
+            jsonb_build_object('playerKey', '11111111-1111-1111-1111-111111111111', 'awarded', '999')
+        )
+    )
+    where invite_code = 'ABC123';
     raise exception 'expected failure';
 exception when others then
     if sqlerrm like 'expected failure%' then raise; end if;
     raise notice 'rejected as expected: %', sqlerrm;
 end;
 $$;
-update public.open_tables set hand = null where invite_code = 'ABC123';
 
 \echo '=== A11. over-withdrawal is refused ==='
 select set_config('test.uid', '33333333-3333-3333-3333-333333333333', false);

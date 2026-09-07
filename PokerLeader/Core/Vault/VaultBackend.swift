@@ -68,13 +68,26 @@ protocol VaultBackend {
     /// between players.
     func tableChips(inviteCode: String) async throws -> [TableChipCount]
 
-    /// Posts the result of one hand. Zero-sum across the seats, host only, and
-    /// keyed on the hand id so the same hand cannot be banked twice.
+    /// Rejected. Hand results are posted by the poker engine, not the client.
     func recordHand(
         inviteCode: String,
         handID: String,
         deltas: [String: Money]
     ) async throws
+
+    /// Asks the server to deal a hand. The caller cannot supply cards or a winner.
+    func startHand(inviteCode: String) async throws -> SharedTableHand
+
+    /// Asks the server to apply one legal action for the signed-in player.
+    func act(
+        inviteCode: String,
+        action: HandMove,
+        amount: Money?,
+        actionID: String
+    ) async throws -> SharedTableHand
+
+    /// Public hand state plus this player's hole cards. Nobody else's.
+    func handView(inviteCode: String) async throws -> SharedTableHand?
 
     /// Stands the player up and moves whatever the backend says their seat holds
     /// into their Vault.

@@ -81,19 +81,24 @@ select * from public.vault_table_chips('ABC123');
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select * from public.vault_table_chips('ABC123');
 
-\echo '=== 6. host records a hand: guest wins $15 from host ==='
-select public.vault_record_hand('ABC123', 'hand-1', '[
-    {"player_key": "11111111-1111-1111-1111-111111111111", "delta_cents": -1500},
-    {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 1500}
-]'::jsonb);
-\echo '--- the same hand posted again is ignored ---'
-select public.vault_record_hand('ABC123', 'hand-1', '[
-    {"player_key": "11111111-1111-1111-1111-111111111111", "delta_cents": -1500},
-    {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 1500}
-]'::jsonb);
+\echo '=== 6. the server plays a hand; clients cannot post a result ==='
+update public.open_tables
+set ante_amount = '1',
+    seats = '[
+        {"id":"20000000-0000-0000-0000-000000000001","seatNumber":1,"playerName":"Host","playerKey":"11111111-1111-1111-1111-111111111111","amount":"40","isHost":true},
+        {"id":"20000000-0000-0000-0000-000000000002","seatNumber":2,"playerName":"Guest","playerKey":"22222222-2222-2222-2222-222222222222","amount":"50","isHost":false}
+    ]'::jsonb
+where invite_code = 'ABC123';
+
+-- Guest calls the ante, host folds. Guest is paid $1 from the server result.
+select public.poker_start_hand_internal('ABC123', '["2c","Ah","7d","Kh"]'::jsonb);
+select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
+select public.poker_act('ABC123', 'call', null, 'flow-guest-call');
+select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+select public.poker_act('ABC123', 'fold', null, 'flow-host-fold');
 select * from public.vault_table_chips('ABC123');
 
-\echo '--- a hand that is not zero-sum is refused ---'
+\echo '--- a client-supplied hand result is refused, even from the host ---'
 do $$
 begin
     perform public.vault_record_hand('ABC123', 'hand-bogus', '[
@@ -105,7 +110,6 @@ exception when others then
 end;
 $$;
 
-\echo '--- a player cannot record their own hand ---'
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 do $$
 begin

@@ -330,7 +330,7 @@ enum VaultError: LocalizedError, Equatable {
         let text = [error.localizedDescription, String(describing: error)]
             .joined(separator: " ")
 
-        guard let range = text.range(of: "vault: ") else {
+        guard let range = text.range(of: "vault: ") ?? text.range(of: "poker: ") else {
             if text.lowercased().contains("jwt") || text.lowercased().contains("not signed in") {
                 return .notSignedIn
             }

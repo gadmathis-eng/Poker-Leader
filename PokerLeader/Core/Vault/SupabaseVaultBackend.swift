@@ -173,14 +173,43 @@ struct SupabaseVaultBackend: VaultBackend {
     }
 
     func recordHand(inviteCode: String, handID: String, deltas: [String: Money]) async throws {
-        let payload = deltas.map { HandDelta(player_key: $0.key, delta_cents: $0.value.cents) }
-        let _: HandResultRow = try await call(
-            "vault_record_hand",
-            params: RecordHandParams(
+        _ = inviteCode
+        _ = handID
+        _ = deltas
+        throw VaultError.backend("The server records the hand. Send a betting action, not a result.")
+    }
+
+    func startHand(inviteCode: String) async throws -> SharedTableHand {
+        try await call(
+            "poker_start_hand",
+            params: InviteCodeParams(p_invite_code: inviteCode),
+            as: SharedTableHand.self
+        )
+    }
+
+    func act(
+        inviteCode: String,
+        action: HandMove,
+        amount: Money?,
+        actionID: String
+    ) async throws -> SharedTableHand {
+        try await call(
+            "poker_act",
+            params: PokerActParams(
                 p_invite_code: inviteCode,
-                p_hand_id: handID,
-                p_deltas: payload
-            )
+                p_action: action.rawValue,
+                p_amount_cents: amount?.cents,
+                p_action_id: actionID
+            ),
+            as: SharedTableHand.self
+        )
+    }
+
+    func handView(inviteCode: String) async throws -> SharedTableHand? {
+        try await call(
+            "poker_hand_view",
+            params: InviteCodeParams(p_invite_code: inviteCode),
+            as: SharedTableHand?.self
         )
     }
 
@@ -289,6 +318,13 @@ private struct RecordHandParams: Encodable {
     let p_invite_code: String
     let p_hand_id: String
     let p_deltas: [HandDelta]
+}
+
+private struct PokerActParams: Encodable {
+    let p_invite_code: String
+    let p_action: String
+    let p_amount_cents: Int?
+    let p_action_id: String
 }
 
 private struct LeaveTableParams: Encodable {

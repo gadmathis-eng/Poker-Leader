@@ -283,39 +283,33 @@ final class SandboxVaultBackend: VaultBackend {
     }
 
     func recordHand(inviteCode: String, handID: String, deltas: [String: Money]) async throws {
-        let code = inviteCode.uppercased()
-        guard var stake = state.stakes[code], !stake.hasLeft else { return }
-        guard let mine = deltas[stake.playerKey], !mine.isZero else { return }
+        _ = inviteCode
+        _ = handID
+        _ = deltas
+        throw VaultError.backend("The server records the hand. Send a betting action, not a result.")
+    }
 
-        // Only one seat is tracked here, so the other side of the movement is the
-        // rest of the table. The real backend requires the whole hand to be
-        // zero-sum across every seat before it will post anything.
-        let inPlay = AccountKey.inPlay(code)
-        guard state.balance(inPlay) + mine.cents >= 0 else {
-            throw VaultError.backend("A seat cannot go below zero.")
-        }
+    func startHand(inviteCode: String) async throws -> SharedTableHand {
+        _ = inviteCode
+        throw VaultError.backend("The game is run by the server.")
+    }
 
-        let posted = try state.post(
-            kind: "table_hand",
-            idempotencyKey: "hand:\(code):\(handID)",
-            moves: [Move(inPlay, mine.cents), Move(.tableCounterparty, -mine.cents)]
-        )
+    func act(
+        inviteCode: String,
+        action: HandMove,
+        amount: Money?,
+        actionID: String
+    ) async throws -> SharedTableHand {
+        _ = inviteCode
+        _ = action
+        _ = amount
+        _ = actionID
+        throw VaultError.backend("The game is run by the server.")
+    }
 
-        guard !state.statement.contains(where: { $0.ledgerID == posted.id }) else { return }
-
-        stake.inPlayCents = state.balance(inPlay)
-        state.stakes[code] = stake
-        state.statement.append(
-            StoredStatement(
-                kind: mine.isPositive ? .tableWinnings : .tableLoss,
-                status: .completed,
-                amountCents: 0,
-                ledgerID: posted.id,
-                tableInviteCode: code,
-                detail: mine.isPositive ? "Won at the table" : "Lost at the table"
-            )
-        )
-        save()
+    func handView(inviteCode: String) async throws -> SharedTableHand? {
+        _ = inviteCode
+        return nil
     }
 
     func leaveTable(inviteCode: String, idempotencyKey: String) async throws -> TableSettlement {

@@ -229,11 +229,33 @@ final class VaultStore {
         return receipt
     }
 
-    /// A hand that has finished. Keyed on the hand id so replaying it, or two
-    /// devices reporting the same hand, cannot bank it twice.
+    /// Rejected on every backend. Settlement is posted by the poker engine.
     func recordHand(inviteCode: String, handID: String, deltas: [String: Money]) async {
-        try? await backend.recordHand(inviteCode: inviteCode, handID: handID, deltas: deltas)
-        await reloadQuietly()
+        _ = inviteCode
+        _ = handID
+        _ = deltas
+    }
+
+    func startHand(inviteCode: String) async throws -> SharedTableHand {
+        try await backend.startHand(inviteCode: inviteCode)
+    }
+
+    func act(
+        inviteCode: String,
+        action: HandMove,
+        amount: Money?,
+        actionID: String = VaultIdempotency.key("act")
+    ) async throws -> SharedTableHand {
+        try await backend.act(
+            inviteCode: inviteCode,
+            action: action,
+            amount: amount,
+            actionID: actionID
+        )
+    }
+
+    func handView(inviteCode: String) async throws -> SharedTableHand? {
+        try await backend.handView(inviteCode: inviteCode)
     }
 
     /// Stands the player up. What comes back is what the backend calculated, and

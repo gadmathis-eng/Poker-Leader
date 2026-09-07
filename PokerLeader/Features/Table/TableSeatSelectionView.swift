@@ -596,12 +596,16 @@ struct TableSeatSelectionView: View {
         persistSelectedSeat()
         repo.updateAnte(anteAmount, on: table)
         rememberAnte(from: table)
-        dealHandIfPossible(on: table)
+        Task { await dealHandIfPossible(on: table) }
     }
 
-    private func dealHandIfPossible(on table: OpenTableModel) {
-        if needsDeal(on: table), (try? repo.dealHand(on: table)) == nil {
-            repo.markStarted(table)
+    private func dealHandIfPossible(on table: OpenTableModel) async {
+        if needsDeal(on: table) {
+            do {
+                _ = try await repo.dealHandAuthoritative(on: table)
+            } catch {
+                repo.markStarted(table)
+            }
         }
         withAnimation(.easeOut(duration: 0.18)) {
             hand = table.hand
@@ -616,19 +620,17 @@ struct TableSeatSelectionView: View {
     }
 
     private func submit(_ move: HandMove, amount: Decimal? = nil) {
+        Task { await submitNow(move, amount: amount) }
+    }
+
+    private func submitNow(_ move: HandMove, amount: Decimal? = nil) async {
         guard let table, let hand else { return }
         do {
-            let next = try HandRound.apply(
-                move: move,
-                amount: amount,
-                playerKey: repo.localPlayerKey,
-                to: hand
-            )
+            let next = try await repo.applyMove(move, amount: amount, on: table, hand: hand)
             handMessage = nil
             withAnimation(.easeOut(duration: 0.18)) {
                 self.hand = next
             }
-            repo.updateHand(next, on: table)
             occupants = table.seats
         } catch {
             handMessage = error.localizedDescription
@@ -645,7 +647,7 @@ struct TableSeatSelectionView: View {
             guard table.hand?.id == hand.id, table.hand?.isComplete == true else { return }
             guard table.isHostLocally else { return }
             do {
-                try repo.dealNextHand(on: table)
+                try await repo.dealNextHand(on: table)
                 handMessage = nil
                 withAnimation(.easeOut(duration: 0.18)) {
                     self.hand = table.hand
@@ -832,7 +834,7 @@ struct TableSeatSelectionView: View {
         }
 
         if isGameStarted, needsDeal(on: table), table.isHostLocally {
-            try? repo.dealHand(on: table)
+            _ = try? await repo.dealHandAuthoritative(on: table)
             occupants = table.seats
         }
 

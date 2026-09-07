@@ -10,7 +10,9 @@ PokerLeader/
 │   ├── Models/                   SwiftData @Model types, shared table + hand, cards
 │   ├── Persistence/              ModelContainer + sample data
 │   ├── Services/                 Settlement, leaderboard, badges, WhatsApp text
-│   │                             HandRound + PokerHandEvaluator deal and read a hand
+│   │                             HandRound + PokerHandEvaluator are the local
+│   │                             rules; the shared table uses the Postgres
+│   │                             engine in 20260907200000_poker_server_engine.sql
 │   │                             HandNarration puts the hand in front of you into words
 │   ├── Theme/                    Colors, spacing
 │   ├── Extensions/               Money + date formatting

@@ -298,38 +298,37 @@ final class SandboxVaultBackendTests: XCTestCase {
 
     // MARK: - Hands and leaving
 
-    func testAHandIsBankedOnceHoweverOftenItIsReported() async throws {
+    func testAClientSuppliedHandResultIsRefused() async throws {
         try await seatWithChips(Money(cents: 4_000))
 
-        for _ in 0..<3 {
+        do {
             try await vault.recordHand(
                 inviteCode: "ABC123",
                 handID: "hand-1",
                 deltas: ["me": Money(cents: 1_500)]
             )
+            XCTFail("A fabricated hand result must be refused")
+        } catch {
+            let message = error.localizedDescription.lowercased()
+            XCTAssertTrue(message.contains("server") || message.contains("action") || message.contains("result"))
         }
 
         let chips = try await vault.tableChips(inviteCode: "ABC123")
-        XCTAssertEqual(chips.first?.inPlay, Money(cents: 5_500))
+        XCTAssertEqual(chips.first?.inPlay, Money(cents: 4_000), "Refusing the result must not move chips")
     }
 
     func testLeavingReturnsWhatTheBackendSaysTheSeatHolds() async throws {
         try await seatWithChips(Money(cents: 4_000))
-        try await vault.recordHand(
-            inviteCode: "ABC123",
-            handID: "hand-1",
-            deltas: ["me": Money(cents: 1_500)]
-        )
 
         let settlement = try await vault.leaveTable(inviteCode: "ABC123", idempotencyKey: "leave-1")
         XCTAssertEqual(settlement.boughtIn, Money(cents: 4_000))
-        XCTAssertEqual(settlement.returned, Money(cents: 5_500))
-        XCTAssertEqual(settlement.net, Money(cents: 1_500))
+        XCTAssertEqual(settlement.returned, Money(cents: 4_000))
+        XCTAssertEqual(settlement.net, .zero)
         XCTAssertFalse(settlement.alreadySettled)
 
         let summary = try await vault.summary()
         XCTAssertEqual(summary.inPlay, .zero)
-        XCTAssertEqual(summary.available, Money(cents: 11_500))
+        XCTAssertEqual(summary.available, Money(cents: 10_000))
     }
 
     func testLeavingTwiceReportsTheSameFiguresAndMovesNothing() async throws {

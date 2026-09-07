@@ -68,7 +68,7 @@ transaction still sums to zero. Both should always return no rows.
 | Deposit | `psp_clearing` −N, `available` +N |
 | Buy-in from Vault | `available` −N, `in_play` +N |
 | Buy-in with Apple Pay | `psp_clearing` −N, `in_play` +N |
-| A hand | `in_play`(loser) −N, `in_play`(winner) +N |
+| A hand (posted by the poker engine) | `in_play`(loser) −N, `in_play`(winner) +N |
 | Leaving a table | `in_play` −N, `available` +N |
 | Cash-out requested | `available` −N, `pending_withdrawal` +N |
 | Cash-out paid | `pending_withdrawal` −N, `payout_clearing` +(N−fee), `fees` +fee |
@@ -105,9 +105,8 @@ withdrawals; sending the same key again returns the original result instead of
 moving money a second time. Some keys are derived from what they identify rather
 than generated:
 
-- A hand is keyed `hand:<table>:<hand id>`. Every phone at a table works the
-  same hand out from the same shared state, so without that key the same result
-  would be banked once per device.
+- A hand is keyed `hand:<table>:<hand id>`. The poker engine posts that key
+  once, when it settles. A second settlement is a no-op.
 - A settled deposit is keyed `intent:<intent id>`, so a webhook delivered twice —
   which providers do — credits once.
 - A buy-in paid by card is keyed on the payment intent, so a retry after a
@@ -140,8 +139,9 @@ The app can ask. It cannot decide.
   settled, for the right amount, for the right table, not yet spent. An app that
   simply claimed a payment had happened would be refused at every one of those
   four checks.
-- A hand's result must be zero-sum across the seats, and only the table host may
-  post one. A seat cannot be driven below zero.
+- A hand's result is never accepted from the client. `vault_record_hand` refuses
+  any payload. The poker engine deals, takes actions, names the winner, and
+  posts the Vault movement itself.
 - Cash-outs are resolved by `vault_resolve_withdrawal`, which refuses any caller
   that has an `auth.uid()`. A player cannot mark their own withdrawal paid.
 
@@ -222,12 +222,11 @@ provider rather than StoreKit.
 
 Worth being plain about, because the architecture points at them:
 
-- **The game is not server-authoritative.** Hands are still dealt and evaluated
-  on the phones, and the host posts the result. The money side refuses anything
-  that is not zero-sum, that would take a seat below zero, or that has already
-  been posted, so a client cannot invent money — but it could still misreport how
-  the money moved *between* seats. A server-side game engine would close that,
-  and `vault_record_hand` is the seam it would replace.
+- **The game is server-authoritative.** `poker_start_hand` deals, `poker_act`
+  is the only betting entry, and settlement is posted from that result. A
+  modified client cannot name a winner, submit cards, or rewrite the pot.
+  Remaining gaps are operational (timeouts, disconnect handling, a richer
+  audit of every street) rather than “who decides the winner”.
 - **A table's buy-in range is set by whoever registers it first.** Normally that
   is the host, and `vault_register_table` will not let anyone else change an
   existing range. But a guest who reaches the backend before the host does can
@@ -247,9 +246,12 @@ Worth being plain about, because the architecture points at them:
 
 The SQL side has an end-to-end harness that runs against a plain PostgreSQL
 server — see `supabase/tests/README.md`. It walks a deposit, both kinds of
-buy-in, a hand, a departure and a cash-out, and asserts the guards: replays move
-nothing twice, hands must balance, only the host may post one, balances stay
-non-negative, the ledger cannot be edited, and the books reconcile.
+buy-in, a server-dealt hand, a departure and a cash-out, and asserts the
+guards: replays move nothing twice, a client-supplied hand result is refused,
+balances stay non-negative, the ledger cannot be edited, and the books
+reconcile. `30_poker_attacks.sql` covers a modified client trying to name a
+winner, submit cards, change the board, act out of turn, over-bet, rewrite
+the pot, replay an action, settle twice, or recover committed chips by leaving.
 
 The Swift side is covered by `PokerLeaderTests/SandboxVaultBackendTests.swift`
 and `PokerLeaderTests/MoneyTests.swift`, which put the demo backend through the

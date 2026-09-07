@@ -558,18 +558,11 @@ final class SupabaseSyncService {
             .execute()
     }
 
-    /// A guest may only publish the hand they are sitting in. Sending the full
-    /// seats array, ante, or started flag is now refused by the server.
+    /// The hand is owned by the server. This used to let a guest publish cards
+    /// and a winner; it is now a no-op so older call sites cannot write one.
     func updateOpenTableHand(_ table: OpenTableModel) async throws {
+        _ = table
         _ = try await ensureReady()
-        let client = try SupabaseBootstrap.requireClient()
-        let update = OpenTableHandUpdate(hand: table.hand, updatedAt: table.updatedAt)
-
-        try await client
-            .from("open_tables")
-            .update(update)
-            .eq("invite_code", value: table.inviteCode)
-            .execute()
     }
 
     /// Drops this player's seat server-side so a guest never has to republish
@@ -1179,10 +1172,11 @@ private struct OpenTableRow: Codable {
         if includesHandColumns {
             try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
-            try container.encode(hand, forKey: .hand)
+            // The hand is written by the poker engine. Sending it from the
+            // phone is refused by the server.
         } else {
             try container.encode(
-                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount ?? "0", hand: hand),
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount ?? "0", hand: nil),
                 forKey: .seats
             )
         }
@@ -1235,10 +1229,9 @@ private struct OpenTablePlayUpdate: Encodable {
         if includesHandColumns {
             try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
-            try container.encode(hand, forKey: .hand)
         } else {
             try container.encode(
-                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount, hand: hand),
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount, hand: nil),
                 forKey: .seats
             )
         }
