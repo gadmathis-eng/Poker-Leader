@@ -7,6 +7,7 @@ struct MyTablesSheet: View {
 
     @Query(sort: \OpenTableModel.updatedAt, order: .reverse) private var tables: [OpenTableModel]
     @State private var activeInviteCode: String?
+    @State private var showEditTables = false
 
     let onTablesChanged: () -> Void
 
@@ -16,12 +17,16 @@ struct MyTablesSheet: View {
 
     private var repo: TableRepository { TableRepository(context: context) }
 
+    private var orderedTables: [OpenTableModel] {
+        TableOrderStore.ordered(tables)
+    }
+
     private var hostedTables: [OpenTableModel] {
-        tables.filter(\.isHostLocally)
+        orderedTables.filter(\.isHostLocally)
     }
 
     private var joinedTables: [OpenTableModel] {
-        tables.filter { !$0.isHostLocally }
+        orderedTables.filter { !$0.isHostLocally }
     }
 
     var body: some View {
@@ -60,6 +65,16 @@ struct MyTablesSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showEditTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Edit tables")
+                    }
+                }
+            }
+            .sheet(isPresented: $showEditTables) {
+                EditTablesSheet(tables: orderedTables, onChange: onTablesChanged)
             }
             .onAppear {
                 activeInviteCode = repo.activeInviteCode

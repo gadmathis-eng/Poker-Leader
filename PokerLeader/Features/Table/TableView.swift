@@ -15,6 +15,7 @@ struct TableView: View {
     @State private var showingSeatSelection = false
     @Query(sort: \OpenTableModel.updatedAt, order: .reverse) private var tables: [OpenTableModel]
     @State private var showMyTables = false
+    @State private var showEditTables = false
     @State private var activeTable: OpenTableModel?
     @State private var joinError: String?
     @State private var joinCodeText = ""
@@ -25,10 +26,14 @@ struct TableView: View {
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
 
+    private var orderedTables: [OpenTableModel] {
+        TableOrderStore.ordered(tables)
+    }
+
     /// Every table but the one that is open, so the card at the top is not
     /// repeated in the list underneath it.
     private var otherTables: [OpenTableModel] {
-        tables.filter { $0.inviteCode != activeTable?.inviteCode }
+        orderedTables.filter { $0.inviteCode != activeTable?.inviteCode }
     }
 
     private var repo: TableRepository { TableRepository(context: context) }
@@ -98,6 +103,13 @@ struct TableView: View {
                     }
                     .accessibilityLabel("Your tables")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showEditTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Edit tables")
+                    }
+                }
             }
             .onAppear(perform: loadDraftValues)
             .task {
@@ -119,6 +131,9 @@ struct TableView: View {
             }
             .sheet(isPresented: $showMyTables, onDismiss: handleTablesChanged) {
                 MyTablesSheet(onTablesChanged: handleTablesChanged)
+            }
+            .sheet(isPresented: $showEditTables, onDismiss: handleTablesChanged) {
+                EditTablesSheet(tables: orderedTables, onChange: handleTablesChanged)
             }
             .sheet(isPresented: $showCreateTable, onDismiss: handleTablesChanged) {
                 CreateTableSheet()

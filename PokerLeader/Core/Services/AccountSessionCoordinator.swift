@@ -62,6 +62,7 @@ enum AccountSessionCoordinator {
         DeletedCirclesStore.clearAll()
         CircleCreatorStore.clearAll()
         CircleOrderStore.clearAll()
+        TableOrderStore.clearAll()
         UserDefaults.standard.removeObject(forKey: "dismissedNotificationKeys")
     }
 }

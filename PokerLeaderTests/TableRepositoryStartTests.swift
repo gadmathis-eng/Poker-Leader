@@ -291,6 +291,60 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(table.anteDecimal, 3)
     }
 
+    func testFetchFindsATableById() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "GBP",
+            hostDisplayName: "Alex"
+        )
+
+        XCTAssertEqual(try repo.fetch(id: table.id)?.inviteCode, table.inviteCode)
+        XCTAssertNil(try repo.fetch(id: UUID()))
+    }
+
+    func testRemoveDeletesAHostedTableFromThisDevice() async throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try repo.startHostedTable(
+            name: "Friday",
+            sessionCurrencyCode: "GBP",
+            hostDisplayName: "Alex"
+        )
+        let inviteCode = table.inviteCode
+        let id = table.id
+
+        XCTAssertEqual(repo.activeInviteCode, inviteCode)
+
+        await repo.remove(table)
+
+        XCTAssertNil(try repo.fetch(id: id))
+        XCTAssertNil(try repo.table(inviteCode: inviteCode))
+        XCTAssertNil(repo.activeInviteCode)
+    }
+
+    func testRemoveForgetsAJoinedTableOnThisDevice() async throws {
+        let context = try makeContext()
+        let joined = OpenTableModel(
+            inviteCode: "JOIN01",
+            name: "Friend's table",
+            hostDisplayName: "Ben",
+            hostPlayerKey: "other-host",
+            sessionCurrencyCode: "GBP",
+            isHostLocally: false
+        )
+        context.insert(joined)
+        try context.save()
+
+        let repo = TableRepository(context: context)
+        repo.makeActive(joined)
+        let id = joined.id
+
+        await repo.remove(joined)
+
+        XCTAssertNil(try repo.fetch(id: id))
+        XCTAssertNil(repo.activeInviteCode)
+    }
+
     func testGuestsCannotChangeTheAnte() throws {
         let context = try makeContext()
         let joined = OpenTableModel(
