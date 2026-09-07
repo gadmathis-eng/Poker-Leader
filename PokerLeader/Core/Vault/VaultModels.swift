@@ -282,6 +282,9 @@ struct TableSettlement: Identifiable, Equatable, Sendable {
     let returned: Money
     let referenceCode: String
     let alreadySettled: Bool
+    var tableCurrencyCode: String = "USD"
+    var walletReturned: Money? = nil
+    var walletCurrencyCode: String? = nil
 
     var net: Money { returned - boughtIn }
 }

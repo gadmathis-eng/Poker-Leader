@@ -36,13 +36,15 @@ select status from public.vault_sandbox_confirm_deposit(:'g_intent');
 \echo '=== 3. host publishes the shared table, then registers the buy-in range ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 insert into public.open_tables (
-    id, invite_code, host_user_id, host_display_name, host_player_key
+    id, invite_code, host_user_id, host_display_name, host_player_key,
+    session_currency_code
 ) values (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'ABC123',
     '11111111-1111-1111-1111-111111111111',
     'Host',
-    '11111111-1111-1111-1111-111111111111'
+    '11111111-1111-1111-1111-111111111111',
+    'USD'
 );
 select invite_code, min_buy_in_cents, max_buy_in_cents from public.vault_register_table('ABC123', 2000, 8000);
 select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'Host');

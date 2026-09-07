@@ -15,7 +15,7 @@ described under [Sandbox phase](#sandbox-phase), not something hidden.
 
 | Layer | Where | What it does |
 |---|---|---|
-| Ledger and rules | `supabase/migrations/20260907120000_vault_ledger.sql` | Owns every balance. Decides who may do what. |
+| Ledger and rules | `supabase/migrations/20260907120000_vault_ledger.sql` and `20260907230000_vault_fx_conversion.sql` | Owns every balance. Converts, then transfers, when a table or cash-out is in another currency. |
 | Backend seam | `PokerLeader/Core/Vault/VaultBackend.swift` | The only interface the app has to money. |
 | Real backend | `Core/Vault/SupabaseVaultBackend.swift` | Calls the Postgres functions. |
 | Demo backend | `Core/Vault/SandboxVaultBackend.swift` | Same rules, in-process, for demoing without a project. |
@@ -31,6 +31,11 @@ There is no floating point in the Vault and no `Decimal` arithmetic on balances.
 and the `Decimal` the rest of the app uses for table stakes, and it rounds to the
 nearest cent in both directions.
 
+The wallet is one currency. A table or a cash-out can be another. Buying in
+with USD at a GBP table, or withdrawing GBP from a USD vault, converts at
+`vault_fx_rates` (the same table as `VaultFX` / `HardcodedExchangeRateProvider`)
+and then transfers. The client never chooses the rate.
+
 ## Double-entry, and why the balance column is not the truth
 
 Money is never added to a balance. It is *moved* between accounts, and each
@@ -38,7 +43,7 @@ movement is a transaction holding two or more entries whose signed cents sum to
 exactly zero. A deposit is not "+$100 to the player" — it is "-$100 from the
 payment provider's clearing account, +$100 to the player's available account".
 
-Six kinds of account:
+Seven kinds of account:
 
 | Kind | Owner | Holds |
 |---|---|---|
@@ -48,6 +53,7 @@ Six kinds of account:
 | `psp_clearing` | system | the outside world money arrives from |
 | `payout_clearing` | system | the outside world money leaves to |
 | `fees` | system | fees retained by the operator |
+| `fx` | system | house legs that keep each currency's books balanced when money converts |
 
 Player accounts carry a check constraint that they may never go negative. The
 three system accounts are expected to, and their negative total is the mirror of
@@ -67,11 +73,14 @@ transaction still sums to zero. Both should always return no rows.
 |---|---|
 | Deposit | `psp_clearing` −N, `available` +N |
 | Buy-in from Vault | `available` −N, `in_play` +N |
+| Buy-in across currencies | `available` −wallet, `fx`(wallet) +wallet, `fx`(table) −table, `in_play` +table |
 | Buy-in with Apple Pay | `psp_clearing` −N, `in_play` +N |
 | A hand (posted by the poker engine) | `in_play`(loser) −N, `in_play`(winner) +N |
 | Leaving a table | `in_play` −N, `available` +N |
+| Leaving across currencies | `in_play` −table, `fx`(table) +table, `fx`(wallet) −wallet, `available` +wallet |
 | Cash-out requested | `available` −N, `pending_withdrawal` +N |
 | Cash-out paid | `pending_withdrawal` −N, `payout_clearing` +(N−fee), `fees` +fee |
+| Cash-out paid across currencies | `pending_withdrawal` −wallet, `fx`(wallet) +wallet, `fx`(payout) −payout, `payout_clearing` +net, `fees` +fee |
 | Cash-out rejected, canceled, failed | `pending_withdrawal` −N, `available` +N |
 
 ## Privacy

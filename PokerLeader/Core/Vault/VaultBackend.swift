@@ -93,13 +93,23 @@ protocol VaultBackend {
     /// into their Vault.
     func leaveTable(inviteCode: String, idempotencyKey: String) async throws -> TableSettlement
 
-    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest
+    func requestWithdrawal(
+        amount: Money,
+        currencyCode: String,
+        idempotencyKey: String
+    ) async throws -> WithdrawalRequest
     func withdrawals() async throws -> [WithdrawalRequest]
     func cancelWithdrawal(id: UUID) async throws -> WithdrawalRequest
 
     /// Demo only: walks a pending cash-out to a finished state so the states can
     /// be seen without a payout rail.
     func settleWithdrawalInSandbox(id: UUID, succeeds: Bool) async throws -> WithdrawalRequest
+}
+
+extension VaultBackend {
+    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
+        try await requestWithdrawal(amount: amount, currencyCode: "USD", idempotencyKey: idempotencyKey)
+    }
 }
 
 enum VaultIdempotency {

@@ -137,6 +137,7 @@ Run these migrations before using it with cloud sync, in order:
 `supabase/migrations/20260907200000_poker_server_engine.sql`
 `supabase/migrations/20260907210000_poker_engine_hardening.sql`
 `supabase/migrations/20260907220000_vault_summary_currency.sql`
+`supabase/migrations/20260907230000_vault_fx_conversion.sql`
 
 That creates the double-entry ledger, the row-level security that keeps one
 player's balance out of every other player's reach, the server poker engine,

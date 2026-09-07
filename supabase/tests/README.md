@@ -23,9 +23,11 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -d vaultdemo \
   -f supabase/migrations/20260907200000_poker_server_engine.sql \
   -f supabase/migrations/20260907210000_poker_engine_hardening.sql \
   -f supabase/migrations/20260907220000_vault_summary_currency.sql \
+  -f supabase/migrations/20260907230000_vault_fx_conversion.sql \
   -f supabase/tests/10_vault_flow.sql \
   -f supabase/tests/20_vault_attacks.sql \
-  -f supabase/tests/30_poker_attacks.sql
+  -f supabase/tests/30_poker_attacks.sql \
+  -f supabase/tests/40_vault_fx.sql
 ```
 
 Every `NOTICE: rejected as expected: …` line is a guard doing its job. The

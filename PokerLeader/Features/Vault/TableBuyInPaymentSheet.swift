@@ -11,6 +11,7 @@ struct TableBuyInPaymentSheet: View {
     let inviteCode: String
     let tableName: String
     let requestedAmount: Money
+    let tableCurrencyCode: String
     let limits: TableBuyInLimits?
     let playerKey: String
     let displayName: String
@@ -32,11 +33,23 @@ struct TableBuyInPaymentSheet: View {
         case topUp
     }
 
-    private var currencyCode: String { store.currencyCode }
+    private var walletCurrencyCode: String { store.currencyCode }
+    private var tableCurrency: String {
+        limits?.currencyCode ?? tableCurrencyCode
+    }
+
+    private var walletCost: Money {
+        VaultFX.convert(requestedAmount, from: tableCurrency, to: walletCurrencyCode)
+            ?? requestedAmount
+    }
+
     private var available: Money { store.summary.available }
 
-    private var vaultCoversIt: Bool { available >= requestedAmount }
-    private var shortfall: Money { (requestedAmount - available).clampedToNonNegative() }
+    private var vaultCoversIt: Bool { available >= walletCost }
+    private var shortfall: Money { (walletCost - available).clampedToNonNegative() }
+    private var showsConversion: Bool {
+        VaultFX.normalize(tableCurrency) != VaultFX.normalize(walletCurrencyCode)
+    }
 
     private var isWithinLimits: Bool {
         guard let limits else { return requestedAmount.isPositive }
@@ -62,7 +75,7 @@ struct TableBuyInPaymentSheet: View {
                     if !isWithinLimits, let limits {
                         VaultNoticeCard(
                             title: "Outside the buy-in range",
-                            message: "This table takes between \(limits.minimum.formatted(currencyCode: currencyCode)) and \(limits.maximum.formatted(currencyCode: currencyCode)). Go back and change your buy-in.",
+                            message: "This table takes between \(limits.minimum.formatted(currencyCode: tableCurrency)) and \(limits.maximum.formatted(currencyCode: tableCurrency)). Go back and change your buy-in.",
                             tint: AppTheme.negative,
                             iconName: "exclamationmark.triangle.fill"
                         )
@@ -136,12 +149,18 @@ struct TableBuyInPaymentSheet: View {
                 .foregroundStyle(AppTheme.muted)
                 .multilineTextAlignment(.center)
 
-            Text(requestedAmount.formatted(currencyCode: currencyCode))
+            Text(requestedAmount.formatted(currencyCode: tableCurrency))
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundStyle(AppTheme.text)
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+
+            if showsConversion {
+                Text("That's \(walletCost.formatted(currencyCode: walletCurrencyCode)) from your Vault.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.muted)
+            }
         }
         .frame(maxWidth: .infinity)
         .cardSurface(padding: 18)
@@ -153,7 +172,7 @@ struct TableBuyInPaymentSheet: View {
                 Text("MINIMUM")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                Text(limits.minimum.formatted(currencyCode: currencyCode))
+                Text(limits.minimum.formatted(currencyCode: tableCurrency))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppTheme.text)
             }
@@ -162,7 +181,7 @@ struct TableBuyInPaymentSheet: View {
                 Text("MAXIMUM")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                Text(limits.maximum.formatted(currencyCode: currencyCode))
+                Text(limits.maximum.formatted(currencyCode: tableCurrency))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppTheme.text)
             }
@@ -177,12 +196,12 @@ struct TableBuyInPaymentSheet: View {
                     .font(.caption2.weight(.bold))
                     .tracking(1)
                     .foregroundStyle(AppTheme.muted)
-                Text(available.formatted(currencyCode: currencyCode))
+                Text(available.formatted(currencyCode: walletCurrencyCode))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(vaultCoversIt ? AppTheme.positive : AppTheme.gold)
                     .monospacedDigit()
                 if !vaultCoversIt {
-                    Text("\(shortfall.formatted(currencyCode: currencyCode)) short of this buy-in")
+                    Text("\(shortfall.formatted(currencyCode: walletCurrencyCode)) short of this buy-in")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.muted)
                 }
@@ -202,7 +221,9 @@ struct TableBuyInPaymentSheet: View {
                 .vault,
                 title: "Use Vault Balance",
                 subtitle: vaultCoversIt
-                    ? "Moves \(requestedAmount.formatted(currencyCode: currencyCode)) from Available into In Play"
+                    ? (showsConversion
+                        ? "Converts \(walletCost.formatted(currencyCode: walletCurrencyCode)) into \(requestedAmount.formatted(currencyCode: tableCurrency)) on the table"
+                        : "Moves \(requestedAmount.formatted(currencyCode: tableCurrency)) from Available into In Play")
                     : "Not enough in your Vault for this buy-in",
                 isEnabled: vaultCoversIt,
                 icon: "lock.fill"
@@ -212,7 +233,7 @@ struct TableBuyInPaymentSheet: View {
                 methodRow(
                     .topUp,
                     title: "Use Vault + Apple Pay",
-                    subtitle: "Add the missing \(shortfall.formatted(currencyCode: currencyCode)) to your Vault, then buy in with the full \(requestedAmount.formatted(currencyCode: currencyCode))",
+                    subtitle: "Add the missing \(shortfall.formatted(currencyCode: walletCurrencyCode)) to your Vault, then buy in with \(requestedAmount.formatted(currencyCode: tableCurrency))",
                     isEnabled: true,
                     icon: "rectangle.split.2x1.fill"
                 )
@@ -221,7 +242,9 @@ struct TableBuyInPaymentSheet: View {
             methodRow(
                 .applePay,
                 title: "Pay with Apple Pay",
-                subtitle: "The full \(requestedAmount.formatted(currencyCode: currencyCode)) goes straight onto the table",
+                subtitle: showsConversion
+                    ? "Pays \(walletCost.formatted(currencyCode: walletCurrencyCode)) and seats \(requestedAmount.formatted(currencyCode: tableCurrency))"
+                    : "The full \(requestedAmount.formatted(currencyCode: tableCurrency)) goes straight onto the table",
                 isEnabled: true,
                 icon: "apple.logo"
             )

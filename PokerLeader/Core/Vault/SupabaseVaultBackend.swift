@@ -226,13 +226,17 @@ struct SupabaseVaultBackend: VaultBackend {
 
     // MARK: - Withdrawals
 
-    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
+    func requestWithdrawal(
+        amount: Money,
+        currencyCode: String,
+        idempotencyKey: String
+    ) async throws -> WithdrawalRequest {
         let row: WithdrawalRow = try await call(
             "vault_request_withdrawal",
             params: WithdrawalParams(
                 p_amount_cents: amount.cents,
                 p_idempotency_key: idempotencyKey,
-                p_currency: "USD"
+                p_currency: CurrencyPreferences.normalizedCurrencyCode(currencyCode)
             )
         )
         return row.model
@@ -503,6 +507,9 @@ private struct SettlementRow: Decodable {
     let returned_cents: Int
     let reference_code: String
     let already_settled: Bool
+    let table_currency: String?
+    let wallet_returned_cents: Int?
+    let wallet_currency: String?
 
     var model: TableSettlement {
         TableSettlement(
@@ -510,7 +517,10 @@ private struct SettlementRow: Decodable {
             boughtIn: Money(cents: bought_in_cents),
             returned: Money(cents: returned_cents),
             referenceCode: reference_code,
-            alreadySettled: already_settled
+            alreadySettled: already_settled,
+            tableCurrencyCode: table_currency ?? "USD",
+            walletReturned: wallet_returned_cents.map(Money.init(cents:)),
+            walletCurrencyCode: wallet_currency
         )
     }
 }

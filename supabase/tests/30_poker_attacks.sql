@@ -32,13 +32,15 @@ select id as host_dep from public.vault_create_deposit_intent(10000, 'poker-host
 select status from public.vault_sandbox_confirm_deposit(:'host_dep');
 
 insert into public.open_tables (
-    id, invite_code, host_user_id, host_display_name, host_player_key, ante_amount, seats
+    id, invite_code, host_user_id, host_display_name, host_player_key,
+    session_currency_code, ante_amount, seats
 ) values (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     'POKER1',
     '11111111-1111-1111-1111-111111111111',
     'Host',
     '11111111-1111-1111-1111-111111111111',
+    'USD',
     '1',
     '[
         {"id":"10000000-0000-0000-0000-000000000001","seatNumber":1,"playerName":"Host","playerKey":"11111111-1111-1111-1111-111111111111","amount":"40","isHost":true},

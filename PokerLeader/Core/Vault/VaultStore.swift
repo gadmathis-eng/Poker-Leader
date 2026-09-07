@@ -190,8 +190,14 @@ final class VaultStore {
         displayName: String
     ) async throws -> TableBuyInReceipt {
         let backend = self.backend
+        let tableCurrency = (try? await backend.tableLimits(inviteCode: inviteCode))?.currencyCode
+            ?? summary.currencyCode
+        guard let charged = VaultFX.convert(amount, from: tableCurrency, to: summary.currencyCode) else {
+            throw VaultError.backend("No exchange rate for that buy-in.")
+        }
+
         let intent = try await backend.createDepositIntent(
-            amount: amount,
+            amount: charged,
             purpose: .tableBuyIn,
             tableInviteCode: inviteCode,
             idempotencyKey: VaultIdempotency.key("tablepay", inviteCode, String(amount.cents))
@@ -199,7 +205,7 @@ final class VaultStore {
 
         do {
             _ = try await VaultProviders.payment.authorize(
-                amount: amount,
+                amount: charged,
                 currencyCode: summary.currencyCode,
                 reference: intent.referenceCode,
                 summaryLabel: "Buy-in at table \(inviteCode)"
@@ -283,10 +289,12 @@ final class VaultStore {
     }
 
     @discardableResult
-    func requestCashOut(_ amount: Money) async throws -> WithdrawalRequest {
+    func requestCashOut(_ amount: Money, currencyCode: String? = nil) async throws -> WithdrawalRequest {
+        let payout = CurrencyPreferences.normalizedCurrencyCode(currencyCode ?? summary.currencyCode)
         let request = try await backend.requestWithdrawal(
             amount: amount,
-            idempotencyKey: VaultIdempotency.key("cashout", String(amount.cents))
+            currencyCode: payout,
+            idempotencyKey: VaultIdempotency.key("cashout", payout, String(amount.cents))
         )
         await reloadQuietly()
         return request

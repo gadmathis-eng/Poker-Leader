@@ -149,6 +149,7 @@ struct TableView: View {
                     inviteCode: pending.inviteCode,
                     tableName: pending.tableName,
                     requestedAmount: pending.amount,
+                    tableCurrencyCode: pending.tableCurrencyCode,
                     limits: pending.limits,
                     playerKey: repo.localPlayerKey,
                     displayName: displayName
