@@ -213,7 +213,7 @@ struct CreateTableSheet: View {
             MoneyAmountEditorState(
                 id: UUID(),
                 title: "Ante",
-                subtitle: "Per hand, in \(tableCurrencyCode)",
+                subtitle: "In \(tableCurrencyCode)",
                 currencyCode: tableCurrencyCode,
                 text: anteText.isEmpty ? "0" : anteText,
                 maximum: tableBuyInAmount > 0 ? tableBuyInAmount : nil

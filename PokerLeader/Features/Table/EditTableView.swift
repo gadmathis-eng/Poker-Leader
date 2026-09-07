@@ -254,7 +254,7 @@ struct EditTableView: View {
             title: "Ante",
             subtitle: table.isStarted
                 ? "Applies from the next hand"
-                : "Per hand, in \(currencyCode)",
+                : "In \(currencyCode)",
             currencyCode: currencyCode,
             text: anteText.isEmpty ? "0" : anteText
         )

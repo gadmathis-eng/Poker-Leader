@@ -567,7 +567,7 @@ struct TableSeatSelectionView: View {
             MoneyAmountEditorState(
                 id: UUID(),
                 title: "Ante",
-                subtitle: isGameStarted ? "Applies from the next hand" : "Per hand",
+                subtitle: isGameStarted ? "Applies from the next hand" : "In \(tableCurrencyCode)",
                 currencyCode: tableCurrencyCode,
                 text: TableMoney.string(anteAmount),
                 maximum: isGameStarted || tableBuyInAmount <= 0 ? nil : tableBuyInAmount
