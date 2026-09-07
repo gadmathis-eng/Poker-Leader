@@ -126,11 +126,12 @@ struct TableView: View {
             .sheet(isPresented: $showJoinBuyIn) {
                 JoinBuyInSheet(
                     hostName: activeTable?.hostDisplayName ?? "",
-                    currencyCode: tableSessionCurrencyCode,
+                    tableCurrencyCode: tableSessionCurrencyCode,
+                    initialPayInCurrencyCode: personalBuyInCurrencyCode,
                     initialAmount: 0,
                     onConfirm: confirmJoinBuyIn
                 )
-                .presentationDetents([.height(520)])
+                .presentationDetents([.height(580)])
                 .presentationDragIndicator(.visible)
             }
             .onChange(of: activeTable?.inviteCode) { _, _ in
@@ -345,10 +346,13 @@ struct TableView: View {
         showJoinBuyIn = true
     }
 
-    private func confirmJoinBuyIn(_ amount: Decimal) {
-        personalBuyInCurrencyCode = tableSessionCurrencyCode
+    private func confirmJoinBuyIn(_ amount: Decimal, currencyCode: String) {
+        let payIn = CurrencyPreferences.isValidCurrencyCode(currencyCode)
+            ? CurrencyPreferences.normalizedCurrencyCode(currencyCode)
+            : tableSessionCurrencyCode
+        personalBuyInCurrencyCode = payIn
         personalBuyInAmountString = NSDecimalNumber(decimal: amount).stringValue
-        draftBuyInCurrencyCode = tableSessionCurrencyCode
+        draftBuyInCurrencyCode = payIn
         draftBuyInText = personalBuyInAmountString
         didConfirmJoinBuyIn = true
         showingSeatSelection = true
