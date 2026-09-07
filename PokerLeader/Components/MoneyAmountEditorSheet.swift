@@ -147,6 +147,13 @@ private struct BuyInAmountButtonStyle: ButtonStyle {
 }
 
 struct MoneyAmountEditorSheet: View {
+    static let compactSheetHeight: CGFloat = 420
+    static let sheetHeight: CGFloat = 520
+
+    static func sheetHeight(for editor: MoneyAmountEditorState) -> CGFloat {
+        editor.title.isEmpty && editor.subtitle.isEmpty ? compactSheetHeight : sheetHeight
+    }
+
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
 
@@ -170,8 +177,9 @@ struct MoneyAmountEditorSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             SheetDragHandle()
+                .padding(.bottom, showsTitle ? 6 : 0)
 
-            if !title.isEmpty || !subtitle.isEmpty {
+            if showsTitle {
                 VStack(spacing: 6) {
                     if !title.isEmpty {
                         Text(title)
@@ -242,7 +250,12 @@ struct MoneyAmountEditorSheet: View {
         }
         .padding(20)
         .background(AppTheme.background)
+        .presentationDetents([.height(showsTitle ? Self.sheetHeight : Self.compactSheetHeight)])
         .presentationDragIndicator(.hidden)
+    }
+
+    private var showsTitle: Bool {
+        !title.isEmpty || !subtitle.isEmpty
     }
 
     private var canSave: Bool {

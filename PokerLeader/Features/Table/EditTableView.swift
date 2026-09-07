@@ -201,8 +201,8 @@ struct EditTableView: View {
             MoneyAmountEditorSheet(editor: editor) { text in
                 anteText = text
             }
-            .presentationDetents([.height(420)])
-            .presentationDragIndicator(.visible)
+            .presentationDetents([.height(MoneyAmountEditorSheet.sheetHeight)])
+            .presentationDragIndicator(.hidden)
         }
         .confirmationDialog(
             removeConfirmationTitle,
@@ -254,7 +254,7 @@ struct EditTableView: View {
             title: "Ante",
             subtitle: table.isStarted
                 ? "Applies from the next hand"
-                : "Per hand, in \(currencyCode)",
+                : "In \(currencyCode)",
             currencyCode: currencyCode,
             text: anteText.isEmpty ? "0" : anteText
         )
