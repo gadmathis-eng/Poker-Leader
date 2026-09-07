@@ -86,7 +86,17 @@ struct CreateTableSheet: View {
                             .foregroundStyle(AppTheme.muted)
                     }
 
-                    anteRow
+                    StandardBuyInCard(
+                        title: "Ante",
+                        showsCurrencyButton: false,
+                        amount: anteAmount ?? 0,
+                        currencyCode: tableCurrencyCode,
+                        onAmountTap: presentAnteEditor,
+                        onCurrencyTap: {}
+                    )
+                    Text("What everyone puts in to stay in the hand. Tap the amount to change it.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
 
                     if let errorMessage {
                         Text(errorMessage)
@@ -182,35 +192,6 @@ struct CreateTableSheet: View {
                     .stroke(AppTheme.cardBorder)
             )
         }
-    }
-
-    private var anteRow: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Ante")
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.text)
-                Text("What everyone puts in to stay in the hand")
-                    .font(.caption2)
-                    .foregroundStyle(AppTheme.muted)
-            }
-            Spacer()
-            Button(action: presentAnteEditor) {
-                Text(MoneyFormatting.plain(anteAmount ?? 0, currencyCode: tableCurrencyCode))
-                    .font(.subheadline.weight(.bold))
-                    .foregroundStyle(AppTheme.gold)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Edit ante")
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(AppTheme.card)
-        .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
-                .stroke(AppTheme.cardBorder)
-        )
     }
 
     private func presentPayInEditor() {

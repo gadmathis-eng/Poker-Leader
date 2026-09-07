@@ -38,6 +38,7 @@ struct MoneyAmountPill: View {
 
 struct StandardBuyInCard: View {
     var title: String = "Buy-in"
+    var showsCurrencyButton: Bool = true
     let amount: Decimal
     let currencyCode: String
     let onAmountTap: () -> Void
@@ -62,7 +63,13 @@ struct StandardBuyInCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.muted)
                 Spacer()
-                CurrencyChipButton(currencyCode: currencyCode, action: onCurrencyTap)
+                if showsCurrencyButton {
+                    CurrencyChipButton(currencyCode: currencyCode, action: onCurrencyTap)
+                } else {
+                    Text(currencyCode)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.muted)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -104,6 +111,7 @@ struct StandardBuyInCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(BuyInAmountButtonStyle())
+            .accessibilityLabel("Edit \(title)")
         }
         .background(AppTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
