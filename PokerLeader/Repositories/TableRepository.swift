@@ -353,16 +353,51 @@ final class TableRepository {
         let stacks = HandRound.stacksAfter(hand)
         var seats = table.seats
         var changed = false
+        var deltas: [String: Decimal] = [:]
         for index in seats.indices {
             guard let stack = stacks[seats[index].playerKey] else { continue }
             let settled = TableMoney.string(stack)
             guard seats[index].amount != settled else { continue }
+            deltas[seats[index].playerKey] = stack - seats[index].amountDecimal
             seats[index].amount = settled
             changed = true
         }
         guard changed else { return }
         table.seats = seats
         try? context.save()
+        reportHandToVault(hand, on: table, deltas: deltas)
+    }
+
+    /// Tells the Vault what the hand did to each seat, so the money in play on
+    /// the backend follows the game rather than the app's own tally.
+    ///
+    /// Only the host posts it, and it is keyed on the hand id: every phone works
+    /// the same hand out from the same shared state, so without that key the
+    /// same result would be banked once per device.
+    private func reportHandToVault(
+        _ hand: SharedTableHand,
+        on table: OpenTableModel,
+        deltas: [String: Decimal]
+    ) {
+        guard table.isHostLocally, !deltas.isEmpty else { return }
+
+        let vault = VaultStore.shared
+        let currency = table.sessionCurrencyCode
+        let converted = deltas.mapValues { delta in
+            TableBuyInPolicy.vaultDelta(
+                delta,
+                fromTableCurrency: currency,
+                vaultCurrencyCode: vault.currencyCode
+            )
+        }
+
+        Task {
+            await vault.recordHand(
+                inviteCode: table.inviteCode,
+                handID: hand.id.uuidString,
+                deltas: converted
+            )
+        }
     }
 
     /// Deals the next hand, moving the button on. The pot has already been paid

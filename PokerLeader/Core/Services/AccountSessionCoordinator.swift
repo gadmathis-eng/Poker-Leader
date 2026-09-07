@@ -59,6 +59,10 @@ enum AccountSessionCoordinator {
     }
 
     private static func clearAccountStores() {
+        // The demo vault lives on the device, so it has to go with the account.
+        // A cloud-backed vault is untouched: it belongs to the server, and the
+        // player finds it waiting when they sign back in.
+        VaultStore.shared.clearLocalState()
         DeletedCirclesStore.clearAll()
         CircleCreatorStore.clearAll()
         CircleOrderStore.clearAll()

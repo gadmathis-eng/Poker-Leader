@@ -5,6 +5,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     case profile = "Profile"
     case currency = "Currency"
     case appearance = "Appearance"
+    case vault = "Vault"
 
     var id: String { rawValue }
 }
@@ -20,6 +21,7 @@ struct ProfileSettingsView: View {
     @State private var showAddFriend = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
+    @State private var vault = VaultStore.shared
     @State private var rateStatusText = ExchangeRateService.shared.rateStatusText
     @Query private var circles: [CircleModel]
     @Query(sort: \FriendRequestModel.createdAt, order: .reverse) private var friendRequests: [FriendRequestModel]
@@ -118,6 +120,8 @@ struct ProfileSettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
+
+                    vaultShortcut
 
                     VStack(alignment: .leading, spacing: 12) {
                         Text(rateStatusText)
@@ -221,6 +225,64 @@ struct ProfileSettingsView: View {
                     .presentationDragIndicator(.visible)
             }
         }
+    }
+
+    /// The balance on this row is the reader's own and is fetched for them
+    /// alone. It is on the profile screen because it is their profile — no other
+    /// player's Vault is reachable from anywhere in the app.
+    private var vaultShortcut: some View {
+        Button {
+            settingsInitialTab = .vault
+            showProfileControls = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "lock.square.stack.fill")
+                    .font(.headline.weight(.bold))
+                    .frame(width: 36, height: 36)
+                    .background(AppTheme.background)
+                    .foregroundStyle(AppTheme.gold)
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text("Vault")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(AppTheme.text)
+                        if vault.isSandbox {
+                            DemoFundsBadge(compact: true)
+                        }
+                    }
+                    Text(vaultSubtitle)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(AppTheme.muted)
+            }
+            .padding()
+            .background(AppTheme.card)
+            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+            .overlay(
+                RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                    .stroke(AppTheme.cardBorder)
+            )
+        }
+        .buttonStyle(.plain)
+        .task { await vault.load() }
+    }
+
+    private var vaultSubtitle: String {
+        guard vault.hasLoadedOnce else { return "Private balance, deposits, and cash-outs" }
+        let available = vault.summary.available.formatted(currencyCode: vault.currencyCode)
+        if vault.summary.inPlay.isPositive {
+            let inPlay = vault.summary.inPlay.formatted(currencyCode: vault.currencyCode)
+            return "\(available) available · \(inPlay) in play"
+        }
+        return "\(available) available"
     }
 
     private var outgoingFriendRequests: [FriendRequestModel] {
@@ -515,6 +577,8 @@ private struct ProfileControlsView: View {
                             currencyTab
                         case .appearance:
                             appearanceTab
+                        case .vault:
+                            VaultTabView()
                         }
 
                         accountSection

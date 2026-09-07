@@ -22,6 +22,11 @@ struct TableSeatSelectionView: View {
     @State private var showTableSettings = false
     /// Bumped when the stake changes so the felt and editor re-read the table.
     @State private var anteStamp: Decimal = 0
+    @State private var vault = VaultStore.shared
+    @State private var settlement: TableSettlement?
+    @State private var isCashingOff = false
+    @State private var cashOffError: String?
+    @State private var showVaultAfterLeaving = false
 
     private static let nextHandPause: Duration = .seconds(2)
 
@@ -246,6 +251,8 @@ struct TableSeatSelectionView: View {
                 } else {
                     sitDownCard
                 }
+
+                cashOffCard
             }
             .padding(.vertical)
         }
@@ -307,6 +314,83 @@ struct TableSeatSelectionView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppTheme.background)
             }
+        }
+        .sheet(item: $settlement) { result in
+            LeaveTableSummarySheet(settlement: result) {
+                showVaultAfterLeaving = true
+            }
+        }
+        .sheet(isPresented: $showVaultAfterLeaving) {
+            CashOutSheet()
+        }
+        .onChange(of: settlement) { _, current in
+            if current == nil, !showVaultAfterLeaving, !isCashingOff {
+                dismiss()
+            }
+        }
+    }
+
+    /// Standing up is a money move, so it goes through the Vault: the backend
+    /// works out what the seat is holding, puts that in the player's Vault, and
+    /// only then is the seat given up. An unfinished hand has to resolve first —
+    /// money that is in a pot belongs to the pot until it is won.
+    @ViewBuilder
+    private var cashOffCard: some View {
+        if let table, mySeat != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    SectionHeader(title: "Leaving the table")
+                    Spacer()
+                    if vault.isSandbox {
+                        DemoFundsBadge(compact: true)
+                    }
+                }
+
+                if isDealtInLive {
+                    Text("Finish the hand you are in first. Whatever is left in front of you goes back to your Vault when you stand up.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                } else {
+                    Text("Your chips go back into your private Vault. Nobody else sees what you leave with.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                }
+
+                if let cashOffError {
+                    Text(cashOffError)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.negative)
+                }
+
+                VaultSecondaryButton(
+                    title: isCashingOff ? "Cashing off…" : "Cash off and leave",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    isEnabled: !isDealtInLive && !isCashingOff
+                ) {
+                    Task { await cashOffAndLeave(table) }
+                }
+            }
+            .cardSurface(padding: 16)
+            .padding(.horizontal)
+        }
+    }
+
+    /// A hand that is still running holds this player's money in the pot.
+    private var isDealtInLive: Bool {
+        guard let hand else { return false }
+        return !hand.isComplete && hand.seat(forPlayerKey: repo.localPlayerKey) != nil
+    }
+
+    private func cashOffAndLeave(_ table: OpenTableModel) async {
+        isCashingOff = true
+        cashOffError = nil
+        defer { isCashingOff = false }
+
+        do {
+            settlement = try await vault.leaveTable(inviteCode: table.inviteCode)
+            await repo.remove(table)
+        } catch {
+            cashOffError = VaultError.from(error).errorDescription
         }
     }
 

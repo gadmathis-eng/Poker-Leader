@@ -78,7 +78,7 @@ final class SandboxVaultBackend: VaultBackend {
 
         let intent = StoredIntent(
             id: UUID(),
-            referenceCode: Self.reference("PI"),
+            referenceCode: SandboxReference.code("PI"),
             amountCents: amount.cents,
             status: .requiresConfirmation,
             purpose: purpose,
@@ -397,7 +397,7 @@ final class SandboxVaultBackend: VaultBackend {
 
         let withdrawal = StoredWithdrawal(
             id: UUID(),
-            referenceCode: Self.reference("CO"),
+            referenceCode: SandboxReference.code("CO"),
             amountCents: amount.cents,
             feeCents: fee.cents,
             status: .pending,
@@ -513,7 +513,12 @@ final class SandboxVaultBackend: VaultBackend {
         return try? JSONDecoder().decode(State.self, from: data)
     }
 
-    fileprivate static func reference(_ prefix: String) -> String {
+}
+
+/// Mirrors the shape of the reference codes the database hands out, so a demo
+/// receipt reads the same as a real one.
+private enum SandboxReference {
+    static func code(_ prefix: String) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd"
         let suffix = UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)
@@ -571,7 +576,7 @@ private struct StoredEntry: Codable {
 
 private struct StoredStatement: Codable {
     var id = UUID()
-    var referenceCode = SandboxVaultBackend.reference("PM")
+    var referenceCode = SandboxReference.code("PM")
     var kind: VaultTransactionKind
     var status: VaultTransactionStatus
     var amountCents: Int
@@ -750,7 +755,7 @@ private struct State: Codable {
 
         let posted = StoredLedger(
             id: UUID(),
-            referenceCode: SandboxVaultBackend.reference("TXN"),
+            referenceCode: SandboxReference.code("TXN"),
             kind: kind,
             idempotencyKey: idempotencyKey,
             createdAt: .now

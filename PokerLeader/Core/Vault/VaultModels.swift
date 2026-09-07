@@ -275,7 +275,8 @@ struct TableBuyInReceipt: Equatable, Sendable {
 
 /// What the player is shown after they stand up: what they sat down with, how
 /// it went, and what the backend put back in their Vault.
-struct TableSettlement: Equatable, Sendable {
+struct TableSettlement: Identifiable, Equatable, Sendable {
+    var id: String { inviteCode + ":" + referenceCode }
     let inviteCode: String
     let boughtIn: Money
     let returned: Money
