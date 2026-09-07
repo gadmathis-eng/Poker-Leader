@@ -151,7 +151,7 @@ struct CreateTableSheet: View {
                         didEditAnte = true
                     }
                 }
-                .presentationDetents([.height(420)])
+                .presentationDetents([.height(520)])
                 .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: $showSignIn) {

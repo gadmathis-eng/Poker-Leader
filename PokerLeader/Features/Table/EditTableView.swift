@@ -201,8 +201,8 @@ struct EditTableView: View {
             MoneyAmountEditorSheet(editor: editor) { text in
                 anteText = text
             }
-            .presentationDetents([.height(420)])
-            .presentationDragIndicator(.visible)
+            .presentationDetents([.height(520)])
+            .presentationDragIndicator(.hidden)
         }
         .confirmationDialog(
             removeConfirmationTitle,

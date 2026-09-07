@@ -170,6 +170,7 @@ struct MoneyAmountEditorSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             SheetDragHandle()
+                .padding(.bottom, 6)
 
             if !title.isEmpty || !subtitle.isEmpty {
                 VStack(spacing: 6) {
