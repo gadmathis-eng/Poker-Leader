@@ -147,6 +147,8 @@ private struct BuyInAmountButtonStyle: ButtonStyle {
 }
 
 struct MoneyAmountEditorSheet: View {
+    static let sheetHeight: CGFloat = 520
+
     @Environment(\.dismiss) private var dismiss
     @State private var text: String
 
@@ -170,7 +172,6 @@ struct MoneyAmountEditorSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             SheetDragHandle()
-                .padding(.bottom, 6)
 
             if !title.isEmpty || !subtitle.isEmpty {
                 VStack(spacing: 6) {
@@ -243,6 +244,7 @@ struct MoneyAmountEditorSheet: View {
         }
         .padding(20)
         .background(AppTheme.background)
+        .presentationDetents([.height(Self.sheetHeight)])
         .presentationDragIndicator(.hidden)
     }
 

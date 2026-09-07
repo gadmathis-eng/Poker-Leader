@@ -251,7 +251,7 @@ struct NewSessionView: View {
                     MoneyAmountEditorSheet(editor: editor) { text in
                         buyInText = sanitizedNonNegativeDecimalText(text)
                     }
-                    .presentationDetents([.height(420)])
+                    .presentationDetents([.height(MoneyAmountEditorSheet.sheetHeight)])
                     .presentationDragIndicator(.hidden)
                 }
                 .sheet(isPresented: $showingCurrencyPicker) {

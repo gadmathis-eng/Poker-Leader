@@ -267,7 +267,7 @@ struct TableSeatSelectionView: View {
             MoneyAmountEditorSheet(editor: editor.state) { text in
                 apply(editedAmount: text, for: editor)
             }
-            .presentationDetents([.height(520)])
+            .presentationDetents([.height(MoneyAmountEditorSheet.sheetHeight)])
             .presentationDragIndicator(.hidden)
         }
         .sheet(isPresented: $showTableSettings) {

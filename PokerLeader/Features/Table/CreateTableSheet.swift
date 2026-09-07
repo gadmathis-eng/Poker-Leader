@@ -151,7 +151,7 @@ struct CreateTableSheet: View {
                         didEditAnte = true
                     }
                 }
-                .presentationDetents([.height(520)])
+                .presentationDetents([.height(MoneyAmountEditorSheet.sheetHeight)])
                 .presentationDragIndicator(.hidden)
             }
             .sheet(isPresented: $showSignIn) {

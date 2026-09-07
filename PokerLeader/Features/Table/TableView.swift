@@ -131,7 +131,7 @@ struct TableView: View {
                     initialAmount: 0,
                     onConfirm: confirmJoinBuyIn
                 )
-                .presentationDetents([.height(580)])
+                .presentationDetents([.height(640)])
                 .presentationDragIndicator(.hidden)
             }
             .onChange(of: activeTable?.inviteCode) { _, _ in

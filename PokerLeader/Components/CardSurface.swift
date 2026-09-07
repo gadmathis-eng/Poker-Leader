@@ -21,6 +21,7 @@ struct SheetDragHandle: View {
         Capsule()
             .fill(AppTheme.text)
             .frame(width: 36, height: 5)
+            .padding(.bottom, 6)
             .accessibilityHidden(true)
     }
 }
