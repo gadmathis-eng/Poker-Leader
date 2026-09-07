@@ -149,7 +149,7 @@ struct TableView: View {
             Text("Table")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.text)
-            Text("Create a table with a currency, buy-in, and ante, then share the code so friends can join you.")
+            Text("Create a table with a currency, buy-in, and ante, then share the code. Everyone who joins chooses how much they sit down with.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
         }
@@ -170,7 +170,7 @@ struct TableView: View {
         } else if let activeTable, !activeTable.isHostLocally {
             noticeCard(
                 title: "You're joining \(activeTable.hostDisplayName)'s table",
-                message: "Set your buy-in, then pick an open seat.",
+                message: "Choose how much you want to buy in, then pick an open seat.",
                 tint: AppTheme.text
             )
         }
@@ -314,6 +314,10 @@ struct TableView: View {
                 buyInCurrencyCode: $draftBuyInCurrencyCode,
                 buyInText: $draftBuyInText
             )
+
+            Text("This is how much you sit down with. Other players choose their own.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
 
             Button {
                 Task { await savePersonalBuyIn() }
@@ -503,7 +507,7 @@ struct TableView: View {
             draftSessionCurrencyCode = table.sessionCurrencyCode
             router.pendingTableInviteCode = nil
             joinCodeText = table.inviteCode
-            if hasJoinableBuyIn {
+            if table.isHostLocally, hasJoinableBuyIn {
                 showingSeatSelection = true
             }
         } catch let error as TableRepositoryError where error == .notSignedIn {

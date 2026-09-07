@@ -568,7 +568,7 @@ private struct SeatMarker: View {
             return "Seat taken"
         }
         if let occupant {
-            return occupant.tapHint ?? "Your buy-in. Tap to edit the amount."
+            return occupant.tapHint ?? "Your buy-in. Chosen before you sat down."
         }
         return "Sits at this seat"
     }
