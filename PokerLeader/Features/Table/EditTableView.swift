@@ -17,8 +17,6 @@ struct EditTableView: View {
     @State private var seatAmount: Decimal = 0
     @State private var activeInviteCode: String?
     @State private var showCurrencyPicker = false
-    @State private var showRemoveConfirmation = false
-    @State private var isRemoving = false
     @State private var isDealtIn = false
 
     init(table: OpenTableModel, onChange: @escaping () -> Void = {}) {
@@ -45,14 +43,6 @@ struct EditTableView: View {
 
     private var currencyLabel: String {
         "\(MoneyFormatting.currencySymbol(for: currencyCode)) \(currencyCode)"
-    }
-
-    private var removeActionTitle: String {
-        isHost ? "Delete table" : "Leave table"
-    }
-
-    private var removeConfirmationTitle: String {
-        isHost ? "Delete this table?" : "Leave this table?"
     }
 
     var body: some View {
@@ -118,19 +108,6 @@ struct EditTableView: View {
                     Label("Share table", systemImage: "square.and.arrow.up")
                 }
             }
-
-            Section {
-                Button(role: .destructive) {
-                    showRemoveConfirmation = true
-                } label: {
-                    Text(removeActionTitle)
-                }
-                .disabled(isRemoving)
-            } footer: {
-                Text(isHost
-                     ? "Deleting closes the table for everyone who joined with your link."
-                     : "Leaving frees your seat and removes the table from this device.")
-            }
         }
         .scrollContentBackground(.hidden)
         .background(AppTheme.background)
@@ -139,7 +116,6 @@ struct EditTableView: View {
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save", action: save)
-                    .disabled(isRemoving)
             }
         }
         .onAppear(perform: loadTableState)
@@ -151,14 +127,6 @@ struct EditTableView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-        }
-        .confirmationDialog(
-            removeConfirmationTitle,
-            isPresented: $showRemoveConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(removeActionTitle, role: .destructive, action: remove)
-            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -206,20 +174,5 @@ struct EditTableView: View {
 
         onChange()
         dismiss()
-    }
-
-    private func remove() {
-        guard !isRemoving else { return }
-        isRemoving = true
-
-        let repo = self.repo
-        let target = table
-        let notifyChange = onChange
-        dismiss()
-
-        Task {
-            await repo.remove(target)
-            notifyChange()
-        }
     }
 }
