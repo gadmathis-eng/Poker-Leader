@@ -223,8 +223,7 @@ enum TableAnte {
     static func defaultAmount(forBuyIn buyIn: Decimal) -> Decimal {
         let stack = buyIn.clampedToNonNegative
         guard stack > 0 else { return 0 }
-        let hundredth = (stack / 100).roundedToHundredths
-        return hundredth < TableMoney.penny ? TableMoney.penny : hundredth
+        return min(1, stack)
     }
 }
 
