@@ -81,6 +81,11 @@ final class TableRepository {
         return try context.fetch(descriptor).first
     }
 
+    func fetch(id: UUID) throws -> OpenTableModel? {
+        let descriptor = FetchDescriptor<OpenTableModel>(predicate: #Predicate { $0.id == id })
+        return try context.fetch(descriptor).first
+    }
+
     func makeActive(_ table: OpenTableModel) {
         activeInviteCode = table.inviteCode
     }
