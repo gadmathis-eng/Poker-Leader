@@ -437,7 +437,7 @@ final class TableRepository {
             if table.isHostLocally {
                 try? await SupabaseSyncService.shared.upsertOpenTable(table)
             } else {
-                try? await SupabaseSyncService.shared.updateOpenTableSeats(table)
+                try? await SupabaseSyncService.shared.updateOpenTableHand(table)
             }
         }
     }
@@ -458,7 +458,7 @@ final class TableRepository {
                 try await SupabaseSyncService.shared.upsertOpenTable(table)
                 try await confirmPublished(table)
             } else {
-                try await SupabaseSyncService.shared.updateOpenTableSeats(table)
+                try await SupabaseSyncService.shared.updateOpenTableHand(table)
             }
         } catch {
             throw TableRepositoryError.wrapping(error)
@@ -553,7 +553,13 @@ final class TableRepository {
             table.seats = SharedTableSeating.removing(playerKey: localPlayerKey, from: table.seats)
             try? context.save()
             if SupabaseBootstrap.isConfigured, SupabaseAuthManager.shared.isSignedIn {
-                try? await SupabaseSyncService.shared.updateOpenTableSeats(table)
+                do {
+                    _ = try await SupabaseSyncService.shared.removeOpenTableSeat(
+                        inviteCode: table.inviteCode
+                    )
+                } catch {
+                    try? await SupabaseSyncService.shared.updateOpenTableHand(table)
+                }
             }
         }
         forget(table)

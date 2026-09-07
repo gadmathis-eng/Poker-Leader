@@ -105,22 +105,14 @@ final class SandboxVaultBackend: VaultBackend {
         return intent.model
     }
 
-    func confirmDeposit(intentID: UUID, succeeds: Bool) async throws -> DepositIntent {
+    func confirmDeposit(intentID: UUID) async throws -> DepositIntent {
         guard var intent = state.intents[intentID] else {
             throw VaultError.backend("Unknown payment.")
         }
 
-        // A replayed confirmation returns what already happened.
+        // A replayed confirmation returns what already happened. The outcome is
+        // this backend's, not the caller's — there is no way to ask for a fail.
         guard intent.status == .requiresConfirmation else { return intent.model }
-
-        guard succeeds else {
-            intent.status = .failed
-            intent.failureReason = "The test payment was declined."
-            state.intents[intentID] = intent
-            state.updateStatement(intentID: intentID, to: .failed, detail: intent.failureReason)
-            save()
-            return intent.model
-        }
 
         intent.status = .succeeded
         state.intents[intentID] = intent
@@ -142,6 +134,21 @@ final class SandboxVaultBackend: VaultBackend {
             )
         }
 
+        save()
+        return intent.model
+    }
+
+    func cancelDeposit(intentID: UUID) async throws -> DepositIntent {
+        guard var intent = state.intents[intentID] else {
+            throw VaultError.backend("Unknown payment.")
+        }
+
+        guard intent.status == .requiresConfirmation else { return intent.model }
+
+        intent.status = .canceled
+        intent.failureReason = "Canceled before payment"
+        state.intents[intentID] = intent
+        state.updateStatement(intentID: intentID, to: .canceled, detail: intent.failureReason)
         save()
         return intent.model
     }

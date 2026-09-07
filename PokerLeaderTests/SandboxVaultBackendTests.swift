@@ -25,7 +25,7 @@ final class SandboxVaultBackendTests: XCTestCase {
             tableInviteCode: nil,
             idempotencyKey: key
         )
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
     }
 
     // MARK: - Deposits
@@ -42,7 +42,7 @@ final class SandboxVaultBackendTests: XCTestCase {
         XCTAssertEqual(summary.available, .zero)
         XCTAssertEqual(summary.pendingDeposits, Money(cents: 10_000))
 
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
 
         summary = try await vault.summary()
         XCTAssertEqual(summary.available, Money(cents: 10_000))
@@ -56,8 +56,8 @@ final class SandboxVaultBackendTests: XCTestCase {
             tableInviteCode: nil,
             idempotencyKey: "dep-1"
         )
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
 
         let summary = try await vault.summary()
         XCTAssertEqual(summary.available, Money(cents: 5_000))
@@ -70,13 +70,13 @@ final class SandboxVaultBackendTests: XCTestCase {
             tableInviteCode: nil,
             idempotencyKey: "dep-1"
         )
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: false)
+        _ = try await vault.cancelDeposit(intentID: intent.id)
 
         let summary = try await vault.summary()
         XCTAssertEqual(summary.available, .zero)
 
         let statement = try await vault.transactions(limit: 10)
-        XCTAssertTrue(statement.contains { $0.kind == .deposit && $0.status == .failed })
+        XCTAssertTrue(statement.contains { $0.kind == .deposit && $0.status == .canceled })
     }
 
     // MARK: - Table buy-ins
@@ -236,7 +236,7 @@ final class SandboxVaultBackendTests: XCTestCase {
             tableInviteCode: "ABC123",
             idempotencyKey: "pay-1"
         )
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
 
         _ = try await vault.buyIn(
             inviteCode: "ABC123",
@@ -280,7 +280,7 @@ final class SandboxVaultBackendTests: XCTestCase {
             tableInviteCode: "ABC123",
             idempotencyKey: "pay-1"
         )
-        _ = try await vault.confirmDeposit(intentID: intent.id, succeeds: true)
+        _ = try await vault.confirmDeposit(intentID: intent.id)
         _ = try await vault.buyIn(
             inviteCode: "ABC123",
             amount: Money(cents: 2_000),

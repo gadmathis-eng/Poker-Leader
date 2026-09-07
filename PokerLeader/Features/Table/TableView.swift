@@ -415,12 +415,11 @@ struct TableView: View {
             vaultCurrencyCode: vault.currencyCode
         )
 
-        // The host sets what this table accepts, and a guest arriving later is
-        // checked against a range they did not choose. A guest still calls this
-        // in case the host has not reached the backend yet — registering a table
-        // that already exists cannot change its range unless you are its host.
+        // Only the host may register a table, and only after the shared row is
+        // already on the cloud. A guest who arrives first used to become the
+        // settlement authority; they now wait for the host.
         var limits = await vault.limits(forTable: table.inviteCode)
-        if limits == nil || table.isHostLocally {
+        if table.isHostLocally {
             let range = TableBuyInPolicy.limits(forStandardBuyIn: vaultAmount)
             limits = await vault.registerTable(
                 inviteCode: table.inviteCode,
@@ -428,6 +427,9 @@ struct TableView: View {
                 maximum: range.maximum,
                 currencyCode: vault.currencyCode
             )
+        } else if limits == nil {
+            joinError = "The host has to open this table for buy-ins first."
+            return
         }
 
         pendingBuyIn = PendingTableBuyIn(

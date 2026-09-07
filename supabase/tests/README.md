@@ -16,9 +16,15 @@ sudo -u postgres dropdb --if-exists vaultdemo
 sudo -u postgres createdb vaultdemo
 sudo -u postgres psql -v ON_ERROR_STOP=1 -d vaultdemo \
   -f supabase/tests/00_supabase_stubs.sql \
+  -f supabase/migrations/20260904120000_open_tables.sql \
   -f supabase/migrations/20260907120000_vault_ledger.sql \
-  -f supabase/tests/10_vault_flow.sql
+  -f supabase/migrations/20260907180000_vault_security_hardening.sql \
+  -f supabase/migrations/20260907190000_open_tables_lockdown.sql \
+  -f supabase/tests/10_vault_flow.sql \
+  -f supabase/tests/20_vault_attacks.sql
 ```
 
 Every `NOTICE: rejected as expected: …` line is a guard doing its job. The two
-reconciliation queries near the end must both return no rows.
+reconciliation queries at the end of each script must both return no rows.
+`20_vault_attacks.sql` is the post-hardening suite: table takeover, forged
+seats, leftover client-chosen deposit confirm, over-withdrawal, and privacy.

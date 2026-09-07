@@ -119,14 +119,14 @@ final class VaultStore {
                 summaryLabel: "Pot Master Vault"
             )
         } catch {
-            // The player backed out or the provider declined. The intent is told
-            // so, which is what moves it off Pending Deposits.
-            _ = try? await backend.confirmDeposit(intentID: intent.id, succeeds: false)
+            // The player backed out or the provider declined. Canceling is an
+            // honest action of its own — it never credits the Vault.
+            _ = try? await backend.cancelDeposit(intentID: intent.id)
             await reloadQuietly()
             throw VaultError.from(error)
         }
 
-        let settled = try await backend.confirmDeposit(intentID: intent.id, succeeds: true)
+        let settled = try await backend.confirmDeposit(intentID: intent.id)
         await reloadQuietly()
 
         guard settled.status.isVerified else {
@@ -205,12 +205,12 @@ final class VaultStore {
                 summaryLabel: "Buy-in at table \(inviteCode)"
             )
         } catch {
-            _ = try? await backend.confirmDeposit(intentID: intent.id, succeeds: false)
+            _ = try? await backend.cancelDeposit(intentID: intent.id)
             await reloadQuietly()
             throw VaultError.from(error)
         }
 
-        let settled = try await backend.confirmDeposit(intentID: intent.id, succeeds: true)
+        let settled = try await backend.confirmDeposit(intentID: intent.id)
         guard settled.status.isVerified else {
             await reloadQuietly()
             throw VaultError.paymentFailed(settled.failureReason ?? "The payment did not go through.")

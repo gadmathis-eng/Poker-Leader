@@ -28,25 +28,34 @@ select public.vault_open('USD');
 select id as g_intent from public.vault_create_deposit_intent(5000, 'dep-g1') \gset
 select status from public.vault_sandbox_confirm_deposit(:'g_intent');
 
-\echo '=== 3. host registers a table, both buy in from the vault ==='
+\echo '=== 3. host publishes the shared table, then registers the buy-in range ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
+insert into public.open_tables (
+    id, invite_code, host_user_id, host_display_name, host_player_key
+) values (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'ABC123',
+    '11111111-1111-1111-1111-111111111111',
+    'Host',
+    '11111111-1111-1111-1111-111111111111'
+);
 select invite_code, min_buy_in_cents, max_buy_in_cents from public.vault_register_table('ABC123', 2000, 8000);
-select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'host-key', 'Host');
+select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'Host');
 \echo '--- replayed buy-in is ignored ---'
-select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'host-key', 'Host');
+select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'Host');
 select public.vault_summary()->>'available_cents' as available,
        public.vault_summary()->>'in_play_cents' as in_play,
        public.vault_summary()->>'total_cents' as total;
 
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
-select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'guest-key', 'Guest');
+select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'Guest');
 
 \echo '=== 4. guest tops up straight onto the table with Apple Pay ==='
 select id as g_table_intent from public.vault_create_deposit_intent(2000, 'buyin-pay-1', 'table_buy_in', 'ABC123') \gset
 \echo '--- an unverified payment cannot buy in ---'
 do $$
 begin
-    perform public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-2', 'guest-key', 'Guest',
+    perform public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-2', 'Guest',
                                       nullif(current_setting('test.intent', true), '')::uuid);
     raise exception 'expected failure';
 exception when others then
@@ -55,11 +64,11 @@ end;
 $$;
 select set_config('test.intent', :'g_table_intent', false);
 select status from public.vault_sandbox_confirm_deposit(:'g_table_intent');
-select public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-2', 'guest-key', 'Guest', :'g_table_intent');
+select public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-2', 'Guest', :'g_table_intent');
 \echo '--- the same payment cannot be spent twice ---'
 do $$
 begin
-    perform public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-3', 'guest-key', 'Guest',
+    perform public.vault_table_buy_in('ABC123', 2000, 'apple_pay', 'buyin-guest-3', 'Guest',
                                       nullif(current_setting('test.intent', true), '')::uuid);
     raise exception 'expected failure';
 exception when others then
@@ -74,13 +83,13 @@ select * from public.vault_table_chips('ABC123');
 
 \echo '=== 6. host records a hand: guest wins $15 from host ==='
 select public.vault_record_hand('ABC123', 'hand-1', '[
-    {"player_key": "host-key", "delta_cents": -1500},
-    {"player_key": "guest-key", "delta_cents": 1500}
+    {"player_key": "11111111-1111-1111-1111-111111111111", "delta_cents": -1500},
+    {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 1500}
 ]'::jsonb);
 \echo '--- the same hand posted again is ignored ---'
 select public.vault_record_hand('ABC123', 'hand-1', '[
-    {"player_key": "host-key", "delta_cents": -1500},
-    {"player_key": "guest-key", "delta_cents": 1500}
+    {"player_key": "11111111-1111-1111-1111-111111111111", "delta_cents": -1500},
+    {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 1500}
 ]'::jsonb);
 select * from public.vault_table_chips('ABC123');
 
@@ -88,7 +97,7 @@ select * from public.vault_table_chips('ABC123');
 do $$
 begin
     perform public.vault_record_hand('ABC123', 'hand-bogus', '[
-        {"player_key": "guest-key", "delta_cents": 999999}
+        {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 999999}
     ]'::jsonb);
     raise exception 'expected failure';
 exception when others then
@@ -101,8 +110,8 @@ select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 do $$
 begin
     perform public.vault_record_hand('ABC123', 'hand-2', '[
-        {"player_key": "host-key", "delta_cents": -100},
-        {"player_key": "guest-key", "delta_cents": 100}
+        {"player_key": "11111111-1111-1111-1111-111111111111", "delta_cents": -100},
+        {"player_key": "22222222-2222-2222-2222-222222222222", "delta_cents": 100}
     ]'::jsonb);
     raise exception 'expected failure';
 exception when others then

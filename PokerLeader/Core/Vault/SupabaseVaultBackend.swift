@@ -87,13 +87,18 @@ struct SupabaseVaultBackend: VaultBackend {
         return row.model
     }
 
-    func confirmDeposit(intentID: UUID, succeeds: Bool) async throws -> DepositIntent {
+    func confirmDeposit(intentID: UUID) async throws -> DepositIntent {
         let row: IntentRow = try await call(
             "vault_sandbox_confirm_deposit",
-            params: ConfirmDepositParams(
-                p_intent_id: intentID,
-                p_outcome: succeeds ? "succeeded" : "failed"
-            )
+            params: ConfirmDepositParams(p_intent_id: intentID)
+        )
+        return row.model
+    }
+
+    func cancelDeposit(intentID: UUID) async throws -> DepositIntent {
+        let row: IntentRow = try await call(
+            "vault_cancel_deposit_intent",
+            params: ConfirmDepositParams(p_intent_id: intentID)
         )
         return row.model
     }
@@ -142,6 +147,9 @@ struct SupabaseVaultBackend: VaultBackend {
         paymentIntentID: UUID?,
         idempotencyKey: String
     ) async throws -> TableBuyInReceipt {
+        // Identity is auth.uid() on the server. playerKey is kept on the
+        // protocol so the in-app sandbox can still match local seats.
+        _ = playerKey
         let row: BuyInRow = try await call(
             "vault_table_buy_in",
             params: BuyInParams(
@@ -149,7 +157,6 @@ struct SupabaseVaultBackend: VaultBackend {
                 p_amount_cents: amount.cents,
                 p_source: source.rawValue,
                 p_idempotency_key: idempotencyKey,
-                p_player_key: playerKey,
                 p_display_name: displayName,
                 p_payment_intent_id: paymentIntentID
             )
@@ -255,7 +262,6 @@ private struct CreateIntentParams: Encodable {
 
 private struct ConfirmDepositParams: Encodable {
     let p_intent_id: UUID
-    let p_outcome: String
 }
 
 private struct RegisterTableParams: Encodable {
@@ -270,7 +276,6 @@ private struct BuyInParams: Encodable {
     let p_amount_cents: Int
     let p_source: String
     let p_idempotency_key: String
-    let p_player_key: String
     let p_display_name: String
     let p_payment_intent_id: UUID?
 }

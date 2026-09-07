@@ -557,6 +557,36 @@ final class SupabaseSyncService {
             .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
             .execute()
     }
+
+    /// A guest may only publish the hand they are sitting in. Sending the full
+    /// seats array, ante, or started flag is now refused by the server.
+    func updateOpenTableHand(_ table: OpenTableModel) async throws {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        let update = OpenTableHandUpdate(hand: table.hand, updatedAt: table.updatedAt)
+
+        try await client
+            .from("open_tables")
+            .update(update)
+            .eq("invite_code", value: table.inviteCode)
+            .execute()
+    }
+
+    /// Drops this player's seat server-side so a guest never has to republish
+    /// the rest of the roster.
+    @discardableResult
+    func removeOpenTableSeat(inviteCode: String) async throws -> [SharedTableSeat] {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        let params = RemoveOpenTableSeatParams(
+            inviteCode: TableInviteDeepLink.normalizedCode(inviteCode)
+        )
+        let seats: [SharedTableSeat] = try await client
+            .rpc("remove_open_table_seat", params: params)
+            .execute()
+            .value
+        return OpenTableSeatsPacking.players(in: seats)
+    }
 }
 
 // MARK: - Database rows
@@ -1239,5 +1269,31 @@ private struct MergeOpenTableSeatParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case inviteCode = "p_invite_code"
         case seat = "p_seat"
+    }
+}
+
+private struct RemoveOpenTableSeatParams: Encodable {
+    let inviteCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+    }
+}
+
+/// Guests write only the hand. Identity columns, seats, ante and started stay
+/// with the host, or with `merge_open_table_seat` / `remove_open_table_seat`.
+private struct OpenTableHandUpdate: Encodable {
+    let hand: SharedTableHand?
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case hand
+        case updatedAt = "updated_at"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(hand, forKey: .hand)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }

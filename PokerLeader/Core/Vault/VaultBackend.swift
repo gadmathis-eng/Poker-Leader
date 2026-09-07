@@ -37,8 +37,13 @@ protocol VaultBackend {
 
     /// Settles a deposit the payment provider has authorised. In production the
     /// provider's signed webhook does this server-side and the app only polls;
-    /// while the sandbox is on, this stands in for that webhook.
-    func confirmDeposit(intentID: UUID, succeeds: Bool) async throws -> DepositIntent
+    /// while the sandbox is on, this stands in for that webhook. The outcome is
+    /// the backend's to decide — the app cannot ask for a success.
+    func confirmDeposit(intentID: UUID) async throws -> DepositIntent
+
+    /// The player dismissed the payment sheet. This can only cancel an intent;
+    /// it never credits money.
+    func cancelDeposit(intentID: UUID) async throws -> DepositIntent
 
     func registerTable(
         inviteCode: String,
