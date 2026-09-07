@@ -97,7 +97,12 @@ struct EditTableView: View {
                     }
                     .buttonStyle(.plain)
                     Button(action: presentAnteEditor) {
-                        editableRow(title: "Ante", value: anteLabel, valueColor: AppTheme.gold)
+                        editableRow(
+                            title: "Ante",
+                            value: anteLabel,
+                            valueColor: AppTheme.gold,
+                            accessory: "pencil"
+                        )
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Edit ante")
@@ -209,14 +214,19 @@ struct EditTableView: View {
         }
     }
 
-    private func editableRow(title: String, value: String, valueColor: Color) -> some View {
+    private func editableRow(
+        title: String,
+        value: String,
+        valueColor: Color,
+        accessory: String = "chevron.right"
+    ) -> some View {
         HStack {
             Text(title)
                 .foregroundStyle(AppTheme.text)
             Spacer()
             Text(value)
                 .foregroundStyle(valueColor)
-            Image(systemName: "chevron.right")
+            Image(systemName: accessory)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.muted)
         }
