@@ -132,7 +132,7 @@ struct TableView: View {
                     onConfirm: confirmJoinBuyIn
                 )
                 .presentationDetents([.height(580)])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
             }
             .onChange(of: activeTable?.inviteCode) { _, _ in
                 didConfirmJoinBuyIn = false

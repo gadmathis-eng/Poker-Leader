@@ -99,7 +99,7 @@ struct FinalStacksView: View {
                         stackTexts[editor.id] = sanitizedNonNegativeDecimalText(text)
                     }
                     .presentationDetents([.height(420)])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                 }
             } else {
                 ContentUnavailableView("Session not found", systemImage: "exclamationmark.circle")

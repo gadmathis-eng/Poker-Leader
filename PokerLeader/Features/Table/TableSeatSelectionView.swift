@@ -252,7 +252,7 @@ struct TableSeatSelectionView: View {
                 apply(editedAmount: text, for: editor)
             }
             .presentationDetents([.height(420)])
-            .presentationDragIndicator(.visible)
+            .presentationDragIndicator(.hidden)
         }
     }
 

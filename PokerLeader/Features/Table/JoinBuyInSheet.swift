@@ -59,6 +59,8 @@ struct JoinBuyInSheet: View {
 
     var body: some View {
         VStack(spacing: 16) {
+            SheetDragHandle()
+
             VStack(spacing: 6) {
                 Text("How much do you want to put in?")
                     .font(.headline)
@@ -134,6 +136,7 @@ struct JoinBuyInSheet: View {
         }
         .padding(20)
         .background(AppTheme.background)
+        .presentationDragIndicator(.hidden)
         .sheet(isPresented: $showCurrencyPicker) {
             CurrencyPickerSheet(selectedCurrencyCode: payInCurrencyCode) { code in
                 let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
