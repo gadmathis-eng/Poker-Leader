@@ -10,10 +10,16 @@ PokerLeader/
 │   ├── Models/                   SwiftData @Model types, shared table + hand, cards
 │   ├── Persistence/              ModelContainer + sample data
 │   ├── Services/                 Settlement, leaderboard, badges, WhatsApp text
-│   │                             HandRound + PokerHandEvaluator deal and read a hand
+│   │                             HandRound + PokerHandEvaluator are the local
+│   │                             rules; the shared table uses the Postgres
+│   │                             engine in 20260907200000_poker_server_engine.sql
+│   │                             and 20260907210000_poker_engine_hardening.sql
 │   │                             HandNarration puts the hand in front of you into words
 │   ├── Theme/                    Colors, spacing
 │   ├── Extensions/               Money + date formatting
+│   ├── Vault/                    Player balances: integer-cents money, the
+│   │                             backend seam, the Supabase and sandbox
+│   │                             backends, and the payment-provider seam
 │   └── Firebase/                 Placeholder until GoogleService-Info.plist
 ├── Repositories/
 │   ├── CircleRepository.swift
@@ -28,6 +34,8 @@ PokerLeader/
 │   ├── History/
 │   ├── Leaderboard/
 │   ├── Rivalry/
+│   ├── Vault/                    Vault tab, Add Money, Cash Out, buy-in and
+│   │                             leave-table settlement
 │   └── Profile/
 ├── Components/                   Reusable SwiftUI
 ├── Resources/                    String catalog
@@ -40,6 +48,13 @@ PokerLeader/
 2. **Repositories** read/write the model context.
 3. **Services** hold pure logic (settlement, leaderboard).
 4. **Views** use `@Query` and repositories.
+
+## Vault
+
+Balances are the one thing the app does not own. Everything under `Core/Vault/`
+asks a backend and reads the answer back; the ledger, the authorisation and the
+arithmetic live in `supabase/migrations/20260907120000_vault_ledger.sql`. See
+[Vault.md](Vault.md).
 
 ## Firebase (phase 2)
 
