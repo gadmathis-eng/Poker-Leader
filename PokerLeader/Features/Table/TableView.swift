@@ -423,6 +423,10 @@ struct TableView: View {
                 .disabled(!canJoinWithTypedCode || isJoiningTable)
             }
             .cardSurface()
+
+            Text("Anyone with the code can sit down. You don't need to add the host as a friend.")
+                .font(.caption)
+                .foregroundStyle(AppTheme.muted)
         }
         .padding(.horizontal)
     }

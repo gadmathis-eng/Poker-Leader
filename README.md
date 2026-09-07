@@ -109,6 +109,10 @@ Run the account deletion migration before release:
 
 That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Anyone signed in can then join from the share link or the 6-character table code — a friend request is not required.
 
+If a live project was set up earlier, run this so join policies stay open to anyone with the code (not only friends):
+
+`supabase/migrations/20260907160000_open_tables_join_without_friends.sql`
+
 The ante and the hand in progress — cards, board, pot, and whose turn it is — sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
 
 `supabase/migrations/20260905090000_open_tables_preflop_hand.sql`

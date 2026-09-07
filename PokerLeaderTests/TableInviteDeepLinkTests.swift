@@ -65,7 +65,7 @@ final class TableInviteDeepLinkTests: XCTestCase {
         XCTAssertTrue(message.contains("https://potmaster.app/?table=ABC123"))
         XCTAssertTrue(message.contains("Table code: ABC123"))
         XCTAssertTrue(message.contains("Alex's"))
-        XCTAssertFalse(message.lowercased().contains("friend request"))
+        XCTAssertTrue(message.lowercased().contains("no friend request needed"))
     }
 }
 

@@ -120,6 +120,7 @@ enum TableInviteSharing {
 
         Table code: \(normalized)
         Tap to sit down: \(link)
+        No friend request needed — the code is enough.
         """
     }
 }

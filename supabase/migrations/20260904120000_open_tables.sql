@@ -68,6 +68,8 @@ begin
         raise exception 'Not authenticated';
     end if;
 
+    -- The invite code is the join gate. friend_requests is not consulted.
+
     if player_key is null or player_key = '' or seat_number is null or seat_number < 1 or seat_number > 8 then
         raise exception 'invalid seat';
     end if;
