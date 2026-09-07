@@ -88,6 +88,25 @@ final class PokerTableSeatGeometryTests: XCTestCase {
         }
     }
 
+    func testCornersLeaveLongStraightSides() {
+        let rect = PokerTableSeatGeometry.railRect(in: canvas, seatSize: seat)
+        let radius = PokerTableSeatGeometry.cornerRadius(for: rect)
+
+        XCTAssertEqual(radius, min(rect.width, rect.height) * PokerTableSeatGeometry.cornerFraction, accuracy: 0.01)
+        XCTAssertLessThan(PokerTableSeatGeometry.cornerFraction, 0.25)
+        XCTAssertGreaterThan(rect.width - 2 * radius, radius)
+        XCTAssertGreaterThan(rect.height - 2 * radius, radius)
+    }
+
+    func testFeltInsetsKeepSeatsOnTheRail() {
+        let insets = PokerTableSeatGeometry.feltInsets(seatSize: seat)
+
+        XCTAssertLessThan(insets.width, seat.width / 2)
+        XCTAssertLessThan(insets.height, seat.height / 2)
+        XCTAssertGreaterThan(insets.width, 0)
+        XCTAssertGreaterThan(insets.height, 0)
+    }
+
     func testBottomCenterNormalizedPointMatchesSeatOne() {
         let rect = PokerTableSeatGeometry.railRect(in: canvas, seatSize: seat)
         let start = PokerTableSeatGeometry.point(

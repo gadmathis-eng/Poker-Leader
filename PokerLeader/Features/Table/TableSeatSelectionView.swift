@@ -217,8 +217,7 @@ struct TableSeatSelectionView: View {
                     onSelect: handleSeatTap,
                     onPlay: startGame
                 )
-                .frame(height: 540)
-                .padding(.horizontal, 8)
+                .frame(height: 500)
 
                 if isGameStarted {
                     handCard
