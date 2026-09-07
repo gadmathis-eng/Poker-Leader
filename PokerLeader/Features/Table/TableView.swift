@@ -97,13 +97,6 @@ struct TableView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showMyTables = true } label: {
-                        Label("Your tables", systemImage: "list.bullet")
-                            .font(.body.weight(.semibold))
-                    }
-                    .accessibilityLabel("Your tables")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Button { showEditTables = true } label: {
                         Image(systemName: "line.3.horizontal")
                             .font(.body.weight(.medium))
