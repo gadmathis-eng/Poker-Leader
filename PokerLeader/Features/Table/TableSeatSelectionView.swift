@@ -82,6 +82,10 @@ struct TableSeatSelectionView: View {
         !isGameStarted || localHandSeat == nil
     }
 
+    private var canEditAnte: Bool {
+        !isGameStarted && (table?.isHostLocally ?? true)
+    }
+
     private var localHandSeat: SharedTableHandSeat? {
         hand?.seat(forPlayerKey: repo.localPlayerKey)
     }
@@ -404,24 +408,12 @@ struct TableSeatSelectionView: View {
             Divider()
                 .overlay(AppTheme.cardBorder)
 
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Ante")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppTheme.text)
-                    Text("What everyone puts in to stay in the hand")
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.muted)
-                }
-                Spacer()
-                Button(action: presentAnteEditor) {
-                    Text(MoneyFormatting.plain(anteAmount, currencyCode: tableCurrencyCode))
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(AppTheme.gold)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Edit ante")
-            }
+            AnteEditorRow(
+                amount: anteAmount,
+                currencyCode: tableCurrencyCode,
+                isEditable: canEditAnte,
+                action: presentAnteEditor
+            )
         }
         .cardSurface()
         .padding(.horizontal)
@@ -594,6 +586,7 @@ struct TableSeatSelectionView: View {
     }
 
     private func presentAnteEditor() {
+        guard canEditAnte else { return }
         amountEditor = .ante(
             MoneyAmountEditorState(
                 id: UUID(),

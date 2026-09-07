@@ -614,11 +614,12 @@ final class HandRoundTests: XCTestCase {
         XCTAssertNil(HandRound.addingMoney(10, playerKey: "late-arrival", to: hand))
     }
 
-    func testDefaultAnteIsAHundredthOfTheBuyIn() {
+    func testDefaultAnteIsOne() {
         XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 100), 1)
-        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 50), dec("0.5"))
-        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: dec("0.2")), dec("0.01"))
-        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 0), 0)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 20), 1)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 50), 1)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: dec("0.2")), 1)
+        XCTAssertEqual(TableAnte.defaultAmount(forBuyIn: 0), 1)
     }
 
     // MARK: - Nothing is ever created or lost

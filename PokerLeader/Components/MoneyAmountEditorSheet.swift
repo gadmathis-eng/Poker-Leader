@@ -37,6 +37,9 @@ struct MoneyAmountPill: View {
 }
 
 struct StandardBuyInCard: View {
+    var title: String = "Buy-in"
+    var showsCurrencyButton: Bool = true
+    var showsEditHint: Bool = false
     let amount: Decimal
     let currencyCode: String
     let onAmountTap: () -> Void
@@ -57,38 +60,58 @@ struct StandardBuyInCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center) {
-                Text("Buy-in")
+                Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.muted)
                 Spacer()
-                CurrencyChipButton(currencyCode: currencyCode, action: onCurrencyTap)
+                if showsCurrencyButton {
+                    CurrencyChipButton(currencyCode: currencyCode, action: onCurrencyTap)
+                } else {
+                    Text(currencyCode)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(AppTheme.muted)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 12)
 
             Button(action: onAmountTap) {
-                Group {
-                    if usesCompactSymbolLayout {
-                        HStack(alignment: .firstTextBaseline, spacing: 1) {
-                            Text(currencySymbol)
-                                .font(.system(size: 26, weight: .semibold, design: .rounded))
-                                .foregroundStyle(AppTheme.muted)
-                                .offset(y: -4)
-                            Text(MoneyFormatting.decimalString(amount))
-                                .font(.system(size: 44, weight: .bold, design: .rounded))
+                ZStack(alignment: .topTrailing) {
+                    Group {
+                        if usesCompactSymbolLayout {
+                            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                                Text(currencySymbol)
+                                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(AppTheme.muted)
+                                    .offset(y: -4)
+                                Text(MoneyFormatting.decimalString(amount))
+                                    .font(.system(size: 44, weight: .bold, design: .rounded))
+                                    .foregroundStyle(AppTheme.text)
+                                    .monospacedDigit()
+                            }
+                        } else {
+                            Text(MoneyFormatting.plain(amount, currencyCode: currencyCode))
+                                .font(.system(size: 40, weight: .bold, design: .rounded))
                                 .foregroundStyle(AppTheme.text)
                                 .monospacedDigit()
                         }
-                    } else {
-                        Text(MoneyFormatting.plain(amount, currencyCode: currencyCode))
-                            .font(.system(size: 40, weight: .bold, design: .rounded))
-                            .foregroundStyle(AppTheme.text)
-                            .monospacedDigit()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+
+                    if showsEditHint {
+                        Label("Edit", systemImage: "pencil")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(AppTheme.muted)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(AppTheme.card)
+                            .clipShape(Capsule())
+                            .overlay(Capsule().stroke(AppTheme.cardBorder))
+                            .padding(10)
                     }
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
                 .background {
                     AppTheme.background
                         .clipShape(
@@ -103,6 +126,7 @@ struct StandardBuyInCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(BuyInAmountButtonStyle())
+            .accessibilityLabel("Edit \(title)")
         }
         .background(AppTheme.card)
         .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))

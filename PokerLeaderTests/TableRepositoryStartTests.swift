@@ -94,6 +94,40 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertTrue(table.seats.isEmpty)
     }
 
+    func testCreateTableButtonStartsAnUntitledHostedTable() throws {
+        let repo = TableRepository(context: try makeContext())
+
+        let table = try repo.startHostedTable(
+            name: nil,
+            sessionCurrencyCode: "USD",
+            hostDisplayName: "Alex"
+        )
+
+        XCTAssertNil(table.name)
+        XCTAssertEqual(table.displayTitle, "Table \(table.inviteCode)")
+        XCTAssertEqual(table.sessionCurrencyCode, "USD")
+        XCTAssertTrue(table.isHostLocally)
+        XCTAssertTrue(table.seats.isEmpty)
+        XCTAssertEqual(table.inviteCode, repo.activeInviteCode)
+    }
+
+    func testStartHostedTableStoresTheChosenAnte() throws {
+        let repo = TableRepository(context: try makeContext())
+
+        let ante = Decimal(string: "0.20") ?? 0
+        let table = try repo.startHostedTable(
+            name: nil,
+            sessionCurrencyCode: "GBP",
+            hostDisplayName: "Alex",
+            anteAmount: ante
+        )
+
+        XCTAssertEqual(table.anteAmount, TableMoney.string(ante))
+        XCTAssertEqual(table.anteDecimal, TableMoney.decimal(TableMoney.string(ante)))
+        XCTAssertEqual(table.sessionCurrencyCode, "GBP")
+        XCTAssertTrue(table.seats.isEmpty)
+    }
+
     func testStartHostedTableAlwaysCreatesANewTable() throws {
         let repo = TableRepository(context: try makeContext())
         let first = try repo.startHostedTable(

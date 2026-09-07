@@ -29,7 +29,7 @@ struct MyTablesSheet: View {
             List {
                 if tables.isEmpty {
                     Section {
-                        Text("No tables yet. Save a buy-in on the Table tab to host one, or join a friend's table with their code.")
+                        Text("No tables yet. Create a table on the Table or Circles tab, or join a friend's table with their code.")
                             .font(.caption)
                             .foregroundStyle(AppTheme.muted)
                     }

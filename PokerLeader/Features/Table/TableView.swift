@@ -19,6 +19,7 @@ struct TableView: View {
     @State private var joinError: String?
     @State private var joinCodeText = ""
     @State private var isJoiningTable = false
+    @State private var showCreateTable = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
 
@@ -56,7 +57,7 @@ struct TableView: View {
     }
 
     private var buyInButtonTitle: String {
-        guard let activeTable else { return "Start table" }
+        guard let activeTable else { return "Save and open" }
         return activeTable.isHostLocally ? "Save and open" : "Join table"
     }
 
@@ -67,6 +68,11 @@ struct TableView: View {
                     header
 
                     banner
+
+                    CreateTableButton {
+                        showCreateTable = true
+                    }
+                    .padding(.horizontal)
 
                     if let activeTable {
                         activeTableCard(activeTable)
@@ -112,6 +118,9 @@ struct TableView: View {
             .sheet(isPresented: $showMyTables, onDismiss: handleTablesChanged) {
                 MyTablesSheet(onTablesChanged: handleTablesChanged)
             }
+            .sheet(isPresented: $showCreateTable, onDismiss: handleTablesChanged) {
+                CreateTableSheet()
+            }
             .sheet(isPresented: $showSignIn) {
                 SignInSheet()
                     .modelContext(context)
@@ -140,7 +149,7 @@ struct TableView: View {
             Text("Table")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.text)
-            Text("Set a buy-in, sit down, and share the code so friends can join you.")
+            Text("Create a table with a currency, buy-in, and ante, then share the code so friends can join you.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
         }
@@ -298,7 +307,7 @@ struct TableView: View {
 
     private var buyInSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: activeTable == nil ? "Start a table" : "Your buy-in")
+            SectionHeader(title: "Your buy-in")
 
             DualCurrencyBuyInSetup(
                 sessionCurrencyCode: $draftSessionCurrencyCode,
@@ -434,15 +443,8 @@ struct TableView: View {
         }
 
         if activeTable == nil {
-            if SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
-                joinError = TableRepositoryError.notSignedIn.localizedDescription
-                showSignIn = true
-                return
-            }
-            activeTable = try? repo.ensureHostTable(
-                sessionCurrencyCode: draftSessionCurrencyCode,
-                hostDisplayName: displayName
-            )
+            showCreateTable = true
+            return
         } else if let table = activeTable, table.isHostLocally {
             table.sessionCurrencyCode = draftSessionCurrencyCode
             table.hostDisplayName = displayName
