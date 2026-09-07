@@ -70,48 +70,6 @@ final class TableOrderStoreTests: XCTestCase {
     }
 }
 
-final class TableRemovalCopyTests: XCTestCase {
-    func testHostedTableUsesDeleteCopy() {
-        let table = makeTable(name: "Friday", inviteCode: "AAAAAA", isHostLocally: true)
-
-        XCTAssertEqual(MyTablesSheet.removeActionTitle(for: [table]), "Delete table")
-        XCTAssertEqual(MyTablesSheet.removeConfirmationTitle(for: [table]), "Delete this table?")
-        XCTAssertTrue(MyTablesSheet.removeConfirmationMessage(for: [table]).contains("closes the table"))
-    }
-
-    func testJoinedTableUsesLeaveCopy() {
-        let table = makeTable(name: "Friday", inviteCode: "BBBBBB", isHostLocally: false)
-
-        XCTAssertEqual(MyTablesSheet.removeActionTitle(for: [table]), "Leave table")
-        XCTAssertEqual(MyTablesSheet.removeConfirmationTitle(for: [table]), "Leave this table?")
-        XCTAssertTrue(MyTablesSheet.removeConfirmationMessage(for: [table]).contains("frees your seat"))
-    }
-
-    func testMixedTablesUseRemoveCopy() {
-        let hosted = makeTable(name: "Host", inviteCode: "AAAAAA", isHostLocally: true)
-        let joined = makeTable(name: "Join", inviteCode: "BBBBBB", isHostLocally: false)
-
-        XCTAssertEqual(MyTablesSheet.removeActionTitle(for: [hosted, joined]), "Remove tables")
-        XCTAssertEqual(MyTablesSheet.removeConfirmationTitle(for: [hosted, joined]), "Remove these tables?")
-    }
-
-    func testSeveralHostedTablesUseDeleteCopy() {
-        let first = makeTable(name: "Friday", inviteCode: "AAAAAA", isHostLocally: true)
-        let second = makeTable(name: "Sunday", inviteCode: "BBBBBB", isHostLocally: true)
-
-        XCTAssertEqual(MyTablesSheet.removeActionTitle(for: [first, second]), "Delete tables")
-        XCTAssertEqual(MyTablesSheet.removeConfirmationTitle(for: [first, second]), "Delete these tables?")
-    }
-
-    func testSeveralJoinedTablesUseLeaveCopy() {
-        let first = makeTable(name: "Friday", inviteCode: "AAAAAA", isHostLocally: false)
-        let second = makeTable(name: "Sunday", inviteCode: "BBBBBB", isHostLocally: false)
-
-        XCTAssertEqual(MyTablesSheet.removeActionTitle(for: [first, second]), "Leave tables")
-        XCTAssertEqual(MyTablesSheet.removeConfirmationTitle(for: [first, second]), "Leave these tables?")
-    }
-}
-
 private func makeTable(
     name: String,
     inviteCode: String,

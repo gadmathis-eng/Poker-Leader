@@ -14,7 +14,7 @@ struct TableView: View {
     @State private var draftBuyInText = "0"
     @State private var showingSeatSelection = false
     @Query(sort: \OpenTableModel.updatedAt, order: .reverse) private var tables: [OpenTableModel]
-    @State private var showMyTables = false
+    @State private var showEditTables = false
     @State private var activeTable: OpenTableModel?
     @State private var joinError: String?
     @State private var joinCodeText = ""
@@ -24,9 +24,6 @@ struct TableView: View {
     @State private var didConfirmJoinBuyIn = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
-    @State private var tablePendingRemoval: OpenTableModel?
-    @State private var showRemoveConfirmation = false
-    @State private var isRemovingTable = false
     @State private var tableListEpoch = 0
 
     /// Every table but the one that is open, so the card at the top is not
@@ -34,10 +31,6 @@ struct TableView: View {
     private var otherTables: [OpenTableModel] {
         _ = tableListEpoch
         return TableOrderStore.ordered(tables).filter { $0.inviteCode != activeTable?.inviteCode }
-    }
-
-    private var tablesPendingRemoval: [OpenTableModel] {
-        tablePendingRemoval.map { [$0] } ?? []
     }
 
     private var repo: TableRepository { TableRepository(context: context) }
@@ -101,11 +94,11 @@ struct TableView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showMyTables = true } label: {
-                        Label("Your tables", systemImage: "list.bullet")
-                            .font(.body.weight(.semibold))
+                    Button { showEditTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Edit tables")
                     }
-                    .accessibilityLabel("Your tables")
                 }
             }
             .onAppear(perform: loadDraftValues)
@@ -126,8 +119,11 @@ struct TableView: View {
                     sessionCurrencyCode: tableSessionCurrencyCode
                 )
             }
-            .sheet(isPresented: $showMyTables, onDismiss: handleTablesChanged) {
-                MyTablesSheet(onTablesChanged: handleTablesChanged)
+            .sheet(isPresented: $showEditTables, onDismiss: handleTablesChanged) {
+                EditTablesSheet(
+                    tables: TableOrderStore.ordered(tables),
+                    onTablesChanged: handleTablesChanged
+                )
             }
             .sheet(isPresented: $showCreateTable, onDismiss: handleTablesChanged) {
                 CreateTableSheet()
@@ -151,20 +147,6 @@ struct TableView: View {
                     .modelContext(context)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
-            }
-            .confirmationDialog(
-                MyTablesSheet.removeConfirmationTitle(for: tablesPendingRemoval),
-                isPresented: $showRemoveConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button(MyTablesSheet.removeActionTitle(for: tablesPendingRemoval), role: .destructive) {
-                    Task { await confirmRemoveTable() }
-                }
-                Button("Cancel", role: .cancel) {
-                    tablePendingRemoval = nil
-                }
-            } message: {
-                Text(MyTablesSheet.removeConfirmationMessage(for: tablesPendingRemoval))
             }
             .onChange(of: showSignIn) { _, isPresented in
                 if !isPresented {
@@ -449,7 +431,7 @@ struct TableView: View {
                 HStack {
                     SectionHeader(title: "Your other tables")
                     Spacer()
-                    Button("See all") { showMyTables = true }
+                    Button("Edit") { showEditTables = true }
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(AppTheme.positive)
                 }
@@ -485,20 +467,23 @@ struct TableView: View {
         }
         .buttonStyle(.plain)
         .contextMenu {
-            Button {
+            Button("Open table") {
                 repo.makeActive(table)
                 handleTablesChanged()
-            } label: {
-                Label("Open on the Table tab", systemImage: "checkmark.circle")
             }
-            Button(role: .destructive) {
-                tablePendingRemoval = table
-                showRemoveConfirmation = true
-            } label: {
-                Label(
-                    table.isHostLocally ? "Delete table" : "Leave table",
-                    systemImage: "trash"
-                )
+            if table.isHostLocally {
+                ShareLink(
+                    item: TableInviteSharing.url(forInviteCode: table.inviteCode),
+                    subject: Text("Join my Pot Master table"),
+                    message: Text(
+                        TableInviteSharing.message(
+                            forInviteCode: table.inviteCode,
+                            hostName: table.hostDisplayName
+                        )
+                    )
+                ) {
+                    Label("Share table", systemImage: "square.and.arrow.up")
+                }
             }
         }
     }
@@ -529,17 +514,6 @@ struct TableView: View {
         activeTable = try? repo.activeTable()
         draftSessionCurrencyCode = tableSessionCurrencyCode
         tableListEpoch += 1
-    }
-
-    private func confirmRemoveTable() async {
-        guard !isRemovingTable, let table = tablePendingRemoval else { return }
-        isRemovingTable = true
-        defer {
-            isRemovingTable = false
-            tablePendingRemoval = nil
-        }
-        await repo.remove(table)
-        handleTablesChanged()
     }
 
     private func savePersonalBuyIn() async {

@@ -6,37 +6,29 @@ enum TableOrderStore {
     static var defaults = UserDefaults.standard
 
     static func ordered(_ tables: [OpenTableModel]) -> [OpenTableModel] {
-        let storedIds = load()
-        guard !storedIds.isEmpty else {
-            return tables.sorted { $0.updatedAt > $1.updatedAt }
+        OrderedIDStore.ordered(
+            tables,
+            storedIds: load(),
+            id: \.id,
+            newItemsAtStart: true
+        ) { lhs, rhs in
+            lhs.updatedAt > rhs.updatedAt
         }
-
-        let tableById = Dictionary(uniqueKeysWithValues: tables.map { ($0.id, $0) })
-        let orderedStoredTables = storedIds.compactMap { tableById[$0] }
-        let orderedStoredIds = Set(orderedStoredTables.map(\.id))
-        let newTables = tables
-            .filter { !orderedStoredIds.contains($0.id) }
-            .sorted { $0.updatedAt > $1.updatedAt }
-
-        return newTables + orderedStoredTables
     }
 
     static func save(_ orderedIds: [UUID]) {
-        defaults.set(orderedIds.map(\.uuidString), forKey: key)
+        OrderedIDStore.save(orderedIds, to: defaults, key: key)
     }
 
     static func removing(_ id: UUID) {
-        save(load().filter { $0 != id })
+        OrderedIDStore.removing(id, from: defaults, key: key)
     }
 
     static func clearAll() {
-        defaults.removeObject(forKey: key)
+        OrderedIDStore.clear(from: defaults, key: key)
     }
 
     static func load() -> [UUID] {
-        defaults
-            .stringArray(forKey: key)?
-            .compactMap(UUID.init(uuidString:)) ?? []
+        OrderedIDStore.load(from: defaults, key: key)
     }
 }
-
