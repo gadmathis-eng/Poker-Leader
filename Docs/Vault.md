@@ -236,10 +236,10 @@ Worth being plain about, because the architecture points at them:
   through a display-rate conversion. A keypad may convert *into* the table
   unit so someone can type a familiar figure; after that the number does
   not move again.
-- **The Vault wallet is one currency.** `vault_summary` reports the available
-  wallet's currency and only sums that currency. Chips on a table in another
-  unit stay on that table until they are cashed off; they are not added into
-  the Vault total as extra dollars.
+- **The Vault wallet is one pot.** `vault_summary` reports the available
+  wallet's currency instead of hardcoding USD. Chips on a table keep the
+  table's settlement label; they are still this wallet, not a second
+  balance that can be added as extra dollars of another unit.
 - **Cloud mid-hand add-ons are not built.** Extra chips on a signed-in table
   would be a Vault buy-in, not a local rewrite of the pot. The table hides
   Add money on that path until a server top-up exists.

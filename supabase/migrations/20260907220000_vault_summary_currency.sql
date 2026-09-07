@@ -1,6 +1,8 @@
--- The Vault is one wallet. vault_summary used to hardcode USD and add every
--- account together, so a GBP table's chips could show up as extra US dollars.
--- Report the available wallet's currency and only sum that currency.
+-- The Vault is one wallet. vault_summary used to hardcode USD. Player
+-- available / pending accounts are looked up without currency, so in-play
+-- chips on a GBP table are still that same pot — tagged with the table's
+-- settlement unit, not a second wallet. Report the available wallet's
+-- currency and keep summing the player's own accounts.
 
 create or replace function public.vault_summary()
 returns jsonb
@@ -32,15 +34,13 @@ begin
            coalesce(sum(balance_cents) filter (where kind = 'pending_withdrawal'), 0)
     into available, in_play, pending_withdrawal
     from public.vault_accounts
-    where owner_user_id = uid
-      and currency_code = wallet_currency;
+    where owner_user_id = uid;
 
     select coalesce(sum(amount_cents), 0) into pending_deposit
     from public.vault_payment_intents
     where user_id = uid
       and purpose = 'vault_deposit'
-      and status in ('requires_confirmation', 'processing')
-      and currency_code = wallet_currency;
+      and status in ('requires_confirmation', 'processing');
 
     select * into profile from public.vault_compliance_profiles where user_id = uid;
     select * into config from public.vault_config where id;
