@@ -19,6 +19,7 @@ struct TableView: View {
     @State private var joinError: String?
     @State private var joinCodeText = ""
     @State private var isJoiningTable = false
+    @State private var isCreatingTable = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
 
@@ -56,7 +57,7 @@ struct TableView: View {
     }
 
     private var buyInButtonTitle: String {
-        guard let activeTable else { return "Start table" }
+        guard let activeTable else { return "Save and open" }
         return activeTable.isHostLocally ? "Save and open" : "Join table"
     }
 
@@ -67,6 +68,11 @@ struct TableView: View {
                     header
 
                     banner
+
+                    CreateTableButton(isBusy: isCreatingTable) {
+                        Task { await createHostedTable() }
+                    }
+                    .padding(.horizontal)
 
                     if let activeTable {
                         activeTableCard(activeTable)
@@ -98,9 +104,15 @@ struct TableView: View {
                     await republishHostTableIfNeeded()
                 }
                 await handlePendingJoin()
+                await handlePendingCreateTable()
             }
             .onChange(of: router.pendingTableInviteCode) { _, _ in
                 Task { await handlePendingJoin() }
+            }
+            .onChange(of: router.pendingCreateTable) { _, pending in
+                if pending {
+                    Task { await handlePendingCreateTable() }
+                }
             }
             .navigationDestination(isPresented: $showingSeatSelection) {
                 TableSeatSelectionView(
@@ -120,7 +132,10 @@ struct TableView: View {
             }
             .onChange(of: showSignIn) { _, isPresented in
                 if !isPresented {
-                    Task { await handlePendingJoin() }
+                    Task {
+                        await handlePendingJoin()
+                        await handlePendingCreateTable()
+                    }
                 }
             }
             .onChange(of: authManager.isSignedIn) { _, signedIn in
@@ -129,6 +144,7 @@ struct TableView: View {
                     Task {
                         await republishHostTableIfNeeded()
                         await handlePendingJoin()
+                        await handlePendingCreateTable()
                     }
                 }
             }
@@ -140,7 +156,7 @@ struct TableView: View {
             Text("Table")
                 .font(.largeTitle.bold())
                 .foregroundStyle(AppTheme.text)
-            Text("Set a buy-in, sit down, and share the code so friends can join you.")
+            Text("Create a table, set a buy-in, sit down, and share the code so friends can join you.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
         }
@@ -298,7 +314,7 @@ struct TableView: View {
 
     private var buyInSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: activeTable == nil ? "Start a table" : "Your buy-in")
+            SectionHeader(title: "Your buy-in")
 
             DualCurrencyBuyInSetup(
                 sessionCurrencyCode: $draftSessionCurrencyCode,
@@ -434,15 +450,8 @@ struct TableView: View {
         }
 
         if activeTable == nil {
-            if SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
-                joinError = TableRepositoryError.notSignedIn.localizedDescription
-                showSignIn = true
-                return
-            }
-            activeTable = try? repo.ensureHostTable(
-                sessionCurrencyCode: draftSessionCurrencyCode,
-                hostDisplayName: displayName
-            )
+            await createHostedTable()
+            return
         } else if let table = activeTable, table.isHostLocally {
             table.sessionCurrencyCode = draftSessionCurrencyCode
             table.hostDisplayName = displayName
@@ -456,6 +465,47 @@ struct TableView: View {
         }
 
         showingSeatSelection = true
+    }
+
+    private func handlePendingCreateTable() async {
+        guard router.pendingCreateTable else { return }
+        guard !isCreatingTable else { return }
+        await createHostedTable()
+    }
+
+    /// Always opens a fresh hosted table. An older active table stays in Your tables.
+    private func createHostedTable() async {
+        if SupabaseBootstrap.isConfigured, !authManager.isSignedIn {
+            router.pendingCreateTable = true
+            joinError = TableRepositoryError.notSignedIn.localizedDescription
+            showSignIn = true
+            return
+        }
+
+        guard !isCreatingTable else { return }
+        isCreatingTable = true
+        router.pendingCreateTable = false
+        joinError = nil
+        defer { isCreatingTable = false }
+
+        do {
+            personalSessionCurrencyCode = draftSessionCurrencyCode
+            let table = try repo.startHostedTable(
+                name: nil,
+                sessionCurrencyCode: draftSessionCurrencyCode,
+                hostDisplayName: displayName
+            )
+            activeTable = table
+            await publishHostTable(table)
+            if joinError != nil {
+                return
+            }
+            if hasJoinableBuyIn {
+                showingSeatSelection = true
+            }
+        } catch {
+            joinError = error.localizedDescription
+        }
     }
 
     /// A table created before the host signed in never reached the cloud, so it

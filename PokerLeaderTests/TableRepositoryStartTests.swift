@@ -94,6 +94,23 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertTrue(table.seats.isEmpty)
     }
 
+    func testCreateTableButtonStartsAnUntitledHostedTable() throws {
+        let repo = TableRepository(context: try makeContext())
+
+        let table = try repo.startHostedTable(
+            name: nil,
+            sessionCurrencyCode: "USD",
+            hostDisplayName: "Alex"
+        )
+
+        XCTAssertNil(table.name)
+        XCTAssertEqual(table.displayTitle, "Table \(table.inviteCode)")
+        XCTAssertEqual(table.sessionCurrencyCode, "USD")
+        XCTAssertTrue(table.isHostLocally)
+        XCTAssertTrue(table.seats.isEmpty)
+        XCTAssertEqual(table.inviteCode, repo.activeInviteCode)
+    }
+
     func testStartHostedTableAlwaysCreatesANewTable() throws {
         let repo = TableRepository(context: try makeContext())
         let first = try repo.startHostedTable(

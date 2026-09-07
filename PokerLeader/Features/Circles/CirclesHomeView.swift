@@ -42,16 +42,22 @@ struct CirclesHomeView: View {
                     }
                     .padding(.horizontal)
 
-                    Button { showJoinTable = true } label: {
-                        Label("Join a table", systemImage: "table.furniture")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(AppTheme.positive)
-                            .foregroundStyle(AppTheme.contrastText)
-                            .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                    VStack(spacing: 12) {
+                        CreateTableButton {
+                            router.pendingCreateTable = true
+                        }
+
+                        Button { showJoinTable = true } label: {
+                            Label("Join a table", systemImage: "table.furniture")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(AppTheme.positive)
+                                .foregroundStyle(AppTheme.contrastText)
+                                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                     .padding(.horizontal)
 
                     VStack(alignment: .leading, spacing: 8) {
