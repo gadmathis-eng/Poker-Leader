@@ -137,7 +137,7 @@ enum VaultTransactionKind: String, Codable, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .deposit: "Vault deposit"
+        case .deposit: "Apple Pay deposit"
         case .depositReversed: "Deposit reversed"
         case .tableBuyInVault: "Table buy-in from Vault"
         case .tableBuyInDirect: "Direct table buy-in"

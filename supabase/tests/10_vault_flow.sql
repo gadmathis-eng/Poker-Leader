@@ -5,7 +5,7 @@ insert into auth.users (id, email) values
     ('11111111-1111-1111-1111-111111111111', 'host@example.com'),
     ('22222222-2222-2222-2222-222222222222', 'guest@example.com');
 
-\echo '=== 1. host opens vault, deposits $100 via sandbox deposit ==='
+\echo '=== 1. host opens vault, deposits $100 via mock Apple Pay ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select public.vault_open('USD');
 

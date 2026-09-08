@@ -8,7 +8,7 @@ import Foundation
 /// on the say-so of this app. That is why `authorize` hands back a token to pass
 /// along rather than a balance to add.
 ///
-/// Nothing here touches card numbers or payment credentials, and no provider
+/// Nothing here touches card numbers or Apple Pay credentials, and no provider
 /// secret key belongs in the app: the publishable identifiers a real
 /// integration needs are configuration, and the private keys stay on the server.
 protocol VaultPaymentProvider: Sendable {
@@ -34,8 +34,10 @@ struct PaymentAuthorization: Sendable {
     let isDemo: Bool
 }
 
-/// The payout side. Cash-outs go to whichever payout provider the operator has
-/// approved and the player has verified — never back out through a card sheet.
+/// The payout side. Apple Pay is a way to *take* a payment, not a way to send
+/// one, so cash-outs are never described to the player as going out through
+/// Apple Pay — they go to whichever payout provider the operator has approved
+/// and the player has verified.
 protocol VaultPayoutProvider: Sendable {
     var displayName: String { get }
     var isLive: Bool { get }
@@ -46,12 +48,12 @@ protocol VaultPayoutProvider: Sendable {
 
 // MARK: - Sandbox implementations
 
-/// Credits demo funds while the build is in sandbox. It shows the pause a real
-/// provider has and can be told to decline, so the failure path is exercised as
-/// often as the happy one — but it authorises nothing, charges nothing, and the
-/// token it returns is only good against the sandbox backend.
-struct SandboxDepositProvider: VaultPaymentProvider {
-    var displayName: String { "Demo deposit" }
+/// Stands in for Apple Pay while the build is in sandbox. It shows the pause a
+/// real sheet has and can be told to decline, so the failure path is exercised
+/// as often as the happy one — but it authorises nothing, charges nothing, and
+/// the token it returns is only good against the sandbox backend.
+struct MockApplePayProvider: VaultPaymentProvider {
+    var displayName: String { "Apple Pay (Test Mode)" }
     var isLive: Bool { false }
 
     /// Flip to make every authorisation decline, for testing the unhappy path.
@@ -68,18 +70,19 @@ struct SandboxDepositProvider: VaultPaymentProvider {
         try await Task.sleep(for: .milliseconds(900))
 
         if alwaysDeclines {
-            throw VaultError.paymentFailed("The test deposit was declined.")
+            throw VaultError.paymentFailed("The test card was declined.")
         }
 
         return PaymentAuthorization(
             providerToken: "demo_tok_\(reference)",
-            providerName: "sandbox",
+            providerName: "mock_apple_pay",
             isDemo: true
         )
     }
 }
 
-/// Stands in for the payout rail.
+/// Stands in for the payout rail. Named as a bank transfer rather than Apple
+/// Pay because that is what a payout provider can actually do.
 struct MockPayoutProvider: VaultPayoutProvider {
     var displayName: String { "Test payout provider" }
     var isLive: Bool { false }
@@ -92,7 +95,7 @@ enum VaultProviders {
     /// Swapped for the approved provider once one is connected. Until then every
     /// path through the app runs on the mocks, and `isLive` stays false so the
     /// interface can say so.
-    static let payment: VaultPaymentProvider = SandboxDepositProvider()
+    static let payment: VaultPaymentProvider = MockApplePayProvider()
     static let payout: VaultPayoutProvider = MockPayoutProvider()
 
     static var isSandbox: Bool { !payment.isLive || !payout.isLive }
