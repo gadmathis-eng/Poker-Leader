@@ -123,9 +123,10 @@ final class VaultStore {
         )
         await reloadQuietly()
 
+        let authorization: PaymentAuthorization
         do {
             onPhase?(.authorizing)
-            _ = try await VaultProviders.payment.authorize(
+            authorization = try await VaultProviders.payment.authorize(
                 amount: amount,
                 currencyCode: currency,
                 reference: intent.referenceCode,
@@ -140,7 +141,11 @@ final class VaultStore {
         }
 
         onPhase?(.verifying)
-        let settled = try await backend.confirmDeposit(intentID: intent.id)
+        let settled = try await settleAuthorizedDeposit(
+            intentID: intent.id,
+            authorization: authorization,
+            backend: backend
+        )
         await reloadQuietly()
 
         guard settled.status.isVerified else {
@@ -220,9 +225,10 @@ final class VaultStore {
             idempotencyKey: VaultIdempotency.key("tablepay", inviteCode, String(amount.cents))
         )
 
+        let authorization: PaymentAuthorization
         do {
             onPhase?(.authorizing)
-            _ = try await VaultProviders.payment.authorize(
+            authorization = try await VaultProviders.payment.authorize(
                 amount: charged,
                 currencyCode: walletCurrency,
                 reference: intent.referenceCode,
@@ -235,7 +241,11 @@ final class VaultStore {
         }
 
         onPhase?(.verifying)
-        let settled = try await backend.confirmDeposit(intentID: intent.id)
+        let settled = try await settleAuthorizedDeposit(
+            intentID: intent.id,
+            authorization: authorization,
+            backend: backend
+        )
         guard settled.status.isVerified else {
             await reloadQuietly()
             throw VaultError.paymentFailed(settled.failureReason ?? "The payment did not go through.")
@@ -252,6 +262,22 @@ final class VaultStore {
         )
         await reloadQuietly()
         return receipt
+    }
+
+    /// Stripe when it is switched on and this backend is the real one; otherwise
+    /// the sandbox confirm that stands in for a webhook.
+    private func settleAuthorizedDeposit(
+        intentID: UUID,
+        authorization: PaymentAuthorization,
+        backend: VaultBackend
+    ) async throws -> DepositIntent {
+        if StripeVaultGateway.isEnabled, isCloudBacked {
+            return try await StripeVaultGateway.confirmApplePay(
+                intentID: intentID,
+                authorization: authorization
+            )
+        }
+        return try await backend.confirmDeposit(intentID: intentID)
     }
 
     /// Rejected on every backend. Settlement is posted by the poker engine.

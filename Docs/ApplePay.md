@@ -56,24 +56,22 @@ Simulator usually cannot present Apple Pay. Use a physical iPhone:
 The sheet should ask for Face ID / Touch ID. After it closes, the Vault still
 shows **Test Mode · Demo Funds**. That is expected.
 
-## 3. Actually charging a card (not done yet)
+## 3. Actually charging a card
 
-The sheet returns an encrypted `PKPayment` token. Decrypting and charging it
-needs a payment processor (Stripe, Adyen, and similar). Until that webhook
-exists, `VaultStore` still calls `vault_sandbox_confirm_deposit`.
+Connect **Stripe**. Not RevenueCat — that is for a digital subscription, not
+the Vault. Step-by-step: [Payments.md](Payments.md).
 
-To take real money later:
+Short version:
 
-1. Create the merchant in the processor and upload Apple's Payment Processing
-   Certificate (the processor's dashboard walks through the CSR).
-2. In `didAuthorizePayment`, send the token to your server. The server charges
-   it and, on success, calls `vault_settle_deposit_intent` as `service_role`.
-3. Complete the Apple Pay sheet with `.success` or `.failure` from that result —
-   not before.
-4. Set `vault_config.sandbox_mode = false` and `ApplePayProvider.isLive = true`
-   only after that path is in place.
+1. Stripe Dashboard → Apple Pay → add `merchant.com.mathisgad.pokerleader` and
+   upload the Payment Processing Certificate Stripe generates.
+2. Deploy `supabase/functions/stripe-apple-pay` and `stripe-webhook`.
+3. `supabase secrets set STRIPE_SECRET_KEY=sk_test_...` and `STRIPE_WEBHOOK_SECRET=whsec_...`.
+4. Set `STRIPE_VAULT_ENABLED` to `YES` in `Supabase.plist`.
+5. Keep `vault_config.sandbox_mode` on until you have walked a test charge.
 
-No processor secret belongs in the app. See [Vault.md](Vault.md#connecting-a-real-provider).
+No `sk_` key belongs in the app. Face ID still is not a charge until those
+functions are live and the plist flag is on.
 
 Real-money poker also needs Apple's real-money gaming entitlement, age gating,
 and the geographic restrictions App Review will expect. That is separate from

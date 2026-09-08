@@ -115,9 +115,12 @@ enum VaultProviders {
 
     /// Why the Add Money / buy-in button will or will not open Apple Pay.
     static var applePayCaption: String {
-        if payment.presentsNativeSheet {
-            return "Apple Pay will open on this device. The Vault still only credits demo funds until a payment processor webhook is connected — Face ID is not a charge."
+        if StripeVaultGateway.isEnabled {
+            return "Apple Pay is charged through Stripe. The Vault is credited only after Stripe confirms the payment — never because this app said so."
         }
-        return "Apple Pay cannot open on this device (Simulator usually cannot). A test authorization is used instead. To see the real sheet: register merchant ID \(ApplePayConfiguration.merchantIdentifier) in Apple Developer, enable Apple Pay on the App ID, and run on an iPhone with Wallet set up."
+        if payment.presentsNativeSheet {
+            return "Apple Pay will open on this device. The Vault still only credits demo funds until Stripe is connected — Face ID is not a charge."
+        }
+        return "Apple Pay cannot open on this device (Simulator usually cannot). A test authorization is used instead. To see the real sheet: register merchant ID \(ApplePayConfiguration.merchantIdentifier) in Apple Developer, enable Apple Pay on the App ID, and run on an iPhone with Wallet set up. To actually charge a card, connect Stripe (Docs/Payments.md)."
     }
 }

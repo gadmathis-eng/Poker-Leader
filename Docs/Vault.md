@@ -178,25 +178,22 @@ payout provider, and the identity and payout-method gates in
 
 ### Connecting a real provider
 
-The system Apple Pay sheet is already wired (`ApplePayProvider`, PassKit). What
-is not wired is a processor that charges the token. Face ID is not a charge.
-See [ApplePay.md](ApplePay.md) for the merchant ID and device steps.
+The system Apple Pay sheet is already wired (`ApplePayProvider`, PassKit). Stripe
+is how that sheet becomes a charge. RevenueCat is not — it is StoreKit, for a
+digital subscription, and must not credit the Vault. See [Payments.md](Payments.md).
 
-1. Register merchant ID `merchant.com.mathisgad.pokerleader` and enable Apple Pay
-   on App ID `com.mathisgad.pokerleader` (details in ApplePay.md).
-2. Send the `PKPayment` token from `didAuthorizePayment` to a server that
-   verifies it with the approved processor, then calls
-   `vault_settle_deposit_intent` as `service_role`. That function is already the
-   only path that turns an intent into money.
-3. Implement `VaultPayoutProvider` and an operator process that calls
-   `vault_resolve_withdrawal`. Apple Pay is not a candidate here: it takes
-   payments, it does not send them, which is why the Cash Out screen names the
-   payout provider's destination instead.
-4. Set `vault_config.sandbox_mode = false` and return `true` from
-   `ApplePayProvider.isLive` only after the webhook is in place.
+1. Follow Payments.md: Stripe Apple Pay certificate, Edge Functions, then
+   `STRIPE_VAULT_ENABLED=YES` in `Supabase.plist`.
+2. `stripe-apple-pay` charges the amount already stored on the Vault intent and
+   calls `vault_settle_deposit_intent`. `stripe-webhook` does the same from
+   Stripe's signed event, so a dropped phone still settles.
+3. Implement `VaultPayoutProvider` against Stripe Connect. Apple Pay is not a
+   candidate here: it takes payments, it does not send them.
+4. Set `vault_config.sandbox_mode = false` only after a test-mode charge has
+   been walked through and the webhook is in place.
 5. No provider secret goes in the app. Publishable identifiers are configuration;
    private keys stay on the server. No card details or Apple Pay credentials are
-   stored anywhere in this system — the provider holds them and the backend sees
+   stored anywhere in this system — Stripe holds them and the backend sees
    only opaque identifiers.
 
 ## Compliance

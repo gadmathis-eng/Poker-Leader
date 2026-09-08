@@ -71,4 +71,11 @@ enum SupabaseBootstrap {
 
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// When YES, Add Money charges through the `stripe-apple-pay` Edge Function
+    /// instead of the sandbox confirm. The Stripe secret never lives in this plist.
+    static var isStripeVaultEnabled: Bool {
+        guard let raw = loadValue(key: "STRIPE_VAULT_ENABLED")?.lowercased() else { return false }
+        return raw == "yes" || raw == "true" || raw == "1"
+    }
 }

@@ -24,7 +24,7 @@ struct VaultTabView: View {
             if store.isSandbox {
                 VaultNoticeCard(
                     title: "Test Mode",
-                    message: "Every figure here is demo money. No card is charged and no payout is made. On an iPhone with Apple Pay set up, Add Money opens the real Apple Pay sheet; the Vault still credits demo funds until a payment processor is connected.",
+                    message: "Every figure here is demo money. No card is charged and no payout is made. On an iPhone with Apple Pay set up, Add Money opens the real Apple Pay sheet; the Vault still credits demo funds until Stripe is connected.",
                     tint: AppTheme.gold,
                     iconName: "testtube.2"
                 )

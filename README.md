@@ -127,12 +127,13 @@ money taken back out. It is on the **You** tab, under Settings → Vault.
 
 **It is a labelled sandbox.** Deposits and payouts are still demo money. On an
 iPhone with Wallet, Add Money opens the real Apple Pay sheet; the Vault still
-credits demo funds until a payment processor is connected. Simulator falls back
-to a test authorization. Every screen showing a figure carries a
+credits demo funds until Stripe is connected. Simulator falls back to a test
+authorization. Every screen showing a figure carries a
 **Test Mode · Demo Funds** badge.
 
-See [Docs/ApplePay.md](Docs/ApplePay.md) for the merchant ID, device, and
-processor steps that make the sheet actually open.
+See [Docs/ApplePay.md](Docs/ApplePay.md) to open the sheet, and
+[Docs/Payments.md](Docs/Payments.md) to charge it with Stripe (RevenueCat is
+for a digital subscription, not the Vault).
 
 Run these migrations before using it with cloud sync, in order:
 
@@ -160,6 +161,8 @@ chips in front of a seat.
 See [Docs/Vault.md](Docs/Vault.md) for the ledger design, the privacy model, what
 is deliberately not built yet, and what connecting a real payment provider takes.
 See [Docs/ApplePay.md](Docs/ApplePay.md) to get the Apple Pay sheet to open.
+See [Docs/Payments.md](Docs/Payments.md) to charge it with Stripe, and why
+RevenueCat is the wrong tool for the Vault.
 
 ## Project structure
 
