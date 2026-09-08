@@ -140,7 +140,7 @@ enum VaultTransactionKind: String, Codable, CaseIterable, Sendable {
         case .deposit: "Apple Pay deposit"
         case .depositReversed: "Deposit reversed"
         case .tableBuyInVault: "Table buy-in from Vault"
-        case .tableBuyInDirect: "Table buy-in with Apple Pay"
+        case .tableBuyInDirect: "Direct table buy-in"
         case .tableWinnings: "Winnings"
         case .tableLoss: "Loss"
         case .tableReturn: "Returned from table"

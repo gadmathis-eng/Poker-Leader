@@ -1,7 +1,7 @@
 # Vault ledger tests
 
 `10_vault_flow.sql` walks the whole money path — deposit, table buy-in from the
-Vault, direct Apple Pay buy-in, a server-dealt hand, leaving the table, and a
+Vault, a direct payment-rail buy-in, a server-dealt hand, leaving the table, and a
 cash-out — and checks the parts that have to hold: replayed requests must not
 move money twice, a client-supplied hand result is refused, a balance must
 never go negative, the ledger must be immutable, and the books must reconcile.

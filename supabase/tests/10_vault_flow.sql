@@ -62,7 +62,7 @@ select public.test_assert(
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'Guest');
 
-\echo '=== 4. guest tops up straight onto the table with Apple Pay ==='
+\echo '=== 4. guest tops up straight onto the table with a direct payment ==='
 select id as g_table_intent from public.vault_create_deposit_intent(2000, 'buyin-pay-1', 'table_buy_in', 'ABC123') \gset
 \echo '--- an unverified payment cannot buy in ---'
 do $$
