@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Add Money. Pick an amount, confirm a demo deposit, and wait for the
-/// backend to say it cleared.
+/// Add Money. Pick an amount, confirm through Apple Pay, and wait for the
+/// backend to say the payment cleared.
 ///
 /// The wait is the point of the third state below. The app does not add the
-/// money when the player taps confirm — it shows "Verifying with the backend"
+/// money when the payment sheet closes — it shows "Verifying with the backend"
 /// until the deposit has actually been settled server-side, because that is the
 /// only moment the balance really changed.
 struct AddMoneySheet: View {
@@ -79,15 +79,15 @@ struct AddMoneySheet: View {
                         }
 
                         VaultPrimaryButton(
-                            title: "Add Demo Funds",
-                            systemImage: "plus.circle.fill",
+                            title: "Confirm with Apple Pay",
+                            systemImage: "apple.logo",
                             isEnabled: isAmountValid,
                             isBusy: isBusy
                         ) {
                             Task { await deposit() }
                         }
 
-                        Text("This build credits demo funds only. The money is added to your Vault only after the backend verifies the deposit — never because this app said so.")
+                        Text(VaultProviders.applePayCaption)
                             .font(.caption2)
                             .foregroundStyle(AppTheme.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -142,8 +142,8 @@ struct AddMoneySheet: View {
         HStack(spacing: 10) {
             ProgressView().controlSize(.small)
             Text(phase == .authorizing
-                ? "Authorising the demo deposit…"
-                : "Verifying the deposit with the backend…")
+                ? "Waiting for Apple Pay…"
+                : "Verifying the payment with the backend…")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(AppTheme.muted)
             Spacer()
@@ -161,7 +161,7 @@ struct AddMoneySheet: View {
                 .font(.title2.weight(.bold))
                 .foregroundStyle(AppTheme.text)
 
-            Text("The backend verified the deposit and your Vault has been credited.")
+            Text("The backend verified the payment and your Vault has been credited.")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
                 .multilineTextAlignment(.center)
@@ -185,17 +185,11 @@ struct AddMoneySheet: View {
         phase = .authorizing
 
         let requested = amount
-        // The provider step and the settlement step both live inside `addMoney`.
-        // This timer only moves the label on from "Authorising" to "Verifying"
-        // while that runs; it decides nothing.
-        let label = Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            if phase == .authorizing { phase = .verifying }
-        }
-        defer { label.cancel() }
 
         do {
-            _ = try await store.addMoney(requested)
+            _ = try await store.addMoney(requested) { next in
+                phase = next == .verifying ? .verifying : .authorizing
+            }
             confirmedAmount = requested
             phase = .done
         } catch {

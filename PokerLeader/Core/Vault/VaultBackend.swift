@@ -11,7 +11,7 @@ import Foundation
 ///
 /// - Amounts the app sends are *intent*. Amounts the app reads back are *fact*.
 ///   A deposit is worth nothing until `confirmDeposit` has run through the
-///   provider and the backend has settled it, and a buy-in paid by a card rail
+///   provider and the backend has settled it, and a buy-in paid with Apple Pay
 ///   has to name a deposit the backend already verified.
 /// - Every mutating call carries an idempotency key. Send the same key twice —
 ///   after a timeout, a retry, a backgrounded app — and the second call returns
