@@ -125,9 +125,15 @@ Without `Supabase.plist`, the app still works locally with SwiftData only.
 The **Vault** is a player's private balance: money added, money on a table, and
 money taken back out. It is on the **You** tab, under Settings → Vault.
 
-**It is a labelled sandbox.** Apple Pay is mocked, deposits are simulated,
-payouts are simulated, and no real money moves anywhere. Every screen showing a
-figure carries a **Test Mode · Demo Funds** badge.
+**It is a labelled sandbox.** Deposits and payouts are still demo money. On an
+iPhone with Wallet, Add Money opens the real Apple Pay sheet; the Vault still
+credits demo funds until Stripe is connected. Simulator falls back to a test
+authorization. Every screen showing a figure carries a
+**Test Mode · Demo Funds** badge.
+
+See [Docs/ApplePay.md](Docs/ApplePay.md) to open the sheet, and
+[Docs/Payments.md](Docs/Payments.md) to charge it with Stripe (RevenueCat is
+for a digital subscription, not the Vault).
 
 Run these migrations before using it with cloud sync, in order:
 
@@ -145,14 +151,18 @@ and the functions the app calls. Without them — or without signing in — the
 Vault falls back to a demo ledger running inside the app, which the Vault tab
 says on screen.
 
-What works: adding money through mock Apple Pay, buying into a table from the
-Vault or straight through Apple Pay, chips tracking a hand, cashing off a table
-back into the Vault, and requesting a mock cash-out. A player's balance is never
-visible to anyone else — at a table, the only figure that crosses between players
-is the chips in front of a seat.
+What works: adding money through Apple Pay (real sheet on device, test
+authorization on Simulator), buying into a table from the Vault or straight
+through Apple Pay, chips tracking a hand, cashing off a table back into the
+Vault, and requesting a mock cash-out. A player's balance is never visible to
+anyone else — at a table, the only figure that crosses between players is the
+chips in front of a seat.
 
 See [Docs/Vault.md](Docs/Vault.md) for the ledger design, the privacy model, what
 is deliberately not built yet, and what connecting a real payment provider takes.
+See [Docs/ApplePay.md](Docs/ApplePay.md) to get the Apple Pay sheet to open.
+See [Docs/Payments.md](Docs/Payments.md) to charge it with Stripe, and why
+RevenueCat is the wrong tool for the Vault.
 
 ## Project structure
 

@@ -87,7 +87,7 @@ struct AddMoneySheet: View {
                             Task { await deposit() }
                         }
 
-                        Text("Apple Pay is simulated in this build. The money is added to your Vault only after the backend verifies the payment — never because this app said so.")
+                        Text(VaultProviders.applePayCaption)
                             .font(.caption2)
                             .foregroundStyle(AppTheme.muted)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -185,17 +185,11 @@ struct AddMoneySheet: View {
         phase = .authorizing
 
         let requested = amount
-        // The provider step and the settlement step both live inside `addMoney`.
-        // This timer only moves the label on from "Waiting for Apple Pay" to
-        // "Verifying" while that runs; it decides nothing.
-        let label = Task {
-            try? await Task.sleep(for: .milliseconds(900))
-            if phase == .authorizing { phase = .verifying }
-        }
-        defer { label.cancel() }
 
         do {
-            _ = try await store.addMoney(requested)
+            _ = try await store.addMoney(requested) { next in
+                phase = next == .verifying ? .verifying : .authorizing
+            }
             confirmedAmount = requested
             phase = .done
         } catch {

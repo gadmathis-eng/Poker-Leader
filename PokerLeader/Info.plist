@@ -24,5 +24,9 @@
 			</array>
 		</dict>
 	</array>
+	<key>ApplePayMerchantIdentifier</key>
+	<string>merchant.com.mathisgad.pokerleader</string>
+	<key>ApplePayMerchantCountryCode</key>
+	<string>US</string>
 </dict>
 </plist>

@@ -6,5 +6,7 @@
 	<string>YOUR_SUPABASE_PROJECT_URL</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>YOUR_SUPABASE_ANON_KEY</string>
+	<key>STRIPE_VAULT_ENABLED</key>
+	<string>NO</string>
 </dict>
 </plist>

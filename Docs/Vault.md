@@ -5,9 +5,10 @@ they have on a table, and money they can take back out. This document covers how
 it is built, what keeps it private, what keeps it correct, and what is still
 missing before it could hold real money.
 
-**Nothing in this system is real money today.** Every deposit is simulated,
-Apple Pay is mocked, and no payout is made. That is a deliberate, labelled state
-described under [Sandbox phase](#sandbox-phase), not something hidden.
+**Nothing in this system is real money today.** Deposits settle as demo funds,
+the Apple Pay sheet does not charge a card, and no payout is made. That is a
+deliberate, labelled state described under [Sandbox phase](#sandbox-phase), not
+something hidden. Getting the sheet to open is [ApplePay.md](ApplePay.md).
 
 ---
 
@@ -19,7 +20,7 @@ described under [Sandbox phase](#sandbox-phase), not something hidden.
 | Backend seam | `PokerLeader/Core/Vault/VaultBackend.swift` | The only interface the app has to money. |
 | Real backend | `Core/Vault/SupabaseVaultBackend.swift` | Calls the Postgres functions. |
 | Demo backend | `Core/Vault/SandboxVaultBackend.swift` | Same rules, in-process, for demoing without a project. |
-| Payment seam | `Core/Vault/PaymentProvider.swift` | Where an approved provider is connected later. |
+| Payment seam | `Core/Vault/PaymentProvider.swift`, `ApplePayProvider.swift` | PassKit sheet on device; mock on Simulator. |
 | App state | `Core/Vault/VaultStore.swift` | Sequences the steps, holds the last answer. |
 | Screens | `Features/Vault/` | Vault tab, Add Money, Cash Out, buy-in, settlement. |
 
@@ -161,8 +162,8 @@ The app can ask. It cannot decide.
 `vault_config.sandbox_mode` is `true`. While it is:
 
 - `vault_sandbox_confirm_deposit` stands in for the provider's signed webhook, so
-  a mock Apple Pay deposit can be settled without a real payment. It still cannot
-  say how much arrived — the amount comes from the stored intent.
+  a deposit authorised by Apple Pay can be settled without a real charge. It still
+  cannot say how much arrived — the amount comes from the stored intent.
 - `vault_sandbox_resolve_withdrawal` walks a pending cash-out to a finished state
   so the pending → completed path can be seen without a payout rail.
 - Identity and payout-method verification are not required for a cash-out,
@@ -177,20 +178,22 @@ payout provider, and the identity and payout-method gates in
 
 ### Connecting a real provider
 
-1. Implement `VaultPaymentProvider` against the approved provider's SDK and swap
-   it into `VaultProviders.payment`. `authorize` returns a token to hand to the
-   backend — never a balance, never a receipt the app treats as settlement.
-2. Add a webhook endpoint that verifies the provider's signature and calls
-   `vault_settle_deposit_intent` as `service_role`. That function is already the
-   only path that turns an intent into money.
-3. Implement `VaultPayoutProvider` and an operator process that calls
-   `vault_resolve_withdrawal`. Apple Pay is not a candidate here: it takes
-   payments, it does not send them, which is why the Cash Out screen names the
-   payout provider's destination instead.
-4. Set `vault_config.sandbox_mode = false`.
+The system Apple Pay sheet is already wired (`ApplePayProvider`, PassKit). Stripe
+is how that sheet becomes a charge. RevenueCat is not — it is StoreKit, for a
+digital subscription, and must not credit the Vault. See [Payments.md](Payments.md).
+
+1. Follow Payments.md: Stripe Apple Pay certificate, Edge Functions, then
+   `STRIPE_VAULT_ENABLED=YES` in `Supabase.plist`.
+2. `stripe-apple-pay` charges the amount already stored on the Vault intent and
+   calls `vault_settle_deposit_intent`. `stripe-webhook` does the same from
+   Stripe's signed event, so a dropped phone still settles.
+3. Implement `VaultPayoutProvider` against Stripe Connect. Apple Pay is not a
+   candidate here: it takes payments, it does not send them.
+4. Set `vault_config.sandbox_mode = false` only after a test-mode charge has
+   been walked through and the webhook is in place.
 5. No provider secret goes in the app. Publishable identifiers are configuration;
    private keys stay on the server. No card details or Apple Pay credentials are
-   stored anywhere in this system — the provider holds them and the backend sees
+   stored anywhere in this system — Stripe holds them and the backend sees
    only opaque identifiers.
 
 ## Compliance
@@ -280,6 +283,7 @@ over-bet, rewrite the pot, replay an action, settle twice, recover committed
 chips by leaving or by forging a finished hand, or change settlement by
 picking a different currency.
 
-The Swift side is covered by `PokerLeaderTests/SandboxVaultBackendTests.swift`
-and `PokerLeaderTests/MoneyTests.swift`, which put the demo backend through the
-same path and check the same invariants.
+The Swift side is covered by `PokerLeaderTests/SandboxVaultBackendTests.swift`,
+`PokerLeaderTests/MoneyTests.swift`, and `PokerLeaderTests/ApplePayProviderTests.swift`,
+which put the demo backend through the same path, check the same invariants, and
+build the Apple Pay request without presenting the sheet.

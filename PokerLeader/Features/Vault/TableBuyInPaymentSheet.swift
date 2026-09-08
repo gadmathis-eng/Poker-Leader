@@ -118,6 +118,13 @@ struct TableBuyInPaymentSheet: View {
                         .font(.caption2)
                         .foregroundStyle(AppTheme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if method != .vault {
+                        Text(VaultProviders.applePayCaption)
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(20)
             }
@@ -325,13 +332,16 @@ struct TableBuyInPaymentSheet: View {
                 )
 
             case .applePay:
-                statusLine = "Verifying the payment with the backend…"
                 receipt = try await store.buyInWithApplePay(
                     inviteCode: inviteCode,
                     amount: requestedAmount,
                     playerKey: playerKey,
                     displayName: displayName
-                )
+                ) { next in
+                    statusLine = next == .authorizing
+                        ? "Waiting for Apple Pay…"
+                        : "Verifying the payment with the backend…"
+                }
 
             case .topUp:
                 // Top the Vault up first, then buy in once for the whole amount.
@@ -341,8 +351,11 @@ struct TableBuyInPaymentSheet: View {
                 // leaves the player's own money untouched in their Vault rather
                 // than stranded halfway onto a table.
                 let missing = shortfall
-                statusLine = "Topping up your Vault with Apple Pay…"
-                _ = try await store.addMoney(missing)
+                _ = try await store.addMoney(missing) { next in
+                    statusLine = next == .authorizing
+                        ? "Topping up your Vault with Apple Pay…"
+                        : "Verifying the payment with the backend…"
+                }
 
                 statusLine = "Moving your buy-in onto the table…"
                 receipt = try await store.buyInFromVault(

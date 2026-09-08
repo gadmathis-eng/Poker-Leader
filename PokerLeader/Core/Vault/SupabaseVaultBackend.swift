@@ -85,7 +85,9 @@ struct SupabaseVaultBackend: VaultBackend {
                 p_idempotency_key: idempotencyKey,
                 p_purpose: purpose.rawValue,
                 p_table_invite_code: tableInviteCode,
-                p_provider: "mock_apple_pay",
+                p_provider: StripeVaultGateway.isEnabled
+                    ? "stripe"
+                    : VaultProviders.payment.backendProviderName,
                 p_currency: VaultFX.normalize(currencyCode)
             )
         )
