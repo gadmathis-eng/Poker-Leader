@@ -76,7 +76,7 @@ transaction still sums to zero. Both should always return no rows.
 | Deposit | `psp_clearing` −N, `available` +N |
 | Buy-in from Vault | `available` −N, `in_play` +N |
 | Buy-in across currencies | `available` −wallet, `fx`(wallet) +wallet, `fx`(table) −table, `in_play` +table |
-| Direct buy-in (payment rail) | `psp_clearing` −N, `in_play` +N |
+| Buy-in with Apple Pay | `psp_clearing` −N, `in_play` +N |
 | A hand (posted by the poker engine) | `in_play`(loser) −N, `in_play`(winner) +N |
 | Leaving a table | `in_play` −N, `available` +N |
 | Leaving across currencies | `in_play` −table, `fx`(table) +table, `fx`(wallet) −wallet, `available` +wallet |
