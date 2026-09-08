@@ -6,8 +6,7 @@ import SwiftUI
 /// balance and nothing else — money on a table, money already reserved for
 /// another cash-out, and deposits still settling are all excluded, because none
 /// of it is the player's to take yet. And the destination is named as the payout
-/// provider's, not Apple Pay: Apple Pay takes payments, it does not send them,
-/// so calling it the cash-out method would be a lie.
+/// provider's, because a card sheet takes payments — it does not send them.
 struct CashOutSheet: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("preferredCurrencyCode") private var preferredCurrencyCode = CurrencyPreferences.defaultCurrencyCode
