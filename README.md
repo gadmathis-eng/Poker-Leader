@@ -146,8 +146,8 @@ Vault falls back to a demo ledger running inside the app, which the Vault tab
 says on screen.
 
 What works: adding money through mock Apple Pay, buying into a table from the
-Vault, chips tracking a hand, cashing off a table back into the Vault, and
-requesting a mock cash-out. A player's balance is never
+Vault or straight through Apple Pay, chips tracking a hand, cashing off a table
+back into the Vault, and requesting a mock cash-out. A player's balance is never
 visible to anyone else — at a table, the only figure that crosses between players
 is the chips in front of a seat.
 
