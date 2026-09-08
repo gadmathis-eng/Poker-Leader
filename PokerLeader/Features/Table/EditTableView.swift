@@ -189,7 +189,10 @@ struct EditTableView: View {
         }
         .onAppear(perform: loadTableState)
         .sheet(isPresented: $showCurrencyPicker) {
-            CurrencyPickerSheet(selectedCurrencyCode: currencyCode) { code in
+            CurrencyPickerSheet(
+                selectedCurrencyCode: currencyCode,
+                allowedCurrencyCodes: VaultFX.supportedCurrencyCodes
+            ) { code in
                 let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
                 guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }
                 currencyCode = cleaned

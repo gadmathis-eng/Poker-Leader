@@ -1,7 +1,7 @@
 # Vault ledger tests
 
 `10_vault_flow.sql` walks the whole money path — deposit, table buy-in from the
-Vault, direct Apple Pay buy-in, a server-dealt hand, leaving the table, and a
+Vault, a direct payment-rail buy-in, a server-dealt hand, leaving the table, and a
 cash-out — and checks the parts that have to hold: replayed requests must not
 move money twice, a client-supplied hand result is refused, a balance must
 never go negative, the ledger must be immutable, and the books must reconcile.
@@ -23,9 +23,11 @@ sudo -u postgres psql -v ON_ERROR_STOP=1 -d vaultdemo \
   -f supabase/migrations/20260907200000_poker_server_engine.sql \
   -f supabase/migrations/20260907210000_poker_engine_hardening.sql \
   -f supabase/migrations/20260907220000_vault_summary_currency.sql \
+  -f supabase/migrations/20260907230000_vault_fx_conversion.sql \
   -f supabase/tests/10_vault_flow.sql \
   -f supabase/tests/20_vault_attacks.sql \
-  -f supabase/tests/30_poker_attacks.sql
+  -f supabase/tests/30_poker_attacks.sql \
+  -f supabase/tests/40_vault_fx.sql
 ```
 
 Every `NOTICE: rejected as expected: …` line is a guard doing its job. The
@@ -39,3 +41,7 @@ rewrite the pot, replay an action, settle twice, recover committed chips by
 leaving or by forging a finished hand, hold the game open by disconnecting,
 read a live table from the invite code alone, or change settlement by
 picking a different currency.
+`40_vault_fx.sql` is the cross-currency suite: conversion between any published
+pair (not only USD and GBP), a buy-in that converts then transfers, a leave that
+converts chips back into the wallet, a cash-out in another unit, and the same
+path with an EUR wallet on an ILS table paying out CAD.

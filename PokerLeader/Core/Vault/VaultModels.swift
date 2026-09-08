@@ -137,10 +137,10 @@ enum VaultTransactionKind: String, Codable, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .deposit: "Apple Pay deposit"
+        case .deposit: "Vault deposit"
         case .depositReversed: "Deposit reversed"
         case .tableBuyInVault: "Table buy-in from Vault"
-        case .tableBuyInDirect: "Table buy-in with Apple Pay"
+        case .tableBuyInDirect: "Direct table buy-in"
         case .tableWinnings: "Winnings"
         case .tableLoss: "Loss"
         case .tableReturn: "Returned from table"
@@ -282,6 +282,9 @@ struct TableSettlement: Identifiable, Equatable, Sendable {
     let returned: Money
     let referenceCode: String
     let alreadySettled: Bool
+    var tableCurrencyCode: String = "USD"
+    var walletReturned: Money? = nil
+    var walletCurrencyCode: String? = nil
 
     var net: Money { returned - boughtIn }
 }

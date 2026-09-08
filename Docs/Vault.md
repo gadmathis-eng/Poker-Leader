@@ -5,9 +5,9 @@ they have on a table, and money they can take back out. This document covers how
 it is built, what keeps it private, what keeps it correct, and what is still
 missing before it could hold real money.
 
-**Nothing in this system is real money today.** Every deposit is simulated,
-Apple Pay is mocked, and no payout is made. That is a deliberate, labelled state
-described under [Sandbox phase](#sandbox-phase), not something hidden.
+**Nothing in this system is real money today.** Every deposit is a sandbox
+credit, and no payout is made. That is a deliberate, labelled state described
+under [Sandbox phase](#sandbox-phase), not something hidden.
 
 ---
 
@@ -15,7 +15,7 @@ described under [Sandbox phase](#sandbox-phase), not something hidden.
 
 | Layer | Where | What it does |
 |---|---|---|
-| Ledger and rules | `supabase/migrations/20260907120000_vault_ledger.sql` | Owns every balance. Decides who may do what. |
+| Ledger and rules | `supabase/migrations/20260907120000_vault_ledger.sql` and `20260907230000_vault_fx_conversion.sql` | Owns every balance. Converts, then transfers, when a table or cash-out is in another currency. |
 | Backend seam | `PokerLeader/Core/Vault/VaultBackend.swift` | The only interface the app has to money. |
 | Real backend | `Core/Vault/SupabaseVaultBackend.swift` | Calls the Postgres functions. |
 | Demo backend | `Core/Vault/SandboxVaultBackend.swift` | Same rules, in-process, for demoing without a project. |
@@ -31,6 +31,13 @@ There is no floating point in the Vault and no `Decimal` arithmetic on balances.
 and the `Decimal` the rest of the app uses for table stakes, and it rounds to the
 nearest cent in both directions.
 
+The wallet is one currency. A table or a cash-out can be another. Buying in
+with euros at an Israeli-shekel table, or withdrawing CAD from an AUD vault,
+converts at `vault_fx_rates` (the same table as `VaultFX` /
+`HardcodedExchangeRateProvider`) and then transfers. The client never chooses
+the rate. The wallet opens in the player's preferred currency when they first
+visit; later visits keep that unit.
+
 ## Double-entry, and why the balance column is not the truth
 
 Money is never added to a balance. It is *moved* between accounts, and each
@@ -38,7 +45,7 @@ movement is a transaction holding two or more entries whose signed cents sum to
 exactly zero. A deposit is not "+$100 to the player" — it is "-$100 from the
 payment provider's clearing account, +$100 to the player's available account".
 
-Six kinds of account:
+Seven kinds of account:
 
 | Kind | Owner | Holds |
 |---|---|---|
@@ -48,6 +55,7 @@ Six kinds of account:
 | `psp_clearing` | system | the outside world money arrives from |
 | `payout_clearing` | system | the outside world money leaves to |
 | `fees` | system | fees retained by the operator |
+| `fx` | system | house legs that keep each currency's books balanced when money converts |
 
 Player accounts carry a check constraint that they may never go negative. The
 three system accounts are expected to, and their negative total is the mirror of
@@ -67,11 +75,14 @@ transaction still sums to zero. Both should always return no rows.
 |---|---|
 | Deposit | `psp_clearing` −N, `available` +N |
 | Buy-in from Vault | `available` −N, `in_play` +N |
-| Buy-in with Apple Pay | `psp_clearing` −N, `in_play` +N |
+| Buy-in across currencies | `available` −wallet, `fx`(wallet) +wallet, `fx`(table) −table, `in_play` +table |
+| Direct buy-in (payment rail) | `psp_clearing` −N, `in_play` +N |
 | A hand (posted by the poker engine) | `in_play`(loser) −N, `in_play`(winner) +N |
 | Leaving a table | `in_play` −N, `available` +N |
+| Leaving across currencies | `in_play` −table, `fx`(table) +table, `fx`(wallet) −wallet, `available` +wallet |
 | Cash-out requested | `available` −N, `pending_withdrawal` +N |
 | Cash-out paid | `pending_withdrawal` −N, `payout_clearing` +(N−fee), `fees` +fee |
+| Cash-out paid across currencies | `pending_withdrawal` −wallet, `fx`(wallet) +wallet, `fx`(payout) −payout, `payout_clearing` +net, `fees` +fee |
 | Cash-out rejected, canceled, failed | `pending_withdrawal` −N, `available` +N |
 
 ## Privacy
@@ -150,7 +161,7 @@ The app can ask. It cannot decide.
 `vault_config.sandbox_mode` is `true`. While it is:
 
 - `vault_sandbox_confirm_deposit` stands in for the provider's signed webhook, so
-  a mock Apple Pay deposit can be settled without a real payment. It still cannot
+  a sandbox deposit can be settled without a real payment. It still cannot
   say how much arrived — the amount comes from the stored intent.
 - `vault_sandbox_resolve_withdrawal` walks a pending cash-out to a finished state
   so the pending → completed path can be seen without a payout rail.
@@ -173,12 +184,12 @@ payout provider, and the identity and payout-method gates in
    `vault_settle_deposit_intent` as `service_role`. That function is already the
    only path that turns an intent into money.
 3. Implement `VaultPayoutProvider` and an operator process that calls
-   `vault_resolve_withdrawal`. Apple Pay is not a candidate here: it takes
+   `vault_resolve_withdrawal`. A card sheet is not a candidate here: it takes
    payments, it does not send them, which is why the Cash Out screen names the
    payout provider's destination instead.
 4. Set `vault_config.sandbox_mode = false`.
 5. No provider secret goes in the app. Publishable identifiers are configuration;
-   private keys stay on the server. No card details or Apple Pay credentials are
+   private keys stay on the server. No card details or payment credentials are
    stored anywhere in this system — the provider holds them and the backend sees
    only opaque identifiers.
 
@@ -212,11 +223,11 @@ where they plug in.
 
 The real-money nature of this feature is not concealed from App Review. When it
 goes live it needs, at minimum: a real-money gaming entitlement and the
-geographic restrictions that come with it; an Apple Pay merchant configuration;
-age gating; the responsible-gaming disclosures the App Store requires; and a
-review of whether the jurisdictions being served permit it. Real-money wagering
-is out of scope for in-app purchase, which is why the payment path is a payment
-provider rather than StoreKit.
+geographic restrictions that come with it; a payment-provider merchant
+configuration; age gating; the responsible-gaming disclosures the App Store
+requires; and a review of whether the jurisdictions being served permit it.
+Real-money wagering is out of scope for in-app purchase, which is why the
+payment path is a payment provider rather than StoreKit.
 
 ## Known gaps
 

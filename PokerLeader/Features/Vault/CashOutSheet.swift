@@ -6,22 +6,32 @@ import SwiftUI
 /// balance and nothing else — money on a table, money already reserved for
 /// another cash-out, and deposits still settling are all excluded, because none
 /// of it is the player's to take yet. And the destination is named as the payout
-/// provider's, not Apple Pay: Apple Pay takes payments, it does not send them,
-/// so calling it the cash-out method would be a lie.
+/// provider's, because a card sheet takes payments — it does not send them.
 struct CashOutSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("preferredCurrencyCode") private var preferredCurrencyCode = CurrencyPreferences.defaultCurrencyCode
     @State private var store = VaultStore.shared
     @State private var text = "0"
+    @State private var withdrawCurrencyCode = CurrencyPreferences.defaultCurrencyCode
+    @State private var showCurrencyPicker = false
     @State private var isConfirming = false
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var completed: WithdrawalRequest?
 
-    private var currencyCode: String { store.currencyCode }
+    private var walletCurrencyCode: String { store.currencyCode }
     private var summary: VaultSummary { store.summary }
 
     private var amount: Money {
         Money(userInput: MoneyAmountKeypad.normalizedText(text)) ?? .zero
+    }
+
+    private var walletDebit: Money? {
+        VaultFX.convert(amount, from: withdrawCurrencyCode, to: walletCurrencyCode)
+    }
+
+    private var showsConversion: Bool {
+        VaultFX.normalize(withdrawCurrencyCode) != VaultFX.normalize(walletCurrencyCode)
     }
 
     private var fee: Money { store.feeForWithdrawal(amount) }
@@ -35,9 +45,20 @@ struct CashOutSheet: View {
     }
 
     private var isAmountValid: Bool {
-        amount >= summary.withdrawalMinimum
-            && amount <= summary.withdrawable
+        guard let walletDebit else { return false }
+        return walletDebit >= summary.withdrawalMinimum
+            && walletDebit <= summary.withdrawable
+            && amount.isPositive
             && fee < amount
+            && VaultFX.supports(withdrawCurrencyCode)
+    }
+
+    private var confirmationMessage: String {
+        let payout = "\(net.formatted(currencyCode: withdrawCurrencyCode)) will be sent to \(VaultProviders.payout.destinationDescription) after a fee of \(fee.formatted(currencyCode: withdrawCurrencyCode))."
+        if showsConversion, let walletDebit {
+            return "\(payout) Your Vault is charged \(walletDebit.formatted(currencyCode: walletCurrencyCode)). The money leaves your available balance now and is held until the payout is finished."
+        }
+        return "\(payout) The money leaves your available balance now and is held until the payout is finished."
     }
 
     var body: some View {
@@ -90,11 +111,31 @@ struct CashOutSheet: View {
                         .disabled(isWorking)
                 }
             }
-            .alert("Cash out \(amount.formatted(currencyCode: currencyCode))?", isPresented: $isConfirming) {
+            .alert("Cash out \(amount.formatted(currencyCode: withdrawCurrencyCode))?", isPresented: $isConfirming) {
                 Button("Confirm") { Task { await requestCashOut() } }
                 Button("Not yet", role: .cancel) {}
             } message: {
-                Text("\(net.formatted(currencyCode: currencyCode)) will be sent to \(VaultProviders.payout.destinationDescription) after a fee of \(fee.formatted(currencyCode: currencyCode)). The money leaves your available balance now and is held until the payout is finished.")
+                Text(confirmationMessage)
+            }
+            .onAppear {
+                if CurrencyPreferences.isValidCurrencyCode(preferredCurrencyCode),
+                   VaultFX.supports(preferredCurrencyCode) {
+                    withdrawCurrencyCode = CurrencyPreferences.normalizedCurrencyCode(preferredCurrencyCode)
+                } else {
+                    withdrawCurrencyCode = walletCurrencyCode
+                }
+            }
+            .sheet(isPresented: $showCurrencyPicker) {
+                CurrencyPickerSheet(
+                    selectedCurrencyCode: withdrawCurrencyCode,
+                    allowedCurrencyCodes: VaultFX.supportedCurrencyCodes
+                ) { code in
+                    let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
+                    guard CurrencyPreferences.isValidCurrencyCode(cleaned), VaultFX.supports(cleaned) else { return }
+                    withdrawCurrencyCode = cleaned
+                }
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
         }
         .presentationDetents([.large])
@@ -107,14 +148,31 @@ struct CashOutSheet: View {
                 .tracking(AppTheme.sectionTracking)
                 .foregroundStyle(AppTheme.muted)
 
-            Text(summary.withdrawable.formatted(currencyCode: currencyCode))
+            Text(summary.withdrawable.formatted(currencyCode: walletCurrencyCode))
                 .font(.system(size: 34, weight: .heavy, design: .rounded))
                 .foregroundStyle(AppTheme.positive)
                 .monospacedDigit()
 
-            Text("Taking out \(amount.formatted(currencyCode: currencyCode))")
+            HStack {
+                Text("Send as")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.muted)
+                Spacer()
+                CurrencyChipButton(currencyCode: withdrawCurrencyCode) {
+                    showCurrencyPicker = true
+                }
+                .accessibilityLabel("Choose cash-out currency")
+            }
+
+            Text("Taking out \(amount.formatted(currencyCode: withdrawCurrencyCode))")
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
+
+            if showsConversion, amount.isPositive, let walletDebit {
+                Text("That's \(walletDebit.formatted(currencyCode: walletCurrencyCode)) from your Vault.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.muted)
+            }
         }
         .frame(maxWidth: .infinity)
         .cardSurface(padding: 18)
@@ -122,13 +180,17 @@ struct CashOutSheet: View {
 
     private var breakdownCard: some View {
         VStack(spacing: 0) {
-            breakdownRow("Cash-out amount", amount.formatted(currencyCode: currencyCode))
+            breakdownRow("Cash-out amount", amount.formatted(currencyCode: withdrawCurrencyCode))
             Divider().overlay(AppTheme.cardBorder)
-            breakdownRow("Fee", fee.isZero ? "None" : fee.formatted(currencyCode: currencyCode))
+            if showsConversion, amount.isPositive, let walletDebit {
+                breakdownRow("Taken from Vault", walletDebit.formatted(currencyCode: walletCurrencyCode))
+                Divider().overlay(AppTheme.cardBorder)
+            }
+            breakdownRow("Fee", fee.isZero ? "None" : fee.formatted(currencyCode: withdrawCurrencyCode))
             Divider().overlay(AppTheme.cardBorder)
             breakdownRow(
                 "You receive",
-                net.formatted(currencyCode: currencyCode),
+                net.formatted(currencyCode: withdrawCurrencyCode),
                 tint: AppTheme.positive,
                 isBold: true
             )
@@ -196,7 +258,7 @@ struct CashOutSheet: View {
                 .font(.caption)
                 .foregroundStyle(AppTheme.muted)
             Spacer()
-            Text(value.formatted(currencyCode: currencyCode))
+            Text(value.formatted(currencyCode: walletCurrencyCode))
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(value.isZero ? AppTheme.muted : AppTheme.gold)
                 .monospacedDigit()
@@ -236,7 +298,7 @@ struct CashOutSheet: View {
         defer { isWorking = false }
 
         do {
-            completed = try await store.requestCashOut(amount)
+            completed = try await store.requestCashOut(amount, currencyCode: withdrawCurrencyCode)
         } catch {
             errorMessage = VaultError.from(error).errorDescription
         }

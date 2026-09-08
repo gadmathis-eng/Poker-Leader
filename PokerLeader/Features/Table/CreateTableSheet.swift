@@ -125,7 +125,8 @@ struct CreateTableSheet: View {
             }
             .sheet(item: $currencyPickerTarget) { target in
                 CurrencyPickerSheet(
-                    selectedCurrencyCode: target == .session ? tableCurrencyCode : payInCurrencyCode
+                    selectedCurrencyCode: target == .session ? tableCurrencyCode : payInCurrencyCode,
+                    allowedCurrencyCodes: VaultFX.supportedCurrencyCodes
                 ) { code in
                     let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
                     guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }

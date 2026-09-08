@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// How the player pays for their seat: out of the Vault, or straight through
-/// Apple Pay.
+/// How the player pays for their seat: out of the Vault.
 ///
 /// The Vault balance shown here is the player's own and goes no further than
 /// this screen — the other people at the table learn only what lands in front of
-/// the seat. If the Vault is short, the sheet offers to make up the difference
-/// or pay the whole buy-in by card rather than quietly seating them for less.
+/// the seat. If the Vault is short, the sheet asks them to add money first
+/// rather than quietly seating them for less.
 struct TableBuyInPaymentSheet: View {
     let inviteCode: String
     let tableName: String
     let requestedAmount: Money
+    let tableCurrencyCode: String
     let limits: TableBuyInLimits?
     let playerKey: String
     let displayName: String
@@ -19,24 +19,34 @@ struct TableBuyInPaymentSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var store = VaultStore.shared
-    @State private var method: Method = .vault
     @State private var isWorking = false
+    @State private var showAddMoney = false
     @State private var errorMessage: String?
     @State private var statusLine: String?
 
-    private enum Method: Hashable {
-        case vault
-        case applePay
-        /// The Vault covers part of it; Apple Pay is asked for the rest. The
-        /// backend still sees two separate verified movements.
-        case topUp
+    private var walletCurrencyCode: String { store.currencyCode }
+    private var tableCurrency: String {
+        limits?.currencyCode ?? tableCurrencyCode
     }
 
-    private var currencyCode: String { store.currencyCode }
+    private var walletCost: Money? {
+        VaultFX.convert(requestedAmount, from: tableCurrency, to: walletCurrencyCode)
+    }
+
     private var available: Money { store.summary.available }
 
-    private var vaultCoversIt: Bool { available >= requestedAmount }
-    private var shortfall: Money { (requestedAmount - available).clampedToNonNegative() }
+    private var vaultCoversIt: Bool {
+        guard let walletCost else { return false }
+        return available >= walletCost
+    }
+
+    private var shortfall: Money {
+        guard let walletCost else { return .zero }
+        return (walletCost - available).clampedToNonNegative()
+    }
+    private var showsConversion: Bool {
+        VaultFX.normalize(tableCurrency) != VaultFX.normalize(walletCurrencyCode)
+    }
 
     private var isWithinLimits: Bool {
         guard let limits else { return requestedAmount.isPositive }
@@ -57,12 +67,23 @@ struct TableBuyInPaymentSheet: View {
 
                     vaultCard
 
-                    methodPicker
+                    if !vaultCoversIt {
+                        VaultNoticeCard(
+                            title: walletCost == nil
+                                ? "No exchange rate"
+                                : "Not enough in your Vault",
+                            message: walletCost == nil
+                                ? "There is no published rate for this table's currency, so the buy-in cannot be taken from your Vault."
+                                : "Add \(shortfall.formatted(currencyCode: walletCurrencyCode)) to your Vault, then come back to sit down.",
+                            tint: AppTheme.gold,
+                            iconName: "exclamationmark.triangle.fill"
+                        )
+                    }
 
                     if !isWithinLimits, let limits {
                         VaultNoticeCard(
                             title: "Outside the buy-in range",
-                            message: "This table takes between \(limits.minimum.formatted(currencyCode: currencyCode)) and \(limits.maximum.formatted(currencyCode: currencyCode)). Go back and change your buy-in.",
+                            message: "This table takes between \(limits.minimum.formatted(currencyCode: tableCurrency)) and \(limits.maximum.formatted(currencyCode: tableCurrency)). Go back and change your buy-in.",
                             tint: AppTheme.negative,
                             iconName: "exclamationmark.triangle.fill"
                         )
@@ -86,13 +107,24 @@ struct TableBuyInPaymentSheet: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    VaultPrimaryButton(
-                        title: confirmTitle,
-                        systemImage: method == .vault ? "lock.fill" : "apple.logo",
-                        isEnabled: isWithinLimits,
-                        isBusy: isWorking
-                    ) {
-                        Task { await confirm() }
+                    if vaultCoversIt {
+                        VaultPrimaryButton(
+                            title: "Use Vault Balance",
+                            systemImage: "lock.fill",
+                            isEnabled: isWithinLimits && walletCost != nil,
+                            isBusy: isWorking
+                        ) {
+                            Task { await confirm() }
+                        }
+                    } else if walletCost != nil {
+                        VaultPrimaryButton(
+                            title: "Add Money",
+                            systemImage: "plus.circle.fill",
+                            isEnabled: !isWorking,
+                            isBusy: false
+                        ) {
+                            showAddMoney = true
+                        }
                     }
 
                     Text("You are not seated until the whole buy-in has been verified by the backend. The other players see only the chips in front of you — never your Vault.")
@@ -115,17 +147,11 @@ struct TableBuyInPaymentSheet: View {
         }
         .task {
             await store.load()
-            method = vaultCoversIt ? .vault : (available.isPositive ? .topUp : .applePay)
+        }
+        .sheet(isPresented: $showAddMoney) {
+            AddMoneySheet()
         }
         .presentationDetents([.large])
-    }
-
-    private var confirmTitle: String {
-        switch method {
-        case .vault: "Use Vault Balance"
-        case .applePay: "Pay with Apple Pay"
-        case .topUp: "Use Vault + Apple Pay"
-        }
     }
 
     private var buyInCard: some View {
@@ -136,12 +162,18 @@ struct TableBuyInPaymentSheet: View {
                 .foregroundStyle(AppTheme.muted)
                 .multilineTextAlignment(.center)
 
-            Text(requestedAmount.formatted(currencyCode: currencyCode))
+            Text(requestedAmount.formatted(currencyCode: tableCurrency))
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundStyle(AppTheme.text)
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
+
+            if showsConversion, let walletCost {
+                Text("That's \(walletCost.formatted(currencyCode: walletCurrencyCode)) from your Vault.")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.muted)
+            }
         }
         .frame(maxWidth: .infinity)
         .cardSurface(padding: 18)
@@ -153,7 +185,7 @@ struct TableBuyInPaymentSheet: View {
                 Text("MINIMUM")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                Text(limits.minimum.formatted(currencyCode: currencyCode))
+                Text(limits.minimum.formatted(currencyCode: tableCurrency))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppTheme.text)
             }
@@ -162,7 +194,7 @@ struct TableBuyInPaymentSheet: View {
                 Text("MAXIMUM")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(AppTheme.muted)
-                Text(limits.maximum.formatted(currencyCode: currencyCode))
+                Text(limits.maximum.formatted(currencyCode: tableCurrency))
                     .font(.subheadline.weight(.bold))
                     .foregroundStyle(AppTheme.text)
             }
@@ -177,12 +209,18 @@ struct TableBuyInPaymentSheet: View {
                     .font(.caption2.weight(.bold))
                     .tracking(1)
                     .foregroundStyle(AppTheme.muted)
-                Text(available.formatted(currencyCode: currencyCode))
+                Text(available.formatted(currencyCode: walletCurrencyCode))
                     .font(.title3.weight(.bold))
                     .foregroundStyle(vaultCoversIt ? AppTheme.positive : AppTheme.gold)
                     .monospacedDigit()
-                if !vaultCoversIt {
-                    Text("\(shortfall.formatted(currencyCode: currencyCode)) short of this buy-in")
+                if vaultCoversIt {
+                    Text(showsConversion
+                        ? "Converts \(walletCost?.formatted(currencyCode: walletCurrencyCode) ?? "—") into \(requestedAmount.formatted(currencyCode: tableCurrency)) on the table"
+                        : "Moves \(requestedAmount.formatted(currencyCode: tableCurrency)) from Available into In Play")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.muted)
+                } else if walletCost != nil {
+                    Text("\(shortfall.formatted(currencyCode: walletCurrencyCode)) short of this buy-in")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.muted)
                 }
@@ -196,82 +234,6 @@ struct TableBuyInPaymentSheet: View {
         .cardSurface()
     }
 
-    private var methodPicker: some View {
-        VStack(spacing: 10) {
-            methodRow(
-                .vault,
-                title: "Use Vault Balance",
-                subtitle: vaultCoversIt
-                    ? "Moves \(requestedAmount.formatted(currencyCode: currencyCode)) from Available into In Play"
-                    : "Not enough in your Vault for this buy-in",
-                isEnabled: vaultCoversIt,
-                icon: "lock.fill"
-            )
-
-            if !vaultCoversIt && available.isPositive {
-                methodRow(
-                    .topUp,
-                    title: "Use Vault + Apple Pay",
-                    subtitle: "Add the missing \(shortfall.formatted(currencyCode: currencyCode)) to your Vault, then buy in with the full \(requestedAmount.formatted(currencyCode: currencyCode))",
-                    isEnabled: true,
-                    icon: "rectangle.split.2x1.fill"
-                )
-            }
-
-            methodRow(
-                .applePay,
-                title: "Pay with Apple Pay",
-                subtitle: "The full \(requestedAmount.formatted(currencyCode: currencyCode)) goes straight onto the table",
-                isEnabled: true,
-                icon: "apple.logo"
-            )
-        }
-    }
-
-    private func methodRow(
-        _ value: Method,
-        title: String,
-        subtitle: String,
-        isEnabled: Bool,
-        icon: String
-    ) -> some View {
-        Button {
-            guard isEnabled else { return }
-            method = value
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.subheadline.weight(.bold))
-                    .frame(width: 34, height: 34)
-                    .background(method == value ? AppTheme.positive : AppTheme.background)
-                    .foregroundStyle(method == value ? AppTheme.contrastText : AppTheme.muted)
-                    .clipShape(Circle())
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(isEnabled ? AppTheme.text : AppTheme.muted)
-                    Text(subtitle)
-                        .font(.caption2)
-                        .foregroundStyle(AppTheme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Spacer(minLength: 0)
-
-                if method == value {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(AppTheme.positive)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .cardSurface()
-        }
-        .buttonStyle(.plain)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.55)
-    }
-
     private func confirm() async {
         isWorking = true
         errorMessage = nil
@@ -281,47 +243,13 @@ struct TableBuyInPaymentSheet: View {
         }
 
         do {
-            let receipt: TableBuyInReceipt
-
-            switch method {
-            case .vault:
-                statusLine = "Moving your buy-in onto the table…"
-                receipt = try await store.buyInFromVault(
-                    inviteCode: inviteCode,
-                    amount: requestedAmount,
-                    playerKey: playerKey,
-                    displayName: displayName
-                )
-
-            case .applePay:
-                statusLine = "Verifying the payment with the backend…"
-                receipt = try await store.buyInWithApplePay(
-                    inviteCode: inviteCode,
-                    amount: requestedAmount,
-                    playerKey: playerKey,
-                    displayName: displayName
-                )
-
-            case .topUp:
-                // Top the Vault up first, then buy in once for the whole amount.
-                // Splitting the buy-in itself would not work: a table's minimum
-                // applies to each buy-in, so the small remainder would be turned
-                // away on its own. Doing it this way also means a declined card
-                // leaves the player's own money untouched in their Vault rather
-                // than stranded halfway onto a table.
-                let missing = shortfall
-                statusLine = "Topping up your Vault with Apple Pay…"
-                _ = try await store.addMoney(missing)
-
-                statusLine = "Moving your buy-in onto the table…"
-                receipt = try await store.buyInFromVault(
-                    inviteCode: inviteCode,
-                    amount: requestedAmount,
-                    playerKey: playerKey,
-                    displayName: displayName
-                )
-            }
-
+            statusLine = "Moving your buy-in onto the table…"
+            let receipt = try await store.buyInFromVault(
+                inviteCode: inviteCode,
+                amount: requestedAmount,
+                playerKey: playerKey,
+                displayName: displayName
+            )
             onComplete(receipt)
             dismiss()
         } catch {

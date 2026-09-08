@@ -18,11 +18,13 @@ final class SandboxVaultBackendTests: XCTestCase {
         vault.reset()
     }
 
-    private func deposit(_ amount: Money, key: String) async throws {
+    private func deposit(_ amount: Money, key: String, currencyCode: String? = nil) async throws {
+        let summary = try await vault.summary()
         let intent = try await vault.createDepositIntent(
             amount: amount,
             purpose: .vaultDeposit,
             tableInviteCode: nil,
+            currencyCode: currencyCode ?? summary.currencyCode,
             idempotencyKey: key
         )
         _ = try await vault.confirmDeposit(intentID: intent.id)
@@ -375,6 +377,135 @@ final class SandboxVaultBackendTests: XCTestCase {
         let summary = try await vault.summary()
         XCTAssertEqual(summary.pendingWithdrawals, .zero)
         XCTAssertEqual(summary.total, Money(cents: 6_000))
+    }
+
+    func testAUSDBuyInOnAGBPTableConvertsThenTransfers() async throws {
+        try await deposit(Money(cents: 10_000), key: "dep-1")
+        _ = try await vault.registerTable(
+            inviteCode: "GBP1",
+            minimum: Money(cents: 1_000),
+            maximum: Money(cents: 8_000),
+            currencyCode: "GBP"
+        )
+
+        let receipt = try await vault.buyIn(
+            inviteCode: "GBP1",
+            amount: Money(cents: 2_000),
+            source: .vault,
+            playerKey: "me",
+            displayName: "Me",
+            paymentIntentID: nil,
+            idempotencyKey: "buy-gbp"
+        )
+
+        let charged = try XCTUnwrap(VaultFX.convert(cents: 2_000, from: "GBP", to: "USD"))
+        XCTAssertEqual(receipt.inPlay, Money(cents: 2_000))
+
+        var summary = try await vault.summary()
+        XCTAssertEqual(summary.available, Money(cents: 10_000 - charged))
+        XCTAssertEqual(summary.inPlay, Money(cents: charged))
+        XCTAssertEqual(summary.total, Money(cents: 10_000))
+
+        let settlement = try await vault.leaveTable(inviteCode: "GBP1", idempotencyKey: "leave-gbp")
+        XCTAssertEqual(settlement.boughtIn, Money(cents: 2_000))
+        XCTAssertEqual(settlement.returned, Money(cents: 2_000))
+        XCTAssertEqual(settlement.walletReturned, Money(cents: charged))
+        XCTAssertEqual(settlement.tableCurrencyCode, "GBP")
+
+        summary = try await vault.summary()
+        XCTAssertEqual(summary.available, Money(cents: 10_000))
+        XCTAssertEqual(summary.inPlay, .zero)
+    }
+
+    func testAUSDVaultCanWithdrawInGBP() async throws {
+        try await deposit(Money(cents: 10_000), key: "dep-1")
+
+        let request = try await vault.requestWithdrawal(
+            amount: Money(cents: 7_900),
+            currencyCode: "GBP",
+            idempotencyKey: "co-gbp"
+        )
+
+        XCTAssertEqual(request.amount, Money(cents: 7_900))
+        XCTAssertEqual(request.currencyCode, "GBP")
+        XCTAssertEqual(request.net, Money(cents: 7_900))
+
+        var summary = try await vault.summary()
+        XCTAssertEqual(summary.available, .zero)
+        XCTAssertEqual(summary.pendingWithdrawals, Money(cents: 10_000))
+        XCTAssertEqual(summary.total, Money(cents: 10_000))
+
+        _ = try await vault.settleWithdrawalInSandbox(id: request.id, succeeds: true)
+
+        summary = try await vault.summary()
+        XCTAssertEqual(summary.available, .zero)
+        XCTAssertEqual(summary.pendingWithdrawals, .zero)
+        XCTAssertEqual(summary.total, .zero)
+    }
+
+    func testAEURVaultCanBuyIntoAnILSTable() async throws {
+        try vault.useWalletCurrency("EUR")
+        try await deposit(Money(cents: 10_000), key: "dep-eur")
+        XCTAssertEqual(try await vault.summary().currencyCode, "EUR")
+
+        _ = try await vault.registerTable(
+            inviteCode: "ILS1",
+            minimum: Money(cents: 1_000),
+            maximum: Money(cents: 8_000),
+            currencyCode: "ILS"
+        )
+
+        let receipt = try await vault.buyIn(
+            inviteCode: "ILS1",
+            amount: Money(cents: 2_000),
+            source: .vault,
+            playerKey: "me",
+            displayName: "Me",
+            paymentIntentID: nil,
+            idempotencyKey: "buy-ils"
+        )
+
+        let charged = try XCTUnwrap(VaultFX.convert(cents: 2_000, from: "ILS", to: "EUR"))
+        XCTAssertEqual(receipt.inPlay, Money(cents: 2_000))
+
+        var summary = try await vault.summary()
+        XCTAssertEqual(summary.available, Money(cents: 10_000 - charged))
+        XCTAssertEqual(summary.inPlay, Money(cents: charged))
+        XCTAssertEqual(summary.currencyCode, "EUR")
+
+        let settlement = try await vault.leaveTable(inviteCode: "ILS1", idempotencyKey: "leave-ils")
+        XCTAssertEqual(settlement.walletReturned, Money(cents: charged))
+        XCTAssertEqual(settlement.tableCurrencyCode, "ILS")
+        XCTAssertEqual(settlement.walletCurrencyCode, "EUR")
+
+        summary = try await vault.summary()
+        XCTAssertEqual(summary.available, Money(cents: 10_000))
+        XCTAssertEqual(summary.inPlay, .zero)
+    }
+
+    func testACADVaultCanWithdrawInAUD() async throws {
+        try vault.useWalletCurrency("CAD")
+        try await deposit(Money(cents: 20_000), key: "dep-cad")
+
+        let request = try await vault.requestWithdrawal(
+            amount: Money(cents: 1_510),
+            currencyCode: "AUD",
+            idempotencyKey: "co-aud"
+        )
+
+        let reserved = try XCTUnwrap(VaultFX.convert(cents: 1_510, from: "AUD", to: "CAD"))
+        XCTAssertEqual(request.currencyCode, "AUD")
+
+        var summary = try await vault.summary()
+        XCTAssertEqual(summary.currencyCode, "CAD")
+        XCTAssertEqual(summary.available, Money(cents: 20_000 - reserved))
+        XCTAssertEqual(summary.pendingWithdrawals, Money(cents: reserved))
+
+        _ = try await vault.settleWithdrawalInSandbox(id: request.id, succeeds: true)
+
+        summary = try await vault.summary()
+        XCTAssertEqual(summary.pendingWithdrawals, .zero)
+        XCTAssertEqual(summary.available, Money(cents: 20_000 - reserved))
     }
 
     func testACanceledCashOutComesBack() async throws {

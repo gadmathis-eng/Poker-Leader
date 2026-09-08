@@ -102,11 +102,13 @@ final class VaultStore {
     func addMoney(_ amount: Money) async throws -> DepositIntent {
         let backend = self.backend
         let key = VaultIdempotency.key("deposit", String(amount.cents))
+        let currency = VaultFX.normalize(summary.currencyCode)
 
         let intent = try await backend.createDepositIntent(
             amount: amount,
             purpose: .vaultDeposit,
             tableInviteCode: nil,
+            currencyCode: currency,
             idempotencyKey: key
         )
         await reloadQuietly()
@@ -114,7 +116,7 @@ final class VaultStore {
         do {
             _ = try await VaultProviders.payment.authorize(
                 amount: amount,
-                currencyCode: summary.currencyCode,
+                currencyCode: currency,
                 reference: intent.referenceCode,
                 summaryLabel: "Pot Master Vault"
             )
@@ -179,56 +181,6 @@ final class VaultStore {
         return receipt
     }
 
-    /// Pays for a seat straight through the provider. The verified payment lands
-    /// on the table without passing through the available balance, and the
-    /// buy-in is only accepted once the backend has settled that payment.
-    @discardableResult
-    func buyInWithApplePay(
-        inviteCode: String,
-        amount: Money,
-        playerKey: String,
-        displayName: String
-    ) async throws -> TableBuyInReceipt {
-        let backend = self.backend
-        let intent = try await backend.createDepositIntent(
-            amount: amount,
-            purpose: .tableBuyIn,
-            tableInviteCode: inviteCode,
-            idempotencyKey: VaultIdempotency.key("tablepay", inviteCode, String(amount.cents))
-        )
-
-        do {
-            _ = try await VaultProviders.payment.authorize(
-                amount: amount,
-                currencyCode: summary.currencyCode,
-                reference: intent.referenceCode,
-                summaryLabel: "Buy-in at table \(inviteCode)"
-            )
-        } catch {
-            _ = try? await backend.cancelDeposit(intentID: intent.id)
-            await reloadQuietly()
-            throw VaultError.from(error)
-        }
-
-        let settled = try await backend.confirmDeposit(intentID: intent.id)
-        guard settled.status.isVerified else {
-            await reloadQuietly()
-            throw VaultError.paymentFailed(settled.failureReason ?? "The payment did not go through.")
-        }
-
-        let receipt = try await backend.buyIn(
-            inviteCode: inviteCode,
-            amount: amount,
-            source: .applePay,
-            playerKey: playerKey,
-            displayName: displayName,
-            paymentIntentID: settled.id,
-            idempotencyKey: VaultIdempotency.stableKey("buyin_intent", settled.id.uuidString)
-        )
-        await reloadQuietly()
-        return receipt
-    }
-
     /// Rejected on every backend. Settlement is posted by the poker engine.
     func recordHand(inviteCode: String, handID: String, deltas: [String: Money]) async {
         _ = inviteCode
@@ -283,10 +235,12 @@ final class VaultStore {
     }
 
     @discardableResult
-    func requestCashOut(_ amount: Money) async throws -> WithdrawalRequest {
+    func requestCashOut(_ amount: Money, currencyCode: String? = nil) async throws -> WithdrawalRequest {
+        let payout = CurrencyPreferences.normalizedCurrencyCode(currencyCode ?? summary.currencyCode)
         let request = try await backend.requestWithdrawal(
             amount: amount,
-            idempotencyKey: VaultIdempotency.key("cashout", String(amount.cents))
+            currencyCode: payout,
+            idempotencyKey: VaultIdempotency.key("cashout", payout, String(amount.cents))
         )
         await reloadQuietly()
         return request

@@ -5,7 +5,7 @@ insert into auth.users (id, email) values
     ('11111111-1111-1111-1111-111111111111', 'host@example.com'),
     ('22222222-2222-2222-2222-222222222222', 'guest@example.com');
 
-\echo '=== 1. host opens vault, deposits $100 via mock Apple Pay ==='
+\echo '=== 1. host opens vault, deposits $100 via sandbox deposit ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select public.vault_open('USD');
 
@@ -36,13 +36,15 @@ select status from public.vault_sandbox_confirm_deposit(:'g_intent');
 \echo '=== 3. host publishes the shared table, then registers the buy-in range ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 insert into public.open_tables (
-    id, invite_code, host_user_id, host_display_name, host_player_key
+    id, invite_code, host_user_id, host_display_name, host_player_key,
+    session_currency_code
 ) values (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
     'ABC123',
     '11111111-1111-1111-1111-111111111111',
     'Host',
-    '11111111-1111-1111-1111-111111111111'
+    '11111111-1111-1111-1111-111111111111',
+    'USD'
 );
 select invite_code, min_buy_in_cents, max_buy_in_cents from public.vault_register_table('ABC123', 2000, 8000);
 select public.vault_table_buy_in('ABC123', 4000, 'vault', 'buyin-host-1', 'Host');
@@ -60,7 +62,7 @@ select public.test_assert(
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'Guest');
 
-\echo '=== 4. guest tops up straight onto the table with Apple Pay ==='
+\echo '=== 4. guest tops up straight onto the table with a direct payment ==='
 select id as g_table_intent from public.vault_create_deposit_intent(2000, 'buyin-pay-1', 'table_buy_in', 'ABC123') \gset
 \echo '--- an unverified payment cannot buy in ---'
 do $$

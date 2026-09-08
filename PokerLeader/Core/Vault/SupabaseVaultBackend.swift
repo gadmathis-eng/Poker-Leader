@@ -49,8 +49,12 @@ struct SupabaseVaultBackend: VaultBackend {
     // MARK: - Reading
 
     func openVault() async throws -> VaultSummary {
-        try await call("vault_open", params: CurrencyParams(p_currency: "USD"), as: SummaryRow.self)
-            .model
+        try await call(
+            "vault_open",
+            params: CurrencyParams(p_currency: VaultFX.preferredOpeningCurrency()),
+            as: SummaryRow.self
+        )
+        .model
     }
 
     func summary() async throws -> VaultSummary {
@@ -71,6 +75,7 @@ struct SupabaseVaultBackend: VaultBackend {
         amount: Money,
         purpose: DepositPurpose,
         tableInviteCode: String?,
+        currencyCode: String,
         idempotencyKey: String
     ) async throws -> DepositIntent {
         let row: IntentRow = try await call(
@@ -80,8 +85,8 @@ struct SupabaseVaultBackend: VaultBackend {
                 p_idempotency_key: idempotencyKey,
                 p_purpose: purpose.rawValue,
                 p_table_invite_code: tableInviteCode,
-                p_provider: "mock_apple_pay",
-                p_currency: "USD"
+                p_provider: "sandbox",
+                p_currency: VaultFX.normalize(currencyCode)
             )
         )
         return row.model
@@ -226,13 +231,17 @@ struct SupabaseVaultBackend: VaultBackend {
 
     // MARK: - Withdrawals
 
-    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
+    func requestWithdrawal(
+        amount: Money,
+        currencyCode: String,
+        idempotencyKey: String
+    ) async throws -> WithdrawalRequest {
         let row: WithdrawalRow = try await call(
             "vault_request_withdrawal",
             params: WithdrawalParams(
                 p_amount_cents: amount.cents,
                 p_idempotency_key: idempotencyKey,
-                p_currency: "USD"
+                p_currency: CurrencyPreferences.normalizedCurrencyCode(currencyCode)
             )
         )
         return row.model
@@ -503,6 +512,9 @@ private struct SettlementRow: Decodable {
     let returned_cents: Int
     let reference_code: String
     let already_settled: Bool
+    let table_currency: String?
+    let wallet_returned_cents: Int?
+    let wallet_currency: String?
 
     var model: TableSettlement {
         TableSettlement(
@@ -510,7 +522,10 @@ private struct SettlementRow: Decodable {
             boughtIn: Money(cents: bought_in_cents),
             returned: Money(cents: returned_cents),
             referenceCode: reference_code,
-            alreadySettled: already_settled
+            alreadySettled: already_settled,
+            tableCurrencyCode: table_currency ?? wallet_currency ?? "USD",
+            walletReturned: wallet_returned_cents.map(Money.init(cents:)),
+            walletCurrencyCode: wallet_currency
         )
     }
 }

@@ -11,7 +11,7 @@ import Foundation
 ///
 /// - Amounts the app sends are *intent*. Amounts the app reads back are *fact*.
 ///   A deposit is worth nothing until `confirmDeposit` has run through the
-///   provider and the backend has settled it, and a buy-in paid with Apple Pay
+///   provider and the backend has settled it, and a buy-in paid by a card rail
 ///   has to name a deposit the backend already verified.
 /// - Every mutating call carries an idempotency key. Send the same key twice —
 ///   after a timeout, a retry, a backgrounded app — and the second call returns
@@ -32,6 +32,7 @@ protocol VaultBackend {
         amount: Money,
         purpose: DepositPurpose,
         tableInviteCode: String?,
+        currencyCode: String,
         idempotencyKey: String
     ) async throws -> DepositIntent
 
@@ -93,13 +94,38 @@ protocol VaultBackend {
     /// into their Vault.
     func leaveTable(inviteCode: String, idempotencyKey: String) async throws -> TableSettlement
 
-    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest
+    func requestWithdrawal(
+        amount: Money,
+        currencyCode: String,
+        idempotencyKey: String
+    ) async throws -> WithdrawalRequest
     func withdrawals() async throws -> [WithdrawalRequest]
     func cancelWithdrawal(id: UUID) async throws -> WithdrawalRequest
 
     /// Demo only: walks a pending cash-out to a finished state so the states can
     /// be seen without a payout rail.
     func settleWithdrawalInSandbox(id: UUID, succeeds: Bool) async throws -> WithdrawalRequest
+}
+
+extension VaultBackend {
+    func createDepositIntent(
+        amount: Money,
+        purpose: DepositPurpose,
+        tableInviteCode: String?,
+        idempotencyKey: String
+    ) async throws -> DepositIntent {
+        try await createDepositIntent(
+            amount: amount,
+            purpose: purpose,
+            tableInviteCode: tableInviteCode,
+            currencyCode: "USD",
+            idempotencyKey: idempotencyKey
+        )
+    }
+
+    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
+        try await requestWithdrawal(amount: amount, currencyCode: "USD", idempotencyKey: idempotencyKey)
+    }
 }
 
 enum VaultIdempotency {

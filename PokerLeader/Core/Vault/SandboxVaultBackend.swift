@@ -30,17 +30,27 @@ final class SandboxVaultBackend: VaultBackend {
     // MARK: - Reading
 
     func openVault() async throws -> VaultSummary {
-        try await summary()
+        if state.ledger.isEmpty, state.entries.isEmpty, state.intents.isEmpty {
+            try useWalletCurrency(VaultFX.preferredOpeningCurrency())
+        }
+        return try await summary()
     }
 
     func summary() async throws -> VaultSummary {
         let pendingDeposits = state.intents.values
             .filter { $0.purpose == .vaultDeposit && $0.status == .requiresConfirmation }
-            .reduce(0) { $0 + $1.amountCents }
+            .reduce(0) { total, intent in
+                total + (VaultFX.convert(
+                    cents: intent.amountCents,
+                    from: intent.currencyCode,
+                    to: state.walletCurrencyCode
+                ) ?? 0)
+            }
 
         var result = VaultSummary.empty
+        result.currencyCode = state.walletCurrencyCode
         result.available = Money(cents: state.balance(.available))
-        result.inPlay = Money(cents: state.inPlayTotal)
+        result.inPlay = Money(cents: state.inPlayTotalInWallet)
         result.pendingDeposits = Money(cents: pendingDeposits)
         result.pendingWithdrawals = Money(cents: state.balance(.pendingWithdrawal))
         result.isSandbox = true
@@ -58,21 +68,27 @@ final class SandboxVaultBackend: VaultBackend {
         amount: Money,
         purpose: DepositPurpose,
         tableInviteCode: String?,
+        currencyCode: String,
         idempotencyKey: String
     ) async throws -> DepositIntent {
         if let existing = state.intents.values.first(where: { $0.idempotencyKey == idempotencyKey }) {
             return existing.model
         }
 
+        let payCurrency = VaultFX.normalize(currencyCode)
+        guard VaultFX.supports(payCurrency) else {
+            throw VaultError.backend("No exchange rate for \(payCurrency).")
+        }
+
         let summary = try await summary()
         guard amount >= summary.depositMinimum else {
             throw VaultError.amountOutOfRange(
-                "The smallest deposit is \(summary.depositMinimum.formatted(currencyCode: "USD"))."
+                "The smallest deposit is \(summary.depositMinimum.formatted(currencyCode: payCurrency))."
             )
         }
         guard amount <= summary.depositMaximum else {
             throw VaultError.amountOutOfRange(
-                "The largest deposit is \(summary.depositMaximum.formatted(currencyCode: "USD"))."
+                "The largest deposit is \(summary.depositMaximum.formatted(currencyCode: payCurrency))."
             )
         }
 
@@ -85,7 +101,8 @@ final class SandboxVaultBackend: VaultBackend {
             tableInviteCode: tableInviteCode?.uppercased(),
             idempotencyKey: idempotencyKey,
             consumed: false,
-            failureReason: nil
+            failureReason: nil,
+            currencyCode: payCurrency
         )
         state.intents[intent.id] = intent
 
@@ -96,7 +113,8 @@ final class SandboxVaultBackend: VaultBackend {
                     status: .pending,
                     amountCents: amount.cents,
                     intentID: intent.id,
-                    detail: "Awaiting payment confirmation"
+                    detail: "Awaiting payment confirmation",
+                    currencyCode: payCurrency
                 )
             )
         }
@@ -118,18 +136,30 @@ final class SandboxVaultBackend: VaultBackend {
         state.intents[intentID] = intent
 
         if intent.purpose == .vaultDeposit {
+            let walletCurrency = state.walletCurrencyCode
+            let walletCents = try VaultFX.convertRequired(
+                cents: intent.amountCents,
+                from: intent.currencyCode,
+                to: walletCurrency
+            )
             let posted = try state.post(
                 kind: "deposit",
                 idempotencyKey: "intent:\(intentID.uuidString)",
-                moves: [
-                    Move(.pspClearing, -intent.amountCents),
-                    Move(.available, intent.amountCents)
-                ]
+                moves: State.conversionMoves(
+                    from: .pspClearing,
+                    fromCents: intent.amountCents,
+                    fromCurrency: intent.currencyCode,
+                    to: .available,
+                    toCents: walletCents,
+                    toCurrency: walletCurrency
+                )
             )
             state.updateStatement(
                 intentID: intentID,
                 to: .completed,
-                detail: "Added to your Vault",
+                detail: intent.currencyCode == walletCurrency
+                    ? "Added to your Vault"
+                    : "Converted from \(intent.currencyCode) into \(walletCurrency)",
                 ledgerID: posted.id
             )
         }
@@ -196,17 +226,28 @@ final class SandboxVaultBackend: VaultBackend {
         }
         guard table.model.contains(amount) else {
             throw VaultError.amountOutOfRange(
-                "The buy-in must be between \(table.model.minimum.formatted(currencyCode: "USD")) and \(table.model.maximum.formatted(currencyCode: "USD"))."
+                "The buy-in must be between \(table.model.minimum.formatted(currencyCode: table.currencyCode)) and \(table.model.maximum.formatted(currencyCode: table.currencyCode))."
             )
         }
 
+        let tableCurrency = table.currencyCode
+        let walletCurrency = state.walletCurrencyCode
         let from: AccountKey
+        let sourceCents: Int
+        let sourceCurrency: String
         switch source {
         case .vault:
-            guard state.balance(.available) >= amount.cents else {
+            let walletCents = try VaultFX.convertRequired(
+                cents: amount.cents,
+                from: tableCurrency,
+                to: walletCurrency
+            )
+            guard state.balance(.available) >= walletCents else {
                 throw VaultError.insufficientFunds
             }
             from = .available
+            sourceCents = walletCents
+            sourceCurrency = walletCurrency
         case .applePay:
             guard let paymentIntentID, var intent = state.intents[paymentIntentID] else {
                 throw VaultError.backend("That buy-in has no payment attached.")
@@ -217,7 +258,12 @@ final class SandboxVaultBackend: VaultBackend {
             guard !intent.consumed else {
                 throw VaultError.backend("That payment was already used.")
             }
-            guard intent.amountCents == amount.cents,
+            let expected = try VaultFX.convertRequired(
+                cents: amount.cents,
+                from: tableCurrency,
+                to: intent.currencyCode
+            )
+            guard expected == intent.amountCents,
                   intent.purpose == .tableBuyIn,
                   intent.tableInviteCode == code
             else {
@@ -226,6 +272,8 @@ final class SandboxVaultBackend: VaultBackend {
             intent.consumed = true
             state.intents[paymentIntentID] = intent
             from = .pspClearing
+            sourceCents = intent.amountCents
+            sourceCurrency = intent.currencyCode
         }
 
         let kind = source == .vault ? "table_buy_in_vault" : "table_buy_in_direct"
@@ -233,7 +281,14 @@ final class SandboxVaultBackend: VaultBackend {
         let posted = try state.post(
             kind: kind,
             idempotencyKey: idempotencyKey,
-            moves: [Move(from, -amount.cents), Move(inPlay, amount.cents)]
+            moves: State.conversionMoves(
+                from: from,
+                fromCents: sourceCents,
+                fromCurrency: sourceCurrency,
+                to: inPlay,
+                toCents: amount.cents,
+                toCurrency: tableCurrency
+            )
         )
 
         var stake = state.stakes[code] ?? StoredStake(playerKey: playerKey, displayName: displayName)
@@ -253,8 +308,11 @@ final class SandboxVaultBackend: VaultBackend {
                     ledgerID: posted.id,
                     tableInviteCode: code,
                     detail: source == .vault
-                        ? "Moved from Available into In Play"
-                        : "Paid straight onto the table"
+                        ? (tableCurrency == sourceCurrency
+                            ? "Moved from Available into In Play"
+                            : "Converted from \(sourceCurrency) into \(tableCurrency) on the table")
+                        : "Paid straight onto the table",
+                    currencyCode: source == .vault ? sourceCurrency : tableCurrency
                 )
             )
         }
@@ -318,25 +376,49 @@ final class SandboxVaultBackend: VaultBackend {
             throw VaultError.backend("You are not at that table.")
         }
 
+        let tableCurrency = state.tables[code]?.currencyCode ?? state.walletCurrencyCode
+        let walletCurrency = state.walletCurrencyCode
+
         if stake.hasLeft {
             return TableSettlement(
                 inviteCode: code,
                 boughtIn: Money(cents: stake.boughtInCents),
                 returned: Money(cents: stake.returnedCents),
                 referenceCode: "",
-                alreadySettled: true
+                alreadySettled: true,
+                tableCurrencyCode: tableCurrency,
+                walletReturned: VaultFX.convert(
+                    Money(cents: stake.returnedCents),
+                    from: tableCurrency,
+                    to: walletCurrency
+                ),
+                walletCurrencyCode: walletCurrency
             )
         }
 
         let inPlay = AccountKey.inPlay(code)
         let finalCents = state.balance(inPlay)
         var referenceCode = ""
+        var walletReturned = 0
 
         if finalCents > 0 {
+            let converted = try VaultFX.convertRequired(
+                cents: finalCents,
+                from: tableCurrency,
+                to: walletCurrency
+            )
+            walletReturned = converted
             let posted = try state.post(
                 kind: "table_return",
                 idempotencyKey: idempotencyKey,
-                moves: [Move(inPlay, -finalCents), Move(.available, finalCents)]
+                moves: State.conversionMoves(
+                    from: inPlay,
+                    fromCents: finalCents,
+                    fromCurrency: tableCurrency,
+                    to: .available,
+                    toCents: walletReturned,
+                    toCurrency: walletCurrency
+                )
             )
             referenceCode = posted.referenceCode
             state.statement.append(
@@ -346,7 +428,10 @@ final class SandboxVaultBackend: VaultBackend {
                     amountCents: 0,
                     ledgerID: posted.id,
                     tableInviteCode: code,
-                    detail: "Returned from the table to your Vault"
+                    detail: tableCurrency == walletCurrency
+                        ? "Returned from the table to your Vault"
+                        : "Converted from \(tableCurrency) back into \(walletCurrency)",
+                    currencyCode: walletCurrency
                 )
             )
         }
@@ -362,26 +447,40 @@ final class SandboxVaultBackend: VaultBackend {
             boughtIn: Money(cents: stake.boughtInCents),
             returned: Money(cents: finalCents),
             referenceCode: referenceCode,
-            alreadySettled: false
+            alreadySettled: false,
+            tableCurrencyCode: tableCurrency,
+            walletReturned: Money(cents: walletReturned),
+            walletCurrencyCode: walletCurrency
         )
     }
 
     // MARK: - Withdrawals
 
-    func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
+    func requestWithdrawal(
+        amount: Money,
+        currencyCode: String,
+        idempotencyKey: String
+    ) async throws -> WithdrawalRequest {
         if let existing = state.withdrawals.values.first(where: { $0.idempotencyKey == idempotencyKey }) {
             return existing.model
         }
 
+        let payoutCurrency = VaultFX.normalize(currencyCode)
         let summary = try await summary()
-        guard amount >= summary.withdrawalMinimum else {
+        let walletCents = try VaultFX.convertRequired(
+            cents: amount.cents,
+            from: payoutCurrency,
+            to: state.walletCurrencyCode
+        )
+
+        guard Money(cents: walletCents) >= summary.withdrawalMinimum else {
             throw VaultError.amountOutOfRange(
-                "The smallest cash-out is \(summary.withdrawalMinimum.formatted(currencyCode: "USD"))."
+                "The smallest cash-out is \(summary.withdrawalMinimum.formatted(currencyCode: state.walletCurrencyCode))."
             )
         }
-        guard amount <= summary.withdrawable else {
+        guard Money(cents: walletCents) <= summary.withdrawable else {
             throw VaultError.amountOutOfRange(
-                "You can cash out at most \(summary.withdrawable.formatted(currencyCode: "USD")) right now."
+                "You can cash out at most \(summary.withdrawable.formatted(currencyCode: state.walletCurrencyCode)) right now."
             )
         }
 
@@ -393,7 +492,7 @@ final class SandboxVaultBackend: VaultBackend {
         let posted = try state.post(
             kind: "withdrawal_request",
             idempotencyKey: idempotencyKey,
-            moves: [Move(.available, -amount.cents), Move(.pendingWithdrawal, amount.cents)]
+            moves: [Move(.available, -walletCents), Move(.pendingWithdrawal, walletCents)]
         )
 
         let withdrawal = StoredWithdrawal(
@@ -401,6 +500,9 @@ final class SandboxVaultBackend: VaultBackend {
             referenceCode: SandboxReference.code("CO"),
             amountCents: amount.cents,
             feeCents: fee.cents,
+            currencyCode: payoutCurrency,
+            sourceAmountCents: walletCents,
+            sourceCurrencyCode: state.walletCurrencyCode,
             status: .pending,
             requestedAt: .now,
             idempotencyKey: idempotencyKey,
@@ -415,7 +517,10 @@ final class SandboxVaultBackend: VaultBackend {
                 amountCents: 0,
                 ledgerID: posted.id,
                 withdrawalID: withdrawal.id,
-                detail: "Cash-out requested"
+                detail: payoutCurrency == state.walletCurrencyCode
+                    ? "Cash-out requested"
+                    : "Cash-out requested in \(payoutCurrency)",
+                currencyCode: payoutCurrency
             )
         )
 
@@ -451,24 +556,28 @@ final class SandboxVaultBackend: VaultBackend {
         }
         guard withdrawal.status.isOpen else { return withdrawal.model }
 
+        let sourceCents = withdrawal.sourceAmountCents
         let posted: StoredLedger
         if outcome == .completed {
             posted = try state.post(
                 kind: "withdrawal_completed",
                 idempotencyKey: "withdrawal_complete:\(id.uuidString)",
-                moves: [
-                    Move(.pendingWithdrawal, -withdrawal.amountCents),
-                    Move(.payoutClearing, withdrawal.amountCents - withdrawal.feeCents),
-                    Move(.fees, withdrawal.feeCents)
-                ]
+                moves: State.payoutMoves(
+                    sourceCents: sourceCents,
+                    sourceCurrency: withdrawal.sourceCurrencyCode,
+                    payoutCents: withdrawal.amountCents,
+                    netCents: withdrawal.amountCents - withdrawal.feeCents,
+                    feeCents: withdrawal.feeCents,
+                    payoutCurrency: withdrawal.currencyCode
+                )
             )
         } else {
             posted = try state.post(
                 kind: "withdrawal_\(outcome.rawValue)",
                 idempotencyKey: "withdrawal_\(outcome.rawValue):\(id.uuidString)",
                 moves: [
-                    Move(.pendingWithdrawal, -withdrawal.amountCents),
-                    Move(.available, withdrawal.amountCents)
+                    Move(.pendingWithdrawal, -sourceCents),
+                    Move(.available, sourceCents)
                 ]
             )
         }
@@ -504,6 +613,15 @@ final class SandboxVaultBackend: VaultBackend {
         UserDefaults.standard.removeObject(forKey: storageKey)
     }
 
+    func useWalletCurrency(_ code: String) throws {
+        let normalized = VaultFX.normalize(code)
+        guard VaultFX.supports(normalized) else {
+            throw VaultError.backend("No exchange rate for \(normalized).")
+        }
+        state.walletCurrencyCode = normalized
+        save()
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(state) else { return }
         UserDefaults.standard.set(data, forKey: storageKey)
@@ -536,6 +654,7 @@ private enum AccountKey: Hashable, Codable {
     case pspClearing
     case payoutClearing
     case fees
+    case fx(String)
     /// Stands for everyone else at the table. A hand moves money between seats;
     /// with only one seat on this device the rest of the table is this account,
     /// which keeps every posting balanced.
@@ -546,7 +665,7 @@ private enum AccountKey: Hashable, Codable {
     var isPlayerHeld: Bool {
         switch self {
         case .available, .pendingWithdrawal, .inPlay: true
-        case .pspClearing, .payoutClearing, .fees, .tableCounterparty: false
+        case .pspClearing, .payoutClearing, .fees, .fx, .tableCounterparty: false
         }
     }
 }
@@ -586,6 +705,7 @@ private struct StoredStatement: Codable {
     var withdrawalID: UUID?
     var tableInviteCode: String?
     var detail: String?
+    var currencyCode: String = "USD"
     var createdAt = Date.now
 
     init(
@@ -596,7 +716,8 @@ private struct StoredStatement: Codable {
         intentID: UUID? = nil,
         withdrawalID: UUID? = nil,
         tableInviteCode: String? = nil,
-        detail: String? = nil
+        detail: String? = nil,
+        currencyCode: String = "USD"
     ) {
         self.kind = kind
         self.status = status
@@ -606,6 +727,7 @@ private struct StoredStatement: Codable {
         self.withdrawalID = withdrawalID
         self.tableInviteCode = tableInviteCode
         self.detail = detail
+        self.currencyCode = currencyCode
     }
 
     var model: VaultTransaction {
@@ -615,7 +737,7 @@ private struct StoredStatement: Codable {
             kind: kind,
             status: status,
             amount: Money(cents: amountCents),
-            currencyCode: "USD",
+            currencyCode: currencyCode,
             tableInviteCode: tableInviteCode,
             isDemo: true,
             detail: detail,
@@ -635,12 +757,14 @@ private struct StoredIntent: Codable {
     var consumed: Bool
     var failureReason: String?
 
+    var currencyCode: String = "USD"
+
     var model: DepositIntent {
         DepositIntent(
             id: id,
             referenceCode: referenceCode,
             amount: Money(cents: amountCents),
-            currencyCode: "USD",
+            currencyCode: currencyCode,
             status: status,
             purpose: purpose,
             tableInviteCode: tableInviteCode,
@@ -655,6 +779,9 @@ private struct StoredWithdrawal: Codable {
     let referenceCode: String
     let amountCents: Int
     let feeCents: Int
+    var currencyCode: String = "USD"
+    var sourceAmountCents: Int = 0
+    var sourceCurrencyCode: String = "USD"
     var status: WithdrawalStatus
     let requestedAt: Date
     let idempotencyKey: String
@@ -667,7 +794,7 @@ private struct StoredWithdrawal: Codable {
             amount: Money(cents: amountCents),
             fee: Money(cents: feeCents),
             net: Money(cents: amountCents - feeCents),
-            currencyCode: "USD",
+            currencyCode: currencyCode,
             status: status,
             isDemo: true,
             failureReason: failureReason,
@@ -709,6 +836,7 @@ private struct State: Codable {
     var withdrawals: [UUID: StoredWithdrawal] = [:]
     var tables: [String: StoredTable] = [:]
     var stakes: [String: StoredStake] = [:]
+    var walletCurrencyCode: String = "USD"
 
     func balance(_ account: AccountKey) -> Int {
         entries.filter { $0.account == account }.reduce(0) { $0 + $1.cents }
@@ -719,6 +847,63 @@ private struct State: Codable {
             if case .inPlay = entry.account { return total + entry.cents }
             return total
         }
+    }
+
+    var inPlayTotalInWallet: Int {
+        let grouped = Dictionary(grouping: entries) { $0.account }
+        return grouped.reduce(0) { total, pair in
+            guard case .inPlay(let code) = pair.key else { return total }
+            let cents = pair.value.reduce(0) { $0 + $1.cents }
+            let tableCurrency = tables[code]?.currencyCode ?? walletCurrencyCode
+            return total + (VaultFX.convert(cents: cents, from: tableCurrency, to: walletCurrencyCode) ?? 0)
+        }
+    }
+
+    static func conversionMoves(
+        from: AccountKey,
+        fromCents: Int,
+        fromCurrency: String,
+        to: AccountKey,
+        toCents: Int,
+        toCurrency: String
+    ) -> [Move] {
+        let source = VaultFX.normalize(fromCurrency)
+        let target = VaultFX.normalize(toCurrency)
+        if source == target {
+            return [Move(from, -fromCents), Move(to, toCents)]
+        }
+        return [
+            Move(from, -fromCents),
+            Move(.fx(source), fromCents),
+            Move(.fx(target), -toCents),
+            Move(to, toCents)
+        ]
+    }
+
+    static func payoutMoves(
+        sourceCents: Int,
+        sourceCurrency: String,
+        payoutCents: Int,
+        netCents: Int,
+        feeCents: Int,
+        payoutCurrency: String
+    ) -> [Move] {
+        let source = VaultFX.normalize(sourceCurrency)
+        let payout = VaultFX.normalize(payoutCurrency)
+        if source == payout {
+            return [
+                Move(.pendingWithdrawal, -sourceCents),
+                Move(.payoutClearing, netCents),
+                Move(.fees, feeCents)
+            ]
+        }
+        return [
+            Move(.pendingWithdrawal, -sourceCents),
+            Move(.fx(source), sourceCents),
+            Move(.fx(payout), -payoutCents),
+            Move(.payoutClearing, netCents),
+            Move(.fees, feeCents)
+        ]
     }
 
     func buyInTotal(for inviteCode: String) -> Int {

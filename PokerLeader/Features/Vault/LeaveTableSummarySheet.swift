@@ -15,7 +15,13 @@ struct LeaveTableSummarySheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var store = VaultStore.shared
 
-    private var currencyCode: String { store.currencyCode }
+    private var tableCurrencyCode: String { settlement.tableCurrencyCode }
+    private var vaultCurrencyCode: String {
+        settlement.walletCurrencyCode ?? store.currencyCode
+    }
+    private var returnedToVault: Money {
+        settlement.walletReturned ?? settlement.returned
+    }
 
     private var netTint: Color {
         if settlement.net.isZero { return AppTheme.text }
@@ -38,7 +44,7 @@ struct LeaveTableSummarySheet: View {
                         Text(headline)
                             .font(.title3.weight(.bold))
                             .foregroundStyle(AppTheme.text)
-                        Text(settlement.net.formattedSigned(currencyCode: currencyCode))
+                        Text(settlement.net.formattedSigned(currencyCode: tableCurrencyCode))
                             .font(.system(size: 44, weight: .heavy, design: .rounded))
                             .foregroundStyle(netTint)
                             .monospacedDigit()
@@ -49,17 +55,17 @@ struct LeaveTableSummarySheet: View {
                     .cardSurface(padding: 20)
 
                     VStack(spacing: 0) {
-                        row("You bought in with", settlement.boughtIn.formatted(currencyCode: currencyCode))
+                        row("You bought in with", settlement.boughtIn.formatted(currencyCode: tableCurrencyCode))
                         Divider().overlay(AppTheme.cardBorder)
                         row(
                             settlement.net.isNegative ? "Losses" : "Winnings",
-                            settlement.net.magnitude.formatted(currencyCode: currencyCode),
+                            settlement.net.magnitude.formatted(currencyCode: tableCurrencyCode),
                             tint: netTint
                         )
                         Divider().overlay(AppTheme.cardBorder)
                         row(
                             "Returned to your Vault",
-                            settlement.returned.formatted(currencyCode: currencyCode),
+                            returnedToVault.formatted(currencyCode: vaultCurrencyCode),
                             tint: AppTheme.positive,
                             isBold: true
                         )
