@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+enum VaultDepositPhase: Equatable {
+    /// The payment sheet is up — or the mock is pretending it is.
+    case authorizing
+    /// The sheet closed. Waiting for the backend to settle the intent.
+    case verifying
+}
+
 /// What the screens talk to. It owns the choice of backend, sequences the two
 /// halves of a payment, and holds the last thing the backend said.
 ///
@@ -99,7 +106,10 @@ final class VaultStore {
     /// backend to settle it. The amount added is the backend's answer, not the
     /// amount passed in here.
     @discardableResult
-    func addMoney(_ amount: Money) async throws -> DepositIntent {
+    func addMoney(
+        _ amount: Money,
+        onPhase: ((VaultDepositPhase) -> Void)? = nil
+    ) async throws -> DepositIntent {
         let backend = self.backend
         let key = VaultIdempotency.key("deposit", String(amount.cents))
         let currency = VaultFX.normalize(summary.currencyCode)
@@ -114,6 +124,7 @@ final class VaultStore {
         await reloadQuietly()
 
         do {
+            onPhase?(.authorizing)
             _ = try await VaultProviders.payment.authorize(
                 amount: amount,
                 currencyCode: currency,
@@ -128,6 +139,7 @@ final class VaultStore {
             throw VaultError.from(error)
         }
 
+        onPhase?(.verifying)
         let settled = try await backend.confirmDeposit(intentID: intent.id)
         await reloadQuietly()
 
@@ -189,7 +201,8 @@ final class VaultStore {
         inviteCode: String,
         amount: Money,
         playerKey: String,
-        displayName: String
+        displayName: String,
+        onPhase: ((VaultDepositPhase) -> Void)? = nil
     ) async throws -> TableBuyInReceipt {
         let backend = self.backend
         let tableCurrency = (try? await backend.tableLimits(inviteCode: inviteCode))?.currencyCode
@@ -208,6 +221,7 @@ final class VaultStore {
         )
 
         do {
+            onPhase?(.authorizing)
             _ = try await VaultProviders.payment.authorize(
                 amount: charged,
                 currencyCode: walletCurrency,
@@ -220,6 +234,7 @@ final class VaultStore {
             throw VaultError.from(error)
         }
 
+        onPhase?(.verifying)
         let settled = try await backend.confirmDeposit(intentID: intent.id)
         guard settled.status.isVerified else {
             await reloadQuietly()

@@ -19,7 +19,7 @@ PokerLeader/
 │   ├── Extensions/               Money + date formatting
 │   ├── Vault/                    Player balances: integer-cents money, the
 │   │                             backend seam, the Supabase and sandbox
-│   │                             backends, and the payment-provider seam
+│   │                             backends, and Apple Pay (PassKit sheet + mock)
 │   └── Firebase/                 Placeholder until GoogleService-Info.plist
 ├── Repositories/
 │   ├── CircleRepository.swift
