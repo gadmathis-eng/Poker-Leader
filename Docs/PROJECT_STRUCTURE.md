@@ -19,7 +19,7 @@ PokerLeader/
 │   ├── Extensions/               Money + date formatting
 │   ├── Vault/                    Player balances: integer-cents money, the
 │   │                             backend seam, the Supabase and sandbox
-│   │                             backends, and the payment-provider seam
+│   │                             backends, and Apple Pay (PassKit sheet + mock)
 │   └── Firebase/                 Placeholder until GoogleService-Info.plist
 ├── Repositories/
 │   ├── CircleRepository.swift
@@ -53,7 +53,9 @@ PokerLeader/
 
 Balances are the one thing the app does not own. Everything under `Core/Vault/`
 asks a backend and reads the answer back; the ledger, the authorisation and the
-arithmetic live in `supabase/migrations/20260907120000_vault_ledger.sql`. See
+arithmetic live in `supabase/migrations/20260907120000_vault_ledger.sql`. Stripe
+charges the Apple Pay token from `supabase/functions/stripe-apple-pay` — see
+[Payments.md](Payments.md). RevenueCat is not part of this path. See
 [Vault.md](Vault.md).
 
 ## Firebase (phase 2)
