@@ -32,9 +32,11 @@ and the `Decimal` the rest of the app uses for table stakes, and it rounds to th
 nearest cent in both directions.
 
 The wallet is one currency. A table or a cash-out can be another. Buying in
-with USD at a GBP table, or withdrawing GBP from a USD vault, converts at
-`vault_fx_rates` (the same table as `VaultFX` / `HardcodedExchangeRateProvider`)
-and then transfers. The client never chooses the rate.
+with euros at an Israeli-shekel table, or withdrawing CAD from an AUD vault,
+converts at `vault_fx_rates` (the same table as `VaultFX` /
+`HardcodedExchangeRateProvider`) and then transfers. The client never chooses
+the rate. The wallet opens in the player's preferred currency when they first
+visit; later visits keep that unit.
 
 ## Double-entry, and why the balance column is not the truth
 

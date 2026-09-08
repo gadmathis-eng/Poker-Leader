@@ -41,3 +41,7 @@ rewrite the pot, replay an action, settle twice, recover committed chips by
 leaving or by forging a finished hand, hold the game open by disconnecting,
 read a live table from the invite code alone, or change settlement by
 picking a different currency.
+`40_vault_fx.sql` is the cross-currency suite: conversion between any published
+pair (not only USD and GBP), a buy-in that converts then transfers, a leave that
+converts chips back into the wallet, a cash-out in another unit, and the same
+path with an EUR wallet on an ILS table paying out CAD.

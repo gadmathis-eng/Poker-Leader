@@ -4,14 +4,35 @@ import Foundation
 ///
 /// The wallet is one pot. A table or a cash-out can be another currency, so
 /// the cents that leave the wallet are not the cents that land on the table or
-/// on the payout. This is the same table the Postgres functions use, so a
-/// demo device and the real backend convert a USD buy-in into a GBP withdrawal
-/// the same way.
+/// on the payout. This is the same table the Postgres functions use
+/// (`vault_fx_rates` / `HardcodedExchangeRateProvider`), so a demo device and
+/// the real backend convert any published pair the same way.
 enum VaultFX {
     static let ratesPerUSD: [String: Decimal] = HardcodedExchangeRateProvider.ratesPerUSD
 
+    static var supportedCurrencyCodes: Set<String> {
+        Set(ratesPerUSD.keys)
+    }
+
     static func normalize(_ code: String) -> String {
         CurrencyPreferences.normalizedCurrencyCode(code)
+    }
+
+    static func supports(_ currencyCode: String) -> Bool {
+        ratePerUSD(for: currencyCode) != nil
+    }
+
+    /// Currency the Vault opens in when the player has no wallet yet: their
+    /// preferred unit, if we publish a rate for it.
+    static func preferredOpeningCurrency() -> String {
+        let stored = UserDefaults.standard.string(forKey: "preferredCurrencyCode")
+            ?? CurrencyPreferences.defaultCurrencyCode
+        let code = normalize(stored)
+        if supports(code) { return code }
+        if supports(CurrencyPreferences.defaultCurrencyCode) {
+            return CurrencyPreferences.defaultCurrencyCode
+        }
+        return "USD"
     }
 
     static func ratePerUSD(for currencyCode: String) -> Decimal? {
@@ -45,5 +66,14 @@ enum VaultFX {
             return nil
         }
         return Money(cents: cents)
+    }
+
+    static func convertRequired(cents: Int, from sourceCurrencyCode: String, to targetCurrencyCode: String) throws -> Int {
+        guard let cents = convert(cents: cents, from: sourceCurrencyCode, to: targetCurrencyCode) else {
+            throw VaultError.backend(
+                "No exchange rate between \(normalize(sourceCurrencyCode)) and \(normalize(targetCurrencyCode))."
+            )
+        }
+        return cents
     }
 }

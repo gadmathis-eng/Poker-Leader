@@ -63,7 +63,115 @@ insert into public.vault_fx_rates (currency_code, rate_per_usd) values
     ('KES', 129.0),
     ('GHS', 15.0),
     ('RUB', 89.0),
-    ('UAH', 40.5)
+    ('UAH', 40.5),
+    ('TWD', 32.5),
+    ('PKR', 278.0),
+    ('BDT', 110.0),
+    ('LKR', 300.0),
+    ('NPR', 133.0),
+    ('MMK', 2100.0),
+    ('KHR', 4100.0),
+    ('LAK', 21600.0),
+    ('MNT', 3450.0),
+    ('KZT', 450.0),
+    ('UZS', 12700.0),
+    ('GEL', 2.70),
+    ('AMD', 390.0),
+    ('AZN', 1.70),
+    ('BYN', 3.27),
+    ('MDL', 17.8),
+    ('MKD', 56.5),
+    ('ALL', 92.0),
+    ('BAM', 1.80),
+    ('RSD', 108.0),
+    ('ISK', 138.0),
+    ('MOP', 8.03),
+    ('TND', 3.12),
+    ('DZD', 134.0),
+    ('LBP', 89500.0),
+    ('JOD', 0.71),
+    ('IQD', 1310.0),
+    ('IRR', 42000.0),
+    ('AFN', 71.0),
+    ('CRC', 515.0),
+    ('UYU', 40.0),
+    ('BOB', 6.91),
+    ('PYG', 7500.0),
+    ('GTQ', 7.75),
+    ('HNL', 24.7),
+    ('NIO', 36.6),
+    ('DOP', 59.0),
+    ('JMD', 156.0),
+    ('TTD', 6.78),
+    ('BZD', 2.02),
+    ('XCD', 2.70),
+    ('BBD', 2.00),
+    ('BSD', 1),
+    ('KYD', 0.83),
+    ('BMD', 1),
+    ('FJD', 2.25),
+    ('PGK', 3.90),
+    ('WST', 2.75),
+    ('TOP', 2.35),
+    ('VUV', 119.0),
+    ('XPF', 110.0),
+    ('XOF', 605.0),
+    ('XAF', 605.0),
+    ('MUR', 46.0),
+    ('NAD', 18.2),
+    ('BWP', 13.6),
+    ('ZMW', 26.0),
+    ('UGX', 3750.0),
+    ('TZS', 2650.0),
+    ('ETB', 57.0),
+    ('RWF', 1300.0),
+    ('MGA', 4500.0),
+    ('AOA', 850.0),
+    ('MZN', 64.0),
+    ('CVE', 102.0),
+    ('GMD', 68.0),
+    ('SLL', 22500.0),
+    ('LRD', 195.0),
+    ('MWK', 1730.0),
+    ('SZL', 18.2),
+    ('LSL', 18.2),
+    ('MRU', 39.8),
+    ('KMF', 450.0),
+    ('STN', 22.6),
+    ('DJF', 178.0),
+    ('SOS', 570.0),
+    ('SDG', 600.0),
+    ('SSP', 1500.0),
+    ('LYD', 4.82),
+    ('SYP', 13000.0),
+    ('YER', 250.0),
+    ('BND', 1.35),
+    ('PAB', 1),
+    ('ANG', 1.80),
+    ('AWG', 1.80),
+    ('SRD', 32.0),
+    ('GYD', 209.0),
+    ('HTG', 132.0),
+    ('CUP', 24.0),
+    ('VES', 36.5),
+    ('BTN', 83.5),
+    ('MVR', 15.4),
+    ('SCR', 13.6),
+    ('KGS', 87.0),
+    ('TJS', 10.9),
+    ('TMT', 3.50),
+    ('SBD', 8.45),
+    ('FKP', 0.79),
+    ('GIP', 0.79),
+    ('SHP', 0.79),
+    ('JEP', 0.79),
+    ('GGP', 0.79),
+    ('IMP', 0.79),
+    ('CDF', 2850.0),
+    ('GNF', 8600.0),
+    ('BIF', 2900.0),
+    ('ERN', 15.0),
+    ('SLE', 22.5)
 on conflict (currency_code) do update
     set rate_per_usd = excluded.rate_per_usd;
 
@@ -201,6 +309,50 @@ begin
 end;
 $$;
 
+-- First visit uses p_currency (any published rate). Later visits keep the
+-- wallet that already exists, so a preferred EUR opening cannot create a
+-- second available pot beside an existing CAD one.
+create or replace function public.vault_open(p_currency text default 'USD')
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+    uid uuid := public.vault_require_user();
+    requested text := upper(trim(coalesce(p_currency, '')));
+    wallet_currency text;
+begin
+    perform public.vault_ensure_compliance_profile(uid);
+
+    select currency_code into wallet_currency
+    from public.vault_accounts
+    where owner_user_id = uid and kind = 'available'
+    order by created_at
+    limit 1;
+
+    if wallet_currency is null then
+        if requested = '' then
+            requested := 'USD';
+        end if;
+        perform public.vault_fx_rate(requested);
+        wallet_currency := requested;
+    end if;
+
+    perform public.vault_account(uid, 'available', wallet_currency);
+    perform public.vault_account(uid, 'pending_withdrawal', wallet_currency);
+    perform public.vault_account(null, 'psp_clearing', wallet_currency);
+    perform public.vault_account(null, 'payout_clearing', wallet_currency);
+    perform public.vault_account(null, 'fees', wallet_currency);
+    perform public.vault_account(null, 'fx', wallet_currency);
+    return public.vault_summary();
+end;
+$$;
+
+revoke all on function public.vault_open(text) from public, anon;
+grant execute on function public.vault_open(text) to authenticated, service_role;
+
 -- Four legs when the currencies differ so each currency's books still balance:
 -- from −A, fx(from) +A, fx(to) −B, to +B. Same currency stays two legs.
 create or replace function public.vault_fx_moves(
@@ -301,8 +453,12 @@ declare
 begin
     wallet_currency := public.vault_wallet_currency(uid);
 
-    select coalesce(sum(balance_cents) filter (where kind = 'available'), 0),
-           coalesce(sum(balance_cents) filter (where kind = 'pending_withdrawal'), 0)
+    select coalesce(sum(public.vault_convert_cents(
+               balance_cents, currency_code, wallet_currency
+           )) filter (where kind = 'available'), 0),
+           coalesce(sum(public.vault_convert_cents(
+               balance_cents, currency_code, wallet_currency
+           )) filter (where kind = 'pending_withdrawal'), 0)
     into available, pending_withdrawal
     from public.vault_accounts
     where owner_user_id = uid;
@@ -314,7 +470,9 @@ begin
     from public.vault_accounts
     where owner_user_id = uid and kind = 'in_play';
 
-    select coalesce(sum(amount_cents), 0) into pending_deposit
+    select coalesce(sum(public.vault_convert_cents(
+               amount_cents, currency_code, wallet_currency
+           )), 0) into pending_deposit
     from public.vault_payment_intents
     where user_id = uid
       and purpose = 'vault_deposit'
@@ -709,7 +867,7 @@ declare
     reserved uuid;
     posted public.vault_ledger_transactions;
     fee bigint;
-    payout_currency text := upper(trim(coalesce(p_currency, 'USD')));
+    payout_currency text := upper(trim(coalesce(p_currency, '')));
     wallet_currency text;
     wallet_cents bigint;
 begin
@@ -721,8 +879,11 @@ begin
         return withdrawal;
     end if;
 
-    perform public.vault_fx_rate(payout_currency);
     wallet_currency := public.vault_wallet_currency(uid);
+    if payout_currency = '' then
+        payout_currency := wallet_currency;
+    end if;
+    perform public.vault_fx_rate(payout_currency);
     wallet_cents := public.vault_convert_cents(p_amount_cents, payout_currency, wallet_currency);
 
     perform public.vault_touch_rate_limit(uid, 'withdrawal', 10, interval '10 minutes');
@@ -1022,3 +1183,204 @@ begin
     return withdrawal;
 end;
 $$;
+
+-- Deposits may be charged in any published currency. They land in the wallet
+-- at the rate, so a USD Apple Pay sheet can still fund an EUR vault.
+create or replace function public.vault_create_deposit_intent(
+    p_amount_cents bigint,
+    p_idempotency_key text,
+    p_purpose text default 'vault_deposit',
+    p_table_invite_code text default null,
+    p_provider text default 'mock_apple_pay',
+    p_currency text default 'USD'
+)
+returns public.vault_payment_intents
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+    uid uuid := public.vault_require_user();
+    config public.vault_config;
+    intent public.vault_payment_intents;
+    pay_currency text := upper(trim(coalesce(p_currency, '')));
+begin
+    select * into intent
+    from public.vault_payment_intents
+    where user_id = uid and idempotency_key = p_idempotency_key;
+
+    if found then
+        return intent;
+    end if;
+
+    if pay_currency = '' then
+        pay_currency := 'USD';
+    end if;
+    perform public.vault_fx_rate(pay_currency);
+
+    perform public.vault_touch_rate_limit(uid, 'deposit_intent', 20, interval '5 minutes');
+
+    select * into config from public.vault_config where id;
+
+    if p_amount_cents < config.deposit_min_cents then
+        raise exception 'vault: the smallest deposit is % cents', config.deposit_min_cents
+            using errcode = '23514';
+    end if;
+
+    if p_amount_cents > config.deposit_max_cents then
+        raise exception 'vault: the largest deposit is % cents', config.deposit_max_cents
+            using errcode = '23514';
+    end if;
+
+    perform public.vault_assert_allowed(uid, 'deposit', p_amount_cents);
+    perform public.vault_open(pay_currency);
+
+    insert into public.vault_payment_intents (
+        user_id, reference_code, provider, purpose, amount_cents, currency_code,
+        table_invite_code, idempotency_key, is_demo
+    )
+    values (
+        uid, public.vault_reference_code('PI'), p_provider, p_purpose,
+        p_amount_cents, pay_currency, upper(nullif(trim(coalesce(p_table_invite_code, '')), '')),
+        p_idempotency_key, public.vault_is_sandbox()
+    )
+    returning * into intent;
+
+    if p_purpose = 'vault_deposit' then
+        perform public.vault_add_statement(
+            uid, 'deposit', 'pending', p_amount_cents, pay_currency,
+            null, intent.id, null, null, 'Awaiting payment confirmation'
+        );
+    end if;
+
+    perform public.vault_log(uid, 'deposit_intent_created', 'ok', p_amount_cents,
+                             intent.reference_code, intent.table_invite_code);
+    return intent;
+end;
+$$;
+
+revoke all on function public.vault_create_deposit_intent(bigint, text, text, text, text, text)
+    from public, anon;
+grant execute on function public.vault_create_deposit_intent(bigint, text, text, text, text, text)
+    to authenticated;
+
+create or replace function public.vault_settle_deposit_intent(
+    p_intent_id uuid,
+    p_outcome text,
+    p_provider_event_id text,
+    p_failure_reason text default null
+)
+returns public.vault_payment_intents
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+    intent public.vault_payment_intents;
+    posted public.vault_ledger_transactions;
+    psp uuid;
+    available uuid;
+    wallet_currency text;
+    wallet_cents bigint;
+begin
+    select * into intent
+    from public.vault_payment_intents
+    where id = p_intent_id
+    for update;
+
+    if not found then
+        raise exception 'vault: unknown payment' using errcode = 'P0002';
+    end if;
+
+    if intent.status in ('succeeded', 'failed', 'canceled', 'reversed') then
+        return intent;
+    end if;
+
+    if p_provider_event_id is not null and exists (
+        select 1 from public.vault_payment_intents
+        where provider = intent.provider
+          and provider_event_id = p_provider_event_id
+          and id <> intent.id
+    ) then
+        raise exception 'vault: that payment event was already handled'
+            using errcode = '23505';
+    end if;
+
+    if p_outcome <> 'succeeded' then
+        update public.vault_payment_intents
+        set status = p_outcome,
+            provider_event_id = p_provider_event_id,
+            failure_reason = p_failure_reason,
+            updated_at = now()
+        where id = intent.id
+        returning * into intent;
+
+        update public.vault_statement_entries
+        set status = case p_outcome when 'canceled' then 'canceled' else 'failed' end,
+            detail = coalesce(p_failure_reason, 'Payment did not complete'),
+            updated_at = now()
+        where payment_intent_id = intent.id and status = 'pending';
+
+        perform public.vault_log(intent.user_id, 'deposit_settled', p_outcome,
+                                 intent.amount_cents, intent.reference_code);
+        return intent;
+    end if;
+
+    wallet_currency := public.vault_wallet_currency(intent.user_id);
+    perform public.vault_open(wallet_currency);
+    wallet_cents := public.vault_convert_cents(
+        intent.amount_cents, intent.currency_code, wallet_currency
+    );
+    psp := public.vault_account(null, 'psp_clearing', intent.currency_code);
+    available := public.vault_account(intent.user_id, 'available', wallet_currency);
+
+    if intent.purpose = 'vault_deposit' then
+        posted := public.vault_post_transaction(
+            intent.user_id,
+            'deposit',
+            public.vault_fx_moves(
+                psp, intent.amount_cents, intent.currency_code,
+                available, wallet_cents, wallet_currency
+            ),
+            'intent:' || intent.id::text,
+            null,
+            jsonb_build_object(
+                'provider', intent.provider,
+                'intent', intent.reference_code,
+                'paid_cents', intent.amount_cents,
+                'wallet_cents', wallet_cents,
+                'paid_currency', intent.currency_code,
+                'wallet_currency', wallet_currency
+            )
+        );
+
+        update public.vault_statement_entries
+        set status = 'completed',
+            ledger_transaction_id = posted.id,
+            detail = case
+                when intent.currency_code = wallet_currency then 'Added to your Vault'
+                else 'Converted from ' || intent.currency_code || ' into ' || wallet_currency
+            end,
+            updated_at = now()
+        where payment_intent_id = intent.id and status = 'pending';
+    end if;
+
+    update public.vault_payment_intents
+    set status = 'succeeded',
+        provider_event_id = p_provider_event_id,
+        updated_at = now()
+    where id = intent.id
+    returning * into intent;
+
+    perform public.vault_log(intent.user_id, 'deposit_settled', 'succeeded',
+                             intent.amount_cents, intent.reference_code);
+    return intent;
+end;
+$$;
+
+revoke all on function public.vault_settle_deposit_intent(uuid, text, text, text)
+    from public, anon, authenticated;
+grant execute on function public.vault_settle_deposit_intent(uuid, text, text, text)
+    to service_role;

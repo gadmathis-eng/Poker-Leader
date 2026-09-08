@@ -102,11 +102,13 @@ final class VaultStore {
     func addMoney(_ amount: Money) async throws -> DepositIntent {
         let backend = self.backend
         let key = VaultIdempotency.key("deposit", String(amount.cents))
+        let currency = VaultFX.normalize(summary.currencyCode)
 
         let intent = try await backend.createDepositIntent(
             amount: amount,
             purpose: .vaultDeposit,
             tableInviteCode: nil,
+            currencyCode: currency,
             idempotencyKey: key
         )
         await reloadQuietly()
@@ -114,7 +116,7 @@ final class VaultStore {
         do {
             _ = try await VaultProviders.payment.authorize(
                 amount: amount,
-                currencyCode: summary.currencyCode,
+                currencyCode: currency,
                 reference: intent.referenceCode,
                 summaryLabel: "Pot Master Vault"
             )
@@ -192,7 +194,8 @@ final class VaultStore {
         let backend = self.backend
         let tableCurrency = (try? await backend.tableLimits(inviteCode: inviteCode))?.currencyCode
             ?? summary.currencyCode
-        guard let charged = VaultFX.convert(amount, from: tableCurrency, to: summary.currencyCode) else {
+        let walletCurrency = VaultFX.normalize(summary.currencyCode)
+        guard let charged = VaultFX.convert(amount, from: tableCurrency, to: walletCurrency) else {
             throw VaultError.backend("No exchange rate for that buy-in.")
         }
 
@@ -200,13 +203,14 @@ final class VaultStore {
             amount: charged,
             purpose: .tableBuyIn,
             tableInviteCode: inviteCode,
+            currencyCode: walletCurrency,
             idempotencyKey: VaultIdempotency.key("tablepay", inviteCode, String(amount.cents))
         )
 
         do {
             _ = try await VaultProviders.payment.authorize(
                 amount: charged,
-                currencyCode: summary.currencyCode,
+                currencyCode: walletCurrency,
                 reference: intent.referenceCode,
                 summaryLabel: "Buy-in at table \(inviteCode)"
             )

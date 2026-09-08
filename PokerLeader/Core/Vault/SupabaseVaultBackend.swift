@@ -49,8 +49,12 @@ struct SupabaseVaultBackend: VaultBackend {
     // MARK: - Reading
 
     func openVault() async throws -> VaultSummary {
-        try await call("vault_open", params: CurrencyParams(p_currency: "USD"), as: SummaryRow.self)
-            .model
+        try await call(
+            "vault_open",
+            params: CurrencyParams(p_currency: VaultFX.preferredOpeningCurrency()),
+            as: SummaryRow.self
+        )
+        .model
     }
 
     func summary() async throws -> VaultSummary {
@@ -71,6 +75,7 @@ struct SupabaseVaultBackend: VaultBackend {
         amount: Money,
         purpose: DepositPurpose,
         tableInviteCode: String?,
+        currencyCode: String,
         idempotencyKey: String
     ) async throws -> DepositIntent {
         let row: IntentRow = try await call(
@@ -81,7 +86,7 @@ struct SupabaseVaultBackend: VaultBackend {
                 p_purpose: purpose.rawValue,
                 p_table_invite_code: tableInviteCode,
                 p_provider: "mock_apple_pay",
-                p_currency: "USD"
+                p_currency: VaultFX.normalize(currencyCode)
             )
         )
         return row.model
@@ -518,7 +523,7 @@ private struct SettlementRow: Decodable {
             returned: Money(cents: returned_cents),
             referenceCode: reference_code,
             alreadySettled: already_settled,
-            tableCurrencyCode: table_currency ?? "USD",
+            tableCurrencyCode: table_currency ?? wallet_currency ?? "USD",
             walletReturned: wallet_returned_cents.map(Money.init(cents:)),
             walletCurrencyCode: wallet_currency
         )

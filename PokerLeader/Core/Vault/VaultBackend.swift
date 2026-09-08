@@ -32,6 +32,7 @@ protocol VaultBackend {
         amount: Money,
         purpose: DepositPurpose,
         tableInviteCode: String?,
+        currencyCode: String,
         idempotencyKey: String
     ) async throws -> DepositIntent
 
@@ -107,6 +108,21 @@ protocol VaultBackend {
 }
 
 extension VaultBackend {
+    func createDepositIntent(
+        amount: Money,
+        purpose: DepositPurpose,
+        tableInviteCode: String?,
+        idempotencyKey: String
+    ) async throws -> DepositIntent {
+        try await createDepositIntent(
+            amount: amount,
+            purpose: purpose,
+            tableInviteCode: tableInviteCode,
+            currencyCode: "USD",
+            idempotencyKey: idempotencyKey
+        )
+    }
+
     func requestWithdrawal(amount: Money, idempotencyKey: String) async throws -> WithdrawalRequest {
         try await requestWithdrawal(amount: amount, currencyCode: "USD", idempotencyKey: idempotencyKey)
     }

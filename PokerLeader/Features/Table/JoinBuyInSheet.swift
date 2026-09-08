@@ -139,7 +139,10 @@ struct JoinBuyInSheet: View {
         .background(AppTheme.background)
         .presentationDragIndicator(.hidden)
         .sheet(isPresented: $showCurrencyPicker) {
-            CurrencyPickerSheet(selectedCurrencyCode: payInCurrencyCode) { code in
+            CurrencyPickerSheet(
+                selectedCurrencyCode: payInCurrencyCode,
+                allowedCurrencyCodes: VaultFX.supportedCurrencyCodes
+            ) { code in
                 let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
                 guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }
                 payInCurrencyCode = cleaned

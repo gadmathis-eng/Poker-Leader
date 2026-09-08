@@ -34,13 +34,18 @@ struct CurrencyPickerSheet: View {
     @State private var allCurrenciesVisibleCount = CurrencyListPagination.pageSize
 
     let selectedCurrencyCode: String
+    var allowedCurrencyCodes: Set<String>? = nil
     let onSelect: (String) -> Void
+
+    private var featuredOptions: [CurrencyPreference] {
+        permitted(CurrencyPreferences.featuredOptions)
+    }
 
     private var filteredCurrencyOptions: [CurrencyPreference] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
 
-        return CurrencyPreferences.options.filter { option in
+        return permitted(CurrencyPreferences.options).filter { option in
             option.currencyCode.localizedCaseInsensitiveContains(query) ||
             option.currencyName.localizedCaseInsensitiveContains(query) ||
             option.countryName.localizedCaseInsensitiveContains(query)
@@ -60,7 +65,7 @@ struct CurrencyPickerSheet: View {
             List {
                 if searchText.isEmpty {
                     Section("Popular") {
-                        ForEach(CurrencyPreferences.featuredOptions) { option in
+                        ForEach(featuredOptions) { option in
                             currencyRow(option)
                         }
                     }
@@ -97,8 +102,13 @@ struct CurrencyPickerSheet: View {
     }
 
     private var remainingOptions: [CurrencyPreference] {
-        let featuredCodes = Set(CurrencyPreferences.featuredOptions.map(\.currencyCode))
-        return CurrencyPreferences.options.filter { !featuredCodes.contains($0.currencyCode) }
+        let featuredCodes = Set(featuredOptions.map(\.currencyCode))
+        return permitted(CurrencyPreferences.options).filter { !featuredCodes.contains($0.currencyCode) }
+    }
+
+    private func permitted(_ options: [CurrencyPreference]) -> [CurrencyPreference] {
+        guard let allowedCurrencyCodes else { return options }
+        return options.filter { allowedCurrencyCodes.contains($0.currencyCode) }
     }
 
     private func resetAllCurrenciesVisibleCount() {

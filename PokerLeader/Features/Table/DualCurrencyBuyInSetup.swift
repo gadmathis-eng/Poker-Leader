@@ -63,7 +63,8 @@ struct DualCurrencyBuyInSetup: View {
         }
         .sheet(item: $currencyPickerTarget) { target in
             CurrencyPickerSheet(
-                selectedCurrencyCode: target == .session ? sessionCurrencyCode : buyInCurrencyCode
+                selectedCurrencyCode: target == .session ? sessionCurrencyCode : buyInCurrencyCode,
+                allowedCurrencyCodes: VaultFX.supportedCurrencyCodes
             ) { code in
                 let cleaned = CurrencyPreferences.normalizedCurrencyCode(code)
                 guard CurrencyPreferences.isValidCurrencyCode(cleaned) else { return }

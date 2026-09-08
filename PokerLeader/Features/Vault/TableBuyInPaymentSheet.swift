@@ -38,15 +38,21 @@ struct TableBuyInPaymentSheet: View {
         limits?.currencyCode ?? tableCurrencyCode
     }
 
-    private var walletCost: Money {
+    private var walletCost: Money? {
         VaultFX.convert(requestedAmount, from: tableCurrency, to: walletCurrencyCode)
-            ?? requestedAmount
     }
 
     private var available: Money { store.summary.available }
 
-    private var vaultCoversIt: Bool { available >= walletCost }
-    private var shortfall: Money { (walletCost - available).clampedToNonNegative() }
+    private var vaultCoversIt: Bool {
+        guard let walletCost else { return false }
+        return available >= walletCost
+    }
+
+    private var shortfall: Money {
+        guard let walletCost else { return .zero }
+        return (walletCost - available).clampedToNonNegative()
+    }
     private var showsConversion: Bool {
         VaultFX.normalize(tableCurrency) != VaultFX.normalize(walletCurrencyCode)
     }
@@ -102,7 +108,7 @@ struct TableBuyInPaymentSheet: View {
                     VaultPrimaryButton(
                         title: confirmTitle,
                         systemImage: method == .vault ? "lock.fill" : "apple.logo",
-                        isEnabled: isWithinLimits,
+                        isEnabled: isWithinLimits && walletCost != nil,
                         isBusy: isWorking
                     ) {
                         Task { await confirm() }
@@ -156,7 +162,7 @@ struct TableBuyInPaymentSheet: View {
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
 
-            if showsConversion {
+            if showsConversion, let walletCost {
                 Text("That's \(walletCost.formatted(currencyCode: walletCurrencyCode)) from your Vault.")
                     .font(.caption)
                     .foregroundStyle(AppTheme.muted)
@@ -222,9 +228,11 @@ struct TableBuyInPaymentSheet: View {
                 title: "Use Vault Balance",
                 subtitle: vaultCoversIt
                     ? (showsConversion
-                        ? "Converts \(walletCost.formatted(currencyCode: walletCurrencyCode)) into \(requestedAmount.formatted(currencyCode: tableCurrency)) on the table"
+                        ? "Converts \(walletCost?.formatted(currencyCode: walletCurrencyCode) ?? "—") into \(requestedAmount.formatted(currencyCode: tableCurrency)) on the table"
                         : "Moves \(requestedAmount.formatted(currencyCode: tableCurrency)) from Available into In Play")
-                    : "Not enough in your Vault for this buy-in",
+                    : (walletCost == nil
+                        ? "No exchange rate for this table's currency"
+                        : "Not enough in your Vault for this buy-in"),
                 isEnabled: vaultCoversIt,
                 icon: "lock.fill"
             )
@@ -243,9 +251,9 @@ struct TableBuyInPaymentSheet: View {
                 .applePay,
                 title: "Pay with Apple Pay",
                 subtitle: showsConversion
-                    ? "Pays \(walletCost.formatted(currencyCode: walletCurrencyCode)) and seats \(requestedAmount.formatted(currencyCode: tableCurrency))"
+                    ? "Pays \(walletCost?.formatted(currencyCode: walletCurrencyCode) ?? "—") and seats \(requestedAmount.formatted(currencyCode: tableCurrency))"
                     : "The full \(requestedAmount.formatted(currencyCode: tableCurrency)) goes straight onto the table",
-                isEnabled: true,
+                isEnabled: walletCost != nil,
                 icon: "apple.logo"
             )
         }
