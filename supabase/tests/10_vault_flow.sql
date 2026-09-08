@@ -5,7 +5,7 @@ insert into auth.users (id, email) values
     ('11111111-1111-1111-1111-111111111111', 'host@example.com'),
     ('22222222-2222-2222-2222-222222222222', 'guest@example.com');
 
-\echo '=== 1. host opens vault, deposits $100 via sandbox deposit ==='
+\echo '=== 1. host opens vault, deposits $100 via mock Apple Pay ==='
 select set_config('test.uid', '11111111-1111-1111-1111-111111111111', false);
 select public.vault_open('USD');
 
@@ -62,7 +62,7 @@ select public.test_assert(
 select set_config('test.uid', '22222222-2222-2222-2222-222222222222', false);
 select public.vault_table_buy_in('ABC123', 3000, 'vault', 'buyin-guest-1', 'Guest');
 
-\echo '=== 4. guest tops up straight onto the table with a direct payment ==='
+\echo '=== 4. guest tops up straight onto the table with Apple Pay ==='
 select id as g_table_intent from public.vault_create_deposit_intent(2000, 'buyin-pay-1', 'table_buy_in', 'ABC123') \gset
 \echo '--- an unverified payment cannot buy in ---'
 do $$

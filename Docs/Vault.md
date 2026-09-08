@@ -5,9 +5,9 @@ they have on a table, and money they can take back out. This document covers how
 it is built, what keeps it private, what keeps it correct, and what is still
 missing before it could hold real money.
 
-**Nothing in this system is real money today.** Every deposit is a sandbox
-credit, and no payout is made. That is a deliberate, labelled state described
-under [Sandbox phase](#sandbox-phase), not something hidden.
+**Nothing in this system is real money today.** Every deposit is simulated,
+Apple Pay is mocked, and no payout is made. That is a deliberate, labelled state
+described under [Sandbox phase](#sandbox-phase), not something hidden.
 
 ---
 
@@ -76,7 +76,7 @@ transaction still sums to zero. Both should always return no rows.
 | Deposit | `psp_clearing` −N, `available` +N |
 | Buy-in from Vault | `available` −N, `in_play` +N |
 | Buy-in across currencies | `available` −wallet, `fx`(wallet) +wallet, `fx`(table) −table, `in_play` +table |
-| Direct buy-in (payment rail) | `psp_clearing` −N, `in_play` +N |
+| Buy-in with Apple Pay | `psp_clearing` −N, `in_play` +N |
 | A hand (posted by the poker engine) | `in_play`(loser) −N, `in_play`(winner) +N |
 | Leaving a table | `in_play` −N, `available` +N |
 | Leaving across currencies | `in_play` −table, `fx`(table) +table, `fx`(wallet) −wallet, `available` +wallet |
@@ -161,7 +161,7 @@ The app can ask. It cannot decide.
 `vault_config.sandbox_mode` is `true`. While it is:
 
 - `vault_sandbox_confirm_deposit` stands in for the provider's signed webhook, so
-  a sandbox deposit can be settled without a real payment. It still cannot
+  a mock Apple Pay deposit can be settled without a real payment. It still cannot
   say how much arrived — the amount comes from the stored intent.
 - `vault_sandbox_resolve_withdrawal` walks a pending cash-out to a finished state
   so the pending → completed path can be seen without a payout rail.
@@ -184,12 +184,12 @@ payout provider, and the identity and payout-method gates in
    `vault_settle_deposit_intent` as `service_role`. That function is already the
    only path that turns an intent into money.
 3. Implement `VaultPayoutProvider` and an operator process that calls
-   `vault_resolve_withdrawal`. A card sheet is not a candidate here: it takes
+   `vault_resolve_withdrawal`. Apple Pay is not a candidate here: it takes
    payments, it does not send them, which is why the Cash Out screen names the
    payout provider's destination instead.
 4. Set `vault_config.sandbox_mode = false`.
 5. No provider secret goes in the app. Publishable identifiers are configuration;
-   private keys stay on the server. No card details or payment credentials are
+   private keys stay on the server. No card details or Apple Pay credentials are
    stored anywhere in this system — the provider holds them and the backend sees
    only opaque identifiers.
 
@@ -223,11 +223,11 @@ where they plug in.
 
 The real-money nature of this feature is not concealed from App Review. When it
 goes live it needs, at minimum: a real-money gaming entitlement and the
-geographic restrictions that come with it; a payment-provider merchant
-configuration; age gating; the responsible-gaming disclosures the App Store
-requires; and a review of whether the jurisdictions being served permit it.
-Real-money wagering is out of scope for in-app purchase, which is why the
-payment path is a payment provider rather than StoreKit.
+geographic restrictions that come with it; an Apple Pay merchant configuration;
+age gating; the responsible-gaming disclosures the App Store requires; and a
+review of whether the jurisdictions being served permit it. Real-money wagering
+is out of scope for in-app purchase, which is why the payment path is a payment
+provider rather than StoreKit.
 
 ## Known gaps
 
