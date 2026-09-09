@@ -97,17 +97,10 @@ struct TableView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button { presentCreateTable() } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.body.weight(.medium))
-                                .accessibilityLabel("Create new table")
-                        }
-                        Button { showEditTables = true } label: {
-                            Image(systemName: "line.3.horizontal")
-                                .font(.body.weight(.medium))
-                                .accessibilityLabel("Edit tables")
-                        }
+                    Button { showEditTables = true } label: {
+                        Image(systemName: "line.3.horizontal")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Edit tables")
                     }
                 }
             }
