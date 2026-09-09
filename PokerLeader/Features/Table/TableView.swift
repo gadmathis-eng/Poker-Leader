@@ -77,7 +77,7 @@ struct TableView: View {
                     banner
 
                     CreateTableButton {
-                        showCreateTable = true
+                        presentCreateTable()
                     }
                     .padding(.horizontal)
 
@@ -111,9 +111,15 @@ struct TableView: View {
                     await republishHostTableIfNeeded()
                 }
                 await handlePendingJoin()
+                presentCreateTableIfNeeded()
             }
             .onChange(of: router.pendingTableInviteCode) { _, _ in
                 Task { await handlePendingJoin() }
+            }
+            .onChange(of: router.pendingCreateTable) { _, pending in
+                if pending {
+                    presentCreateTableIfNeeded()
+                }
             }
             .navigationDestination(isPresented: $showingSeatSelection) {
                 TableSeatSelectionView(
@@ -498,6 +504,17 @@ struct TableView: View {
         draftSessionCurrencyCode = tableSessionCurrencyCode
     }
 
+    private func presentCreateTable() {
+        showingSeatSelection = false
+        router.pendingCreateTable = false
+        showCreateTable = true
+    }
+
+    private func presentCreateTableIfNeeded() {
+        guard router.pendingCreateTable else { return }
+        presentCreateTable()
+    }
+
     private func savePersonalBuyIn() async {
         guard let amount = draftBuyInAmount else { return }
         personalBuyInCurrencyCode = draftBuyInCurrencyCode
@@ -508,7 +525,7 @@ struct TableView: View {
         }
 
         if activeTable == nil {
-            showCreateTable = true
+            presentCreateTable()
             return
         } else if let table = activeTable, table.isHostLocally {
             table.sessionCurrencyCode = draftSessionCurrencyCode
