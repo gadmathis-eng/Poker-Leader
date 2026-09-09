@@ -22,6 +22,11 @@ struct TableSeatSelectionView: View {
     @State private var showTableSettings = false
     /// Bumped when the stake changes so the felt and editor re-read the table.
     @State private var anteStamp: Decimal = 0
+    @State private var vault = VaultStore.shared
+    @State private var settlement: TableSettlement?
+    @State private var isCashingOff = false
+    @State private var cashOffError: String?
+    @State private var showVaultAfterLeaving = false
 
     private static let nextHandPause: Duration = .seconds(2)
 
@@ -88,10 +93,10 @@ struct TableSeatSelectionView: View {
         occupants.first { $0.playerKey == repo.localPlayerKey }
     }
 
-    /// Once cards are out, extra money is added on top of the stack rather than
-    /// replacing the buy-in you sat down with.
+    /// Extra chips mid-hand are a local-table path. A signed-in cloud table
+    /// keeps the stack in the Vault, so this phone cannot top it up here.
     private var canAddMoney: Bool {
-        table != nil && hand != nil && mySeat != nil
+        table != nil && hand != nil && mySeat != nil && !repo.usesServerPoker
     }
 
     /// Nothing in front of you and no pot left to win, so the game carries on
@@ -246,6 +251,8 @@ struct TableSeatSelectionView: View {
                 } else {
                     sitDownCard
                 }
+
+                cashOffCard
             }
             .padding(.vertical)
         }
@@ -307,6 +314,89 @@ struct TableSeatSelectionView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppTheme.background)
             }
+        }
+        .sheet(item: $settlement) { result in
+            LeaveTableSummarySheet(settlement: result) {
+                showVaultAfterLeaving = true
+            }
+        }
+        .sheet(isPresented: $showVaultAfterLeaving) {
+            CashOutSheet()
+        }
+        .onChange(of: settlement) { _, current in
+            if current == nil, !showVaultAfterLeaving, !isCashingOff {
+                dismiss()
+            }
+        }
+    }
+
+    /// Standing up is a money move, so it goes through the Vault: the backend
+    /// works out what the seat is holding, puts that in the player's Vault, and
+    /// only then is the seat given up. An unfinished hand has to resolve first —
+    /// money that is in a pot belongs to the pot until it is won.
+    @ViewBuilder
+    private var cashOffCard: some View {
+        if let table, mySeat != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    SectionHeader(title: "Leaving the table")
+                    Spacer()
+                    if vault.isSandbox {
+                        DemoFundsBadge(compact: true)
+                    }
+                }
+
+                if isDealtInLive {
+                    Text("Finish the hand you are in first. Whatever is left in front of you goes back to your Vault when you stand up.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                } else {
+                    Text("Your chips go back into your private Vault. Nobody else sees what you leave with.")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.muted)
+                }
+
+                if let cashOffError {
+                    Text(cashOffError)
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.negative)
+                }
+
+                VaultSecondaryButton(
+                    title: isCashingOff ? "Cashing off…" : "Cash off and leave",
+                    systemImage: "rectangle.portrait.and.arrow.right",
+                    isEnabled: !isDealtInLive && !isCashingOff
+                ) {
+                    Task { await cashOffAndLeave(table) }
+                }
+            }
+            .cardSurface(padding: 16)
+            .padding(.horizontal)
+        }
+    }
+
+    /// A hand that is still running holds this player's money in the pot.
+    private var isDealtInLive: Bool {
+        guard let hand else { return false }
+        return !hand.isComplete && hand.seat(forPlayerKey: repo.localPlayerKey) != nil
+    }
+
+    private func cashOffAndLeave(_ table: OpenTableModel) async {
+        isCashingOff = true
+        cashOffError = nil
+        defer { isCashingOff = false }
+
+        do {
+            settlement = try await vault.leaveTable(inviteCode: table.inviteCode)
+            // The money is settled, so the table can go. Let go of it here
+            // first: `remove` deletes the stored object, and this screen must
+            // not still be reading from it when the next redraw comes round.
+            self.table = nil
+            occupants = []
+            hand = nil
+            await repo.remove(table)
+        } catch {
+            cashOffError = VaultError.from(error).errorDescription
         }
     }
 
@@ -506,12 +596,16 @@ struct TableSeatSelectionView: View {
         persistSelectedSeat()
         repo.updateAnte(anteAmount, on: table)
         rememberAnte(from: table)
-        dealHandIfPossible(on: table)
+        Task { await dealHandIfPossible(on: table) }
     }
 
-    private func dealHandIfPossible(on table: OpenTableModel) {
-        if needsDeal(on: table), (try? repo.dealHand(on: table)) == nil {
-            repo.markStarted(table)
+    private func dealHandIfPossible(on table: OpenTableModel) async {
+        if needsDeal(on: table) {
+            do {
+                _ = try await repo.dealHandAuthoritative(on: table)
+            } catch {
+                repo.markStarted(table)
+            }
         }
         withAnimation(.easeOut(duration: 0.18)) {
             hand = table.hand
@@ -526,19 +620,17 @@ struct TableSeatSelectionView: View {
     }
 
     private func submit(_ move: HandMove, amount: Decimal? = nil) {
+        Task { await submitNow(move, amount: amount) }
+    }
+
+    private func submitNow(_ move: HandMove, amount: Decimal? = nil) async {
         guard let table, let hand else { return }
         do {
-            let next = try HandRound.apply(
-                move: move,
-                amount: amount,
-                playerKey: repo.localPlayerKey,
-                to: hand
-            )
+            let next = try await repo.applyMove(move, amount: amount, on: table, hand: hand)
             handMessage = nil
             withAnimation(.easeOut(duration: 0.18)) {
                 self.hand = next
             }
-            repo.updateHand(next, on: table)
             occupants = table.seats
         } catch {
             handMessage = error.localizedDescription
@@ -555,7 +647,7 @@ struct TableSeatSelectionView: View {
             guard table.hand?.id == hand.id, table.hand?.isComplete == true else { return }
             guard table.isHostLocally else { return }
             do {
-                try repo.dealNextHand(on: table)
+                try await repo.dealNextHand(on: table)
                 handMessage = nil
                 withAnimation(.easeOut(duration: 0.18)) {
                     self.hand = table.hand
@@ -742,7 +834,7 @@ struct TableSeatSelectionView: View {
         }
 
         if isGameStarted, needsDeal(on: table), table.isHostLocally {
-            try? repo.dealHand(on: table)
+            _ = try? await repo.dealHandAuthoritative(on: table)
             occupants = table.seats
         }
 

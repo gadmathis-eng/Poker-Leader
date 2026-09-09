@@ -439,7 +439,25 @@ final class SupabaseSyncService {
             .execute()
             .value
 
-        return rows.first?.snapshot
+        if let snapshot = rows.first?.snapshot {
+            return snapshot
+        }
+
+        // A six-character code is not enough to read the live hand. Joiners
+        // get names, seats and the ante — not the board, pot or cards.
+        do {
+            let preview: OpenTableRow = try await client
+                .rpc(
+                    "open_table_preview",
+                    params: OpenTablePreviewParams(inviteCode: normalized)
+                )
+                .execute()
+                .value
+            return preview.snapshot
+        } catch {
+            if OpenTableSchema.isMissingTable(error) { throw error }
+            return nil
+        }
     }
 
     func upsertOpenTable(_ table: OpenTableModel) async throws {
@@ -459,7 +477,7 @@ final class SupabaseSyncService {
             isStarted: table.isStarted,
             seats: table.seats,
             anteAmount: table.anteAmount,
-            hand: table.hand,
+            hand: nil,
             createdAt: table.createdAt,
             updatedAt: table.updatedAt,
             includesHandColumns: openTablesHasHandColumns
@@ -481,7 +499,7 @@ final class SupabaseSyncService {
             isStarted: table.isStarted,
             seats: table.seats,
             anteAmount: table.anteAmount,
-            hand: table.hand,
+            hand: nil,
             updatedAt: table.updatedAt,
             includesHandColumns: openTablesHasHandColumns
         )
@@ -556,6 +574,29 @@ final class SupabaseSyncService {
             .update(OpenTableStartedUpdate(isStarted: true, updatedAt: .now))
             .eq("invite_code", value: TableInviteDeepLink.normalizedCode(inviteCode))
             .execute()
+    }
+
+    /// The hand is owned by the server. This used to let a guest publish cards
+    /// and a winner; it is now a no-op so older call sites cannot write one.
+    func updateOpenTableHand(_ table: OpenTableModel) async throws {
+        _ = table
+        _ = try await ensureReady()
+    }
+
+    /// Drops this player's seat server-side so a guest never has to republish
+    /// the rest of the roster.
+    @discardableResult
+    func removeOpenTableSeat(inviteCode: String) async throws -> [SharedTableSeat] {
+        _ = try await ensureReady()
+        let client = try SupabaseBootstrap.requireClient()
+        let params = RemoveOpenTableSeatParams(
+            inviteCode: TableInviteDeepLink.normalizedCode(inviteCode)
+        )
+        let seats: [SharedTableSeat] = try await client
+            .rpc("remove_open_table_seat", params: params)
+            .execute()
+            .value
+        return OpenTableSeatsPacking.players(in: seats)
     }
 }
 
@@ -1149,10 +1190,11 @@ private struct OpenTableRow: Codable {
         if includesHandColumns {
             try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
-            try container.encode(hand, forKey: .hand)
+            // The hand is written by the poker engine. Sending it from the
+            // phone is refused by the server.
         } else {
             try container.encode(
-                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount ?? "0", hand: hand),
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount ?? "0", hand: nil),
                 forKey: .seats
             )
         }
@@ -1205,10 +1247,9 @@ private struct OpenTablePlayUpdate: Encodable {
         if includesHandColumns {
             try container.encode(seats, forKey: .seats)
             try container.encode(anteAmount, forKey: .anteAmount)
-            try container.encode(hand, forKey: .hand)
         } else {
             try container.encode(
-                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount, hand: hand),
+                OpenTablePackedSeats(seats: seats, anteAmount: anteAmount, hand: nil),
                 forKey: .seats
             )
         }
@@ -1232,6 +1273,14 @@ private struct OpenTableStartedUpdate: Encodable {
     }
 }
 
+private struct OpenTablePreviewParams: Encodable {
+    let inviteCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+    }
+}
+
 private struct MergeOpenTableSeatParams: Encodable {
     let inviteCode: String
     let seat: SharedTableSeat
@@ -1239,5 +1288,30 @@ private struct MergeOpenTableSeatParams: Encodable {
     enum CodingKeys: String, CodingKey {
         case inviteCode = "p_invite_code"
         case seat = "p_seat"
+    }
+}
+
+private struct RemoveOpenTableSeatParams: Encodable {
+    let inviteCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case inviteCode = "p_invite_code"
+    }
+}
+
+/// Guests write only the hand. Identity columns, seats, ante and started stay
+/// with the host, or with `merge_open_table_seat` / `remove_open_table_seat`.
+private struct OpenTableHandUpdate: Encodable {
+    let hand: SharedTableHand?
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case hand
+        case updatedAt = "updated_at"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }

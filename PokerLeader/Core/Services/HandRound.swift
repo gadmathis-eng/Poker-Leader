@@ -32,8 +32,10 @@ enum HandMove: String, Codable, Equatable {
     /// A bet or a raise, sized as the total this player wants in front of them
     /// on this street.
     case bet
+    case raise
     case check
     case fold
+    case allIn = "all-in"
 }
 
 /// Deals and plays a hand of Texas hold'em on a shared table: two cards each, an
@@ -151,7 +153,10 @@ enum HandRound {
             guard toCall == 0 else { throw HandRoundError.moveNotAllowed }
         case .call:
             commit(toCall, to: &seat)
-        case .bet:
+        case .allIn:
+            guard seat.remaining > 0 else { throw HandRoundError.moveNotAllowed }
+            commit(seat.remaining, to: &seat)
+        case .bet, .raise:
             let requested = (amount ?? 0).clampedToNonNegative.roundedToHundredths
             let target = Swift.min(requested, seat.streetCap)
             let isAllIn = target == seat.streetCap

@@ -59,7 +59,7 @@ PokerLeader/
 - **A real hand of hold'em** dealt by the app — two cards each, then the ante round, the flop, the turn, and the river, each asking you to bet, check, or fold
 - **Cards are dealt, not just shown** — the dealer pitches one card at a time from the middle of the felt, round the table and then round again, each card turning over in the air as it lands. The board is spread a street at a time into the slots waiting for it, and a hand shown down turns over where it lies
 - **One card under the table** holds everything a hand asks of you: your two cards, what they add up to, whose turn it is, and the buttons
-- **Add money** while the table is being played — a stack in a hand belongs to that hand, so the money waits beside it and joins your stack as soon as the hand settles
+- **Add money** while a local table is being played — a stack in a hand belongs to that hand, so the money waits beside it and joins your stack as soon as the hand settles. Signed-in cloud tables keep the stack in the Vault, so extra chips are a new buy-in between hands, not a rewrite of the live pot.
 - **Buy in again** when you run out: the table says you have nothing left and offers the button, for however much you want, whatever you first sat down with
 - **Showdown**: everyone still in turns their cards over, the best five-card hand is read out ("Full house, kings full of twos"), and the pot lands in the winner's money on the table. The next hand deals itself — nobody has to tap through.
 - **New session → Live table** (+ buy-in only, no voice/type)
@@ -110,15 +110,48 @@ Run the account deletion migration before release:
 
 That creates `public.open_tables`, grants API access, adds an atomic seat-merge function so two phones cannot overwrite each other, and reloads PostgREST’s schema cache. Friends can then join from the share link, or type the 6-character table code on the Table tab.
 
-The ante and the hand in progress — cards, board, pot, and whose turn it is — sync between players on the existing `open_tables` row. A dedicated pair of columns is optional:
+On a signed-in cloud table the server deals, takes every action, and settles the pot. Phones may request check, call, bet, raise, fold, all-in, start a hand, or leave — they cannot publish cards, the board, the pot, or a winner. A six-character table code is enough to preview who is sitting, not to watch the hand.
+
+The older optional columns are unused once the engine migrations are applied:
 
 `supabase/migrations/20260905090000_open_tables_preflop_hand.sql`
-
-If those columns are not there yet, the app keeps the seats, ante and hand together in the `seats` JSON so every signed-in device sees the same pot.
 
 **Important:** Do not commit `PokerLeader/Supabase.plist` — it contains your API key. After adding or editing it, use **Product → Clean Build Folder** (⇧⌘K), then run again so Xcode copies the file into the app.
 
 Without `Supabase.plist`, the app still works locally with SwiftData only.
+
+## Vault (player balances)
+
+The **Vault** is a player's private balance: money added, money on a table, and
+money taken back out. It is on the **You** tab, under Settings → Vault.
+
+**It is a labelled sandbox.** Apple Pay is mocked, deposits are simulated,
+payouts are simulated, and no real money moves anywhere. Every screen showing a
+figure carries a **Test Mode · Demo Funds** badge.
+
+Run these migrations before using it with cloud sync, in order:
+
+`supabase/migrations/20260907120000_vault_ledger.sql`
+`supabase/migrations/20260907180000_vault_security_hardening.sql`
+`supabase/migrations/20260907190000_open_tables_lockdown.sql`
+`supabase/migrations/20260907200000_poker_server_engine.sql`
+`supabase/migrations/20260907210000_poker_engine_hardening.sql`
+`supabase/migrations/20260907220000_vault_summary_currency.sql`
+
+That creates the double-entry ledger, the row-level security that keeps one
+player's balance out of every other player's reach, the server poker engine,
+and the functions the app calls. Without them — or without signing in — the
+Vault falls back to a demo ledger running inside the app, which the Vault tab
+says on screen.
+
+What works: adding money through mock Apple Pay, buying into a table from the
+Vault or straight through Apple Pay, chips tracking a hand, cashing off a table
+back into the Vault, and requesting a mock cash-out. A player's balance is never
+visible to anyone else — at a table, the only figure that crosses between players
+is the chips in front of a seat.
+
+See [Docs/Vault.md](Docs/Vault.md) for the ledger design, the privacy model, what
+is deliberately not built yet, and what connecting a real payment provider takes.
 
 ## Project structure
 

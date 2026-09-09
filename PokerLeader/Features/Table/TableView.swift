@@ -25,6 +25,8 @@ struct TableView: View {
     @State private var didConfirmJoinBuyIn = false
     @State private var showSignIn = false
     @State private var authManager = SupabaseAuthManager.shared
+    @State private var vault = VaultStore.shared
+    @State private var pendingBuyIn: PendingTableBuyIn?
 
     private var orderedTables: [OpenTableModel] {
         TableOrderStore.ordered(tables)
@@ -147,6 +149,18 @@ struct TableView: View {
                 )
                 .presentationDetents([.height(640)])
                 .presentationDragIndicator(.hidden)
+            }
+            .sheet(item: $pendingBuyIn) { pending in
+                TableBuyInPaymentSheet(
+                    inviteCode: pending.inviteCode,
+                    tableName: pending.tableName,
+                    requestedAmount: pending.amount,
+                    limits: pending.limits,
+                    playerKey: repo.localPlayerKey,
+                    displayName: displayName
+                ) { receipt in
+                    seatAfterVerifiedBuyIn(receipt, pending: pending)
+                }
             }
             .onChange(of: activeTable?.inviteCode) { _, _ in
                 didConfirmJoinBuyIn = false
@@ -369,6 +383,83 @@ struct TableView: View {
         draftBuyInCurrencyCode = payIn
         draftBuyInText = personalBuyInAmountString
         didConfirmJoinBuyIn = true
+        Task { await startBuyIn() }
+    }
+
+    /// The buy-in is money, so it goes through the Vault before the seat is
+    /// taken. What the player typed is turned into the table's currency — that
+    /// is the unit the server settles — and the payment sheet asks how they
+    /// want to cover it.
+    private func startBuyIn() async {
+        guard let table = activeTable else {
+            showingSeatSelection = true
+            return
+        }
+
+        // Already sitting with money on the table: reopening it is not a new
+        // buy-in, so nothing needs paying for.
+        guard repo.mySeat(on: table) == nil else {
+            showingSeatSelection = true
+            return
+        }
+
+        let tableAmount = TableCurrencyConversion.amountInTableCurrency(
+            personalBuyInAmount ?? 0,
+            from: personalBuyInCurrencyCode,
+            to: table.sessionCurrencyCode
+        )
+
+        guard tableAmount > 0 else {
+            showingSeatSelection = true
+            return
+        }
+
+        await vault.load()
+
+        // Chips, bets and Vault settlement are integer cents of the table's
+        // currency. A display conversion must not change what is posted.
+        let tableMoney = Money(decimal: tableAmount)
+
+        // Only the host may register a table, and only after the shared row is
+        // already on the cloud. A guest who arrives first used to become the
+        // settlement authority; they now wait for the host.
+        var limits = await vault.limits(forTable: table.inviteCode)
+        if table.isHostLocally {
+            let range = TableBuyInPolicy.limits(forStandardBuyIn: tableMoney)
+            limits = await vault.registerTable(
+                inviteCode: table.inviteCode,
+                minimum: range.minimum,
+                maximum: range.maximum,
+                currencyCode: table.sessionCurrencyCode
+            )
+        } else if limits == nil {
+            joinError = "The host has to open this table for buy-ins first."
+            return
+        }
+
+        pendingBuyIn = PendingTableBuyIn(
+            inviteCode: table.inviteCode,
+            tableName: table.displayTitle,
+            amount: tableMoney,
+            tableAmount: tableAmount,
+            tableCurrencyCode: table.sessionCurrencyCode,
+            limits: limits
+        )
+    }
+
+    /// Only reached once the backend has verified the whole buy-in. The chips
+    /// put in front of the seat are the ones the backend says are in play, not
+    /// the ones this phone asked for.
+    private func seatAfterVerifiedBuyIn(_ receipt: TableBuyInReceipt, pending: PendingTableBuyIn) {
+        // The receipt is already in the table's currency. Do not convert it
+        // through a display rate — that is how a mismatch used to change chips.
+        let seated = receipt.inPlay.decimalValue
+
+        personalBuyInCurrencyCode = pending.tableCurrencyCode
+        personalBuyInAmountString = NSDecimalNumber(decimal: seated).stringValue
+        draftBuyInCurrencyCode = pending.tableCurrencyCode
+        draftBuyInText = personalBuyInAmountString
+        pendingBuyIn = nil
         showingSeatSelection = true
     }
 
@@ -542,7 +633,7 @@ struct TableView: View {
         if activeTable?.isHostLocally == false {
             didConfirmJoinBuyIn = true
         }
-        showingSeatSelection = true
+        await startBuyIn()
     }
 
     /// A table created before the host signed in never reached the cloud, so it
@@ -592,7 +683,7 @@ struct TableView: View {
             router.pendingTableInviteCode = nil
             joinCodeText = table.inviteCode
             if table.isHostLocally, hasJoinableBuyIn {
-                showingSeatSelection = true
+                await startBuyIn()
             } else if !table.isHostLocally, shouldAskJoinBuyIn(for: table) {
                 await presentJoinBuyInAfterJoin()
             }

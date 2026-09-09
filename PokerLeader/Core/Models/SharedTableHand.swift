@@ -468,6 +468,9 @@ struct SharedTableHand: Codable, Equatable, Hashable {
     /// cannot be played to a showdown and the table deals again.
     var needsRedeal: Bool {
         guard !isComplete else { return false }
+        // Version 3 is dealt by the server. Hole cards are not in the shared
+        // row, so an empty `cards` array is not a reason to deal again.
+        if version >= 3 { return false }
         if version < Self.currentVersion { return true }
         return contenders.contains { !$0.isDealtCards }
     }

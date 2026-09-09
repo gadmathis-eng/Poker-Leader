@@ -210,7 +210,7 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(table.seats.map(\.amountDecimal), [20, 20])
     }
 
-    func testDealNextHandStartsTheFollowingHandWithoutBeingAsked() throws {
+    func testDealNextHandStartsTheFollowingHandWithoutBeingAsked() async throws {
         let repo = TableRepository(context: try makeContext())
         let table = try repo.startHostedTable(
             name: "Friday",
@@ -246,7 +246,7 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(table.seats.first { $0.playerKey == "host-key" }?.amountDecimal, 21)
         XCTAssertEqual(table.seats.first { $0.playerKey == "ben" }?.amountDecimal, 19)
 
-        try repo.dealNextHand(on: table)
+        try await repo.dealNextHand(on: table)
 
         let next = try XCTUnwrap(table.hand)
         XCTAssertEqual(next.handNumber, 2)
@@ -258,7 +258,7 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(next.seat(forPlayerKey: "ben")?.stackDecimal, 19)
     }
 
-    func testChangingTheAnteAppliesToTheNextHandNotTheCurrentOne() throws {
+    func testChangingTheAnteAppliesToTheNextHandNotTheCurrentOne() async throws {
         let repo = TableRepository(context: try makeContext())
         let table = try hostedHeadsUpTable(repo)
         repo.updateAnte(1, on: table)
@@ -274,7 +274,7 @@ final class TableRepositoryStartTests: XCTestCase {
         finished = try HandRound.apply(move: .call, playerKey: "host-key", to: finished)
         finished = try HandRound.apply(move: .fold, playerKey: "ben", to: finished)
         repo.updateHand(finished, on: table)
-        try repo.dealNextHand(on: table)
+        try await repo.dealNextHand(on: table)
 
         XCTAssertEqual(table.hand?.anteDecimal, 2)
         XCTAssertEqual(table.hand?.handNumber, 2)
