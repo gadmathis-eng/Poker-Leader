@@ -4,6 +4,7 @@ import SwiftData
 struct MyTablesSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(AppRouter.self) private var router
 
     @Query(sort: \OpenTableModel.updatedAt, order: .reverse) private var tables: [OpenTableModel]
     @State private var activeInviteCode: String?
@@ -34,7 +35,7 @@ struct MyTablesSheet: View {
             List {
                 if tables.isEmpty {
                     Section {
-                        Text("No tables yet. Create a table on the Table or Circles tab, or join a friend's table with their code.")
+                        Text("No tables yet. Create a new table on the Table or Circles tab, or join a friend's table with their code.")
                             .font(.caption)
                             .foregroundStyle(AppTheme.muted)
                     }
@@ -65,7 +66,15 @@ struct MyTablesSheet: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        router.pendingCreateTable = true
+                        dismiss()
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.body.weight(.medium))
+                            .accessibilityLabel("Create new table")
+                    }
                     Button { showEditTables = true } label: {
                         Image(systemName: "line.3.horizontal")
                             .font(.body.weight(.medium))

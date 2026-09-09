@@ -6,7 +6,7 @@ struct CreateTableButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(isBusy ? "Creating..." : "Create table", systemImage: "plus.circle.fill")
+            Label(isBusy ? "Creating..." : "Create new table", systemImage: "plus.circle.fill")
                 .font(.headline)
                 .frame(maxWidth: .infinity)
                 .padding()
@@ -16,7 +16,7 @@ struct CreateTableButton: View {
         }
         .buttonStyle(.plain)
         .disabled(isBusy)
-        .accessibilityLabel("Create table")
-        .accessibilityHint("Choose the table currency, buy-in, and ante")
+        .accessibilityLabel("Create new table")
+        .accessibilityHint("Starts a new hosted poker table")
     }
 }

@@ -23,6 +23,8 @@ final class AppRouter {
     var pendingInviteCode: String?
     var pendingSettlementSessionId: UUID?
     var pendingTableInviteCode: String?
+    /// Opens Create new table on the Table tab, including from Circles or the felt.
+    var pendingCreateTable = false
 
     func push(_ route: AppRoute) {
         circlesPath.append(route)

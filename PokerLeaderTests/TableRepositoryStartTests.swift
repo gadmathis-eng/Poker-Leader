@@ -94,7 +94,7 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertTrue(table.seats.isEmpty)
     }
 
-    func testCreateTableButtonStartsAnUntitledHostedTable() throws {
+    func testCreateNewTableStartsAnUntitledHostedTable() throws {
         let repo = TableRepository(context: try makeContext())
 
         let table = try repo.startHostedTable(

@@ -109,7 +109,7 @@ struct CreateTableSheet: View {
                 .padding()
             }
             .background(AppTheme.background)
-            .navigationTitle("Create table")
+            .navigationTitle("Create new table")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {

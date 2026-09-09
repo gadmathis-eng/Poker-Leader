@@ -8,6 +8,7 @@ struct TableSeatSelectionView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
     @AppStorage("displayName") private var displayName = "Your name"
     @AppStorage("playerHandle") private var playerHandle = "@yourname"
     @AppStorage("personalTableSeat") private var storedSeatNumber = 0
@@ -253,8 +254,18 @@ struct TableSeatSelectionView: View {
         .navigationTitle("Table")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let table {
-                ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .topBarTrailing) {
+                Button {
+                    router.popToRoot()
+                    router.pendingCreateTable = true
+                    dismiss()
+                } label: {
+                    Image(systemName: "plus.circle")
+                }
+                .accessibilityLabel("Create new table")
+                .accessibilityHint("Starts a new hosted poker table")
+
+                if let table {
                     InviteCodeCopyLabel(code: table.inviteCode, style: .compact)
 
                     ShareLink(

@@ -4,6 +4,7 @@ import SwiftData
 struct EditTableView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var context
+    @Environment(AppRouter.self) private var router
 
     private let table: OpenTableModel
     private let onChange: () -> Void
@@ -147,6 +148,14 @@ struct EditTableView: View {
                         .foregroundStyle(AppTheme.positive)
                 } else {
                     Button("Open this table on the Table tab", action: makeActive)
+                }
+
+                Button {
+                    router.popToRoot()
+                    router.pendingCreateTable = true
+                    dismiss()
+                } label: {
+                    Label("Create new table", systemImage: "plus.circle")
                 }
 
                 ShareLink(
