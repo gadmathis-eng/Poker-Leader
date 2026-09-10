@@ -1,12 +1,13 @@
 import Foundation
 
 struct SettlementPayment: Identifiable, Equatable {
-    let id = UUID()
     let fromName: String
     let fromInitial: String
     let toName: String
     let toInitial: String
     let amount: Decimal
+
+    var id: String { "\(fromName)|\(toName)|\(amount)" }
 }
 
 struct PlayerNet: Identifiable {
@@ -35,6 +36,39 @@ enum SettlementService {
     static func missingAmount(players: [SessionPlayerModel]) -> Decimal {
         let check = potIsBalanced(players: players)
         return abs(check.totalIn - check.totalOut)
+    }
+
+    /// What this player walks away with. A hand still being played is treated as
+    /// cancelled, so bets go back to the people who put them in.
+    static func cashOut(for seat: SharedTableSeat, hand: SharedTableHand?) -> Decimal {
+        guard let hand, let handSeat = hand.seat(forPlayerKey: seat.playerKey) else {
+            return seat.amountDecimal
+        }
+        if hand.isComplete {
+            return (handSeat.remaining + handSeat.awardedDecimal + handSeat.toppedUpDecimal)
+                .roundedToHundredths
+        }
+        return (handSeat.stackDecimal + handSeat.toppedUpDecimal).roundedToHundredths
+    }
+
+    static func computeNets(seats: [SharedTableSeat], hand: SharedTableHand? = nil) -> [PlayerNet] {
+        seats.map { seat in
+            PlayerNet(
+                id: seat.id,
+                name: seat.playerName,
+                initial: initial(for: seat.playerName),
+                net: cashOut(for: seat, hand: hand) - seat.boughtInDecimal
+            )
+        }
+        .sorted { $0.net > $1.net }
+    }
+
+    static func minimumPayments(seats: [SharedTableSeat], hand: SharedTableHand? = nil) -> [SettlementPayment] {
+        minimumPayments(nets: computeNets(seats: seats, hand: hand))
+    }
+
+    static func initial(for name: String) -> String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "?"
     }
 
     static func minimumPayments(nets: [PlayerNet]) -> [SettlementPayment] {

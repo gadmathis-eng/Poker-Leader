@@ -280,8 +280,15 @@ final class TableRepository {
         let added = amount.clampedToNonNegative.roundedToHundredths
         guard added > 0 else { return false }
 
+        var seats = table.seats
+        guard let index = seats.firstIndex(where: { $0.playerKey == localPlayerKey }) else {
+            return false
+        }
+        seats[index].boughtIn = TableMoney.string(seats[index].boughtInDecimal + added)
+
         if let hand = table.hand,
            let next = HandRound.addingMoney(added, playerKey: localPlayerKey, to: hand) {
+            table.seats = seats
             table.hand = next
             if next.isComplete {
                 payOutHand(next, on: table)
@@ -291,8 +298,10 @@ final class TableRepository {
             return true
         }
 
-        guard let seat = mySeat(on: table) else { return false }
-        updateLocalAmount(on: table, amount: seat.amountDecimal + added)
+        seats[index].amount = TableMoney.string(seats[index].amountDecimal + added)
+        table.seats = seats
+        try? context.save()
+        publishLocalSeat(on: table)
         return true
     }
 

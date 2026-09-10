@@ -245,6 +245,14 @@ final class TableRepositoryStartTests: XCTestCase {
         XCTAssertEqual(table.hand?.handNumber, 1)
         XCTAssertEqual(table.seats.first { $0.playerKey == "host-key" }?.amountDecimal, 21)
         XCTAssertEqual(table.seats.first { $0.playerKey == "ben" }?.amountDecimal, 19)
+        XCTAssertEqual(table.seats.first { $0.playerKey == "host-key" }?.boughtInDecimal, 20)
+        XCTAssertEqual(table.seats.first { $0.playerKey == "ben" }?.boughtInDecimal, 20)
+
+        let payments = SettlementService.minimumPayments(seats: table.seats)
+        XCTAssertEqual(payments.count, 1)
+        XCTAssertEqual(payments[0].fromName, "Ben")
+        XCTAssertEqual(payments[0].toName, "Ana")
+        XCTAssertEqual(payments[0].amount, 1)
 
         try repo.dealNextHand(on: table)
 
@@ -343,6 +351,35 @@ final class TableRepositoryStartTests: XCTestCase {
 
         XCTAssertNil(try repo.fetch(id: id))
         XCTAssertNil(repo.activeInviteCode)
+    }
+
+    func testAddMoneyCountsAsMorePutIn() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try hostedHeadsUpTable(repo)
+
+        XCTAssertTrue(repo.addMoney(10, on: table))
+
+        let host = try XCTUnwrap(table.seats.first { $0.playerKey == "host-key" })
+        XCTAssertEqual(host.amountDecimal, 30)
+        XCTAssertEqual(host.boughtInDecimal, 30)
+        XCTAssertEqual(table.seats.first { $0.playerKey == "ben" }?.boughtInDecimal, 20)
+        XCTAssertTrue(SettlementService.minimumPayments(seats: table.seats).isEmpty)
+    }
+
+    func testAddMoneyDuringAHandWaitsBesideTheStackAndCountsAsPutIn() throws {
+        let repo = TableRepository(context: try makeContext())
+        let table = try hostedHeadsUpTable(repo)
+        repo.updateAnte(1, on: table)
+        _ = try repo.dealHand(on: table)
+
+        XCTAssertTrue(repo.addMoney(10, on: table))
+
+        let host = try XCTUnwrap(table.seats.first { $0.playerKey == "host-key" })
+        XCTAssertEqual(host.amountDecimal, 20, "A stack in a hand belongs to the hand")
+        XCTAssertEqual(host.boughtInDecimal, 30)
+        XCTAssertEqual(table.hand?.seat(forPlayerKey: "host-key")?.toppedUpDecimal, 10)
+        XCTAssertEqual(SettlementService.cashOut(for: host, hand: table.hand), 30)
+        XCTAssertTrue(SettlementService.minimumPayments(seats: table.seats, hand: table.hand).isEmpty)
     }
 
     func testGuestsCannotChangeTheAnte() throws {

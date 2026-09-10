@@ -7,10 +7,73 @@ struct SharedTableSeat: Codable, Equatable, Hashable, Identifiable {
     var handle: String?
     var playerKey: String
     var amount: String
+    /// Total this player has put on the table: the buy-in they sat down with,
+    /// plus any money they added later. Their stack (`amount`) moves around the
+    /// table; this does not.
+    var boughtIn: String
     var isHost: Bool
 
     var amountDecimal: Decimal {
         Decimal(string: amount) ?? 0
+    }
+
+    var boughtInDecimal: Decimal {
+        Decimal(string: boughtIn) ?? amountDecimal
+    }
+
+    init(
+        id: UUID,
+        seatNumber: Int,
+        playerName: String,
+        handle: String? = nil,
+        playerKey: String,
+        amount: String,
+        boughtIn: String? = nil,
+        isHost: Bool
+    ) {
+        self.id = id
+        self.seatNumber = seatNumber
+        self.playerName = playerName
+        self.handle = handle
+        self.playerKey = playerKey
+        self.amount = amount
+        self.boughtIn = boughtIn ?? amount
+        self.isHost = isHost
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case seatNumber
+        case playerName
+        case handle
+        case playerKey
+        case amount
+        case boughtIn
+        case isHost
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        seatNumber = try container.decode(Int.self, forKey: .seatNumber)
+        playerName = try container.decode(String.self, forKey: .playerName)
+        handle = try container.decodeIfPresent(String.self, forKey: .handle)
+        playerKey = try container.decode(String.self, forKey: .playerKey)
+        amount = try container.decode(String.self, forKey: .amount)
+        boughtIn = try container.decodeIfPresent(String.self, forKey: .boughtIn) ?? amount
+        isHost = try container.decode(Bool.self, forKey: .isHost)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(seatNumber, forKey: .seatNumber)
+        try container.encode(playerName, forKey: .playerName)
+        try container.encodeIfPresent(handle, forKey: .handle)
+        try container.encode(playerKey, forKey: .playerKey)
+        try container.encode(amount, forKey: .amount)
+        try container.encode(boughtIn, forKey: .boughtIn)
+        try container.encode(isHost, forKey: .isHost)
     }
 }
 
@@ -86,6 +149,7 @@ enum SharedTableSeating {
 
         var next = OpenTableSeatsPacking.players(in: seats).filter { $0.playerKey != playerKey }
         let existing = seats.first(where: { $0.playerKey == playerKey })
+        let amountString = NSDecimalNumber(decimal: amount.clampedToNonNegative).stringValue
         next.append(
             SharedTableSeat(
                 id: existing?.id ?? UUID(),
@@ -93,7 +157,8 @@ enum SharedTableSeating {
                 playerName: playerName,
                 handle: handle,
                 playerKey: playerKey,
-                amount: NSDecimalNumber(decimal: amount.clampedToNonNegative).stringValue,
+                amount: amountString,
+                boughtIn: existing.map { TableMoney.string($0.boughtInDecimal) } ?? amountString,
                 isHost: isHost
             )
         )

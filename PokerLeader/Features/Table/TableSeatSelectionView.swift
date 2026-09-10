@@ -20,6 +20,7 @@ struct TableSeatSelectionView: View {
     @State private var hand: SharedTableHand?
     @State private var handMessage: String?
     @State private var showTableSettings = false
+    @State private var showEndGame = false
     /// Bumped when the stake changes so the felt and editor re-read the table.
     @State private var anteStamp: Decimal = 0
 
@@ -241,6 +242,7 @@ struct TableSeatSelectionView: View {
                     if canEditAnte {
                         gameAnteCard
                     }
+                    endGameButton
                 } else if selectedSeat == nil {
                     seatHint
                 } else {
@@ -307,6 +309,17 @@ struct TableSeatSelectionView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppTheme.background)
             }
+        }
+        .sheet(isPresented: $showEndGame) {
+            TableSettlementSheet(
+                title: table?.displayTitle ?? "Table",
+                currencyCode: tableCurrencyCode,
+                seats: occupants,
+                hand: hand
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(AppTheme.background)
         }
     }
 
@@ -487,6 +500,28 @@ struct TableSeatSelectionView: View {
             }
         }
         .cardSurface()
+        .padding(.horizontal)
+    }
+
+    private var endGameButton: some View {
+        Button {
+            showEndGame = true
+        } label: {
+            Text("End game")
+                .font(.headline.weight(.bold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(AppTheme.card)
+                .foregroundStyle(AppTheme.text)
+                .clipShape(RoundedRectangle(cornerRadius: AppTheme.cornerRadius))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppTheme.cornerRadius)
+                        .stroke(AppTheme.cardBorder)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("End game")
+        .accessibilityHint("Shows who owes who and how much")
         .padding(.horizontal)
     }
 
