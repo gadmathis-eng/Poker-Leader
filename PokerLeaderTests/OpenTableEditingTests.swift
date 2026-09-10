@@ -68,7 +68,53 @@ final class SharedTableSeatingRemovalTests: XCTestCase {
         )
 
         XCTAssertEqual(seats.map(\.amountDecimal), [50, 15])
+        XCTAssertEqual(seats.map(\.boughtInDecimal), [50, 15])
         XCTAssertEqual(seats.map(\.playerKey), ["host", "guest"])
+    }
+
+    func testSittingAgainKeepsWhatTheyPutInWhenTheStackMoves() throws {
+        var seats = try SharedTableSeating.occupy(
+            seats: [],
+            seatNumber: 1,
+            playerKey: "host",
+            playerName: "Alex",
+            handle: nil,
+            amount: 20,
+            isHost: true
+        )
+        seats[0].amount = "35"
+        seats = try SharedTableSeating.occupy(
+            seats: seats,
+            seatNumber: 3,
+            playerKey: "host",
+            playerName: "Alex",
+            handle: nil,
+            amount: 35,
+            isHost: true
+        )
+
+        XCTAssertEqual(seats.count, 1)
+        XCTAssertEqual(seats[0].seatNumber, 3)
+        XCTAssertEqual(seats[0].amountDecimal, 35)
+        XCTAssertEqual(seats[0].boughtInDecimal, 20)
+    }
+
+    func testASeatFromAnOlderBuildTreatsTheStackAsWhatTheyPutIn() throws {
+        let json = """
+        {
+          "id": "6F9619FF-8B86-D011-B42D-00CF4FC964F0",
+          "seatNumber": 1,
+          "playerName": "Ana",
+          "playerKey": "ana",
+          "amount": "20",
+          "isHost": true
+        }
+        """
+        let seat = try JSONDecoder().decode(SharedTableSeat.self, from: Data(json.utf8))
+
+        XCTAssertEqual(seat.amountDecimal, 20)
+        XCTAssertEqual(seat.boughtInDecimal, 20)
+        XCTAssertEqual(seat.boughtIn, "20")
     }
 
     func testRemovingAPlayerWithoutASeatChangesNothing() throws {
